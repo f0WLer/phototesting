@@ -15,7 +15,8 @@
     }
   },
   "attributes": {
-    "photoshape": "phototesting:photoplanestand"
+    "photoshape": "phototesting:photoplanestand",
+    "photoUvRotation": 180
   },
   "faceCullMode": "NeverCull",
   "behaviors": [

@@ -31,6 +31,7 @@ namespace Phototesting.Frame
         private MeshData? _photoMesh;
         private volatile bool _rebuildScheduled;
         private AssetLocation _photoPlaneCode = new AssetLocation("phototesting", "photoplanepainting-north");
+        private int _photoUvRotation = 90;
 
         public BlockEntityFrame()
         {
@@ -54,6 +55,7 @@ namespace Phototesting.Frame
                                 ?? "phototesting:photoplanepainting";
             string facing = Block?.LastCodePart() ?? "north";
             _photoPlaneCode = new AssetLocation(photoshape + "-" + facing);
+            _photoUvRotation = Block?.Attributes?["photoUvRotation"]?.AsInt(90) ?? 90;
 
             // Initialize runs on the main thread on both sides — kick off an initial mesh build if needed.
             if (api.Side == EnumAppSide.Client && !_inventory[0].Empty)
@@ -161,7 +163,7 @@ namespace Phototesting.Frame
 
             // Clone before stamping UVs so the cached default mesh stays untouched.
             MeshData cloned = baseMesh.Clone();
-            PhotoMeshUtil.StampUvByRotationCropped(cloned, photoTex, 90, photoAspect, PhotoMeshUtil.PhotoTargetAspect);
+            PhotoMeshUtil.StampUvByRotationCropped(cloned, photoTex, _photoUvRotation, photoAspect, PhotoMeshUtil.PhotoTargetAspect);
             return cloned;
         }
 
