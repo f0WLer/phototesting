@@ -1,0 +1,32 @@
+[
+  {
+    "ingredientPattern": "FF,FR,FR",
+    "width": 2,
+    "height": 3,
+    "ingredients": {
+      "F": { "type": "item", "code": "game:flaxfibers", "quantity": 1 },
+      "R": { "type": "item", "code": "game:resin", "quantity": 1 }
+    },
+    "output": { "type": "item", "code": "phototesting:drycollodionmix", "quantity": 1 }
+  },
+  {
+    "ingredientPattern": "FF,FR,FR",
+    "width": 2,
+    "height": 3,
+    "ingredients": {
+      "F": { "type": "item", "code": "game:papyrustops", "quantity": 1 },
+      "R": { "type": "item", "code": "game:resin", "quantity": 1 }
+    },
+    "output": { "type": "item", "code": "phototesting:drycollodionmix", "quantity": 1 }
+  },
+  {
+    "ingredientPattern": "FF,FR,FR",
+    "width": 2,
+    "height": 3,
+    "ingredients": {
+      "F": { "type": "item", "code": "game:cattailtops", "quantity": 1 },
+      "R": { "type": "item", "code": "game:resin", "quantity": 1 }
+    },
+    "output": { "type": "item", "code": "phototesting:drycollodionmix", "quantity": 1 }
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "textureWidth": 16,
+  "textureHeight": 16,
+  "textures": {
+    "plate": "phototesting:item/plate-silvered"
+  },
+  "elements": [
+    {
+      "name": "platefill",
+      "from": [0, 0, 0],
+      "to": [0.5, 7.7, 7],
+      "faces": {
+        "north": { "texture": "#plate" },
+        "east": { "texture": "#plate" },
+        "south": { "texture": "#plate" },
+        "west": { "texture": "#plate" },
+        "up": { "texture": "#plate" },
+        "down": { "texture": "#plate" }
+      }
+    }
+  ]
+}

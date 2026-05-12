@@ -1,0 +1,21 @@
+{
+  "code": "photoplanestand",
+  "blockmaterial": "Cloth",
+  "drawtype": "json",
+  "shape": {
+    "base": "phototesting:block/frame/photoplanestand",
+    "rotateYByType": {
+      "*-north": 0,
+      "*-east": 270,
+      "*-south": 180,
+      "*-west": 90
+    }
+  },
+  "variantgroups": [
+    { "code": "side", "loadFromProperties": "abstract/horizontalorientation" }
+  ],
+  "creativeinventory": {},
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" },
+  "lightAbsorption": 0
+}

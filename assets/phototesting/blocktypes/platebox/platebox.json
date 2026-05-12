@@ -1,0 +1,52 @@
+{
+  "code": "platebox",
+  "class": "PlateBox",
+  "entityClass": "BlockEntityPlateBox",
+  "blockmaterial": "Wood",
+  "drawtype": "json",
+  "variantgroups": [
+    { "code": "facing", "states": ["south", "north", "east", "west"] }
+  ],
+  "shape": {
+    "base": "phototesting:block/platebox-closed",
+    "rotateYByType": {
+      "*-south": 0,
+      "*-north": 180,
+      "*-east": 90,
+      "*-west": 270
+    }
+  },
+  "tpHandTransform": {
+    "translation": { "x": -0.65, "y": -0.6, "z": -0.6 },
+    "rotation": { "x": 0, "y": 0, "z": 0 },
+    "origin": { "x": 0.5, "y": 0, "z": 0.5 },
+    "scale": 0.8
+  },
+  "groundTransform": {
+    "scale": 3.0
+  },
+  "textures": {
+    "oak": { "base": "game:block/wood/oak" },
+    "leather": { "base": "game:block/leather/plain" },
+    "tinbronze": { "base": "game:block/metal/sheet/tinbronze1" },
+    "plate": { "base": "phototesting:item/plate-silvered" }
+  },
+  "creativeinventory": { "general": ["*"] },
+  "resistance": 1.2,
+  "lightAbsorption": 0,
+  "sounds": {
+    "place": "game:block/wood",
+    "break": "game:block/wood",
+    "hit": "game:block/wood"
+  },
+  "collisionbox": {
+    "x1": 0.0625, "y1": 0, "z1": 0.2, "x2": 0.9375, "y2": 0.4375, "z2": 0.8,
+    "rotateYByType": { "*-south": 0, "*-north": 180, "*-east": 90, "*-west": 270 }
+  },
+  "selectionbox": {
+    "x1": 0.0625, "y1": 0, "z1": 0.2, "x2": 0.9375, "y2": 0.4375, "z2": 0.8,
+    "rotateYByType": { "*-south": 0, "*-north": 180, "*-east": 90, "*-west": 270 }
+  },
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" }
+}

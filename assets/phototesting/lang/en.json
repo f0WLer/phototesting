@@ -1,0 +1,138 @@
+{
+    "item-wetplatecamera":      "Wetplate Camera",
+    "itemdesc-wetplatecamera":  "A heavy wooden box used to capture moments in time on glass plates.",
+    "item-wetplatecamera-loaded-silvered":      "Wetplate Camera (Loaded)",
+    "itemdesc-wetplatecamera-loaded-silvered":  "A wetplate camera loaded with a silvered plate.",
+    "item-wetplatecamera-loaded-exposed":      "Wetplate Camera (Loaded)",
+    "itemdesc-wetplatecamera-loaded-exposed":  "A wetplate camera loaded with an exposed plate.",
+    
+
+    "block-platebox":       "Plate Box",
+    "block-platebox-north": "Plate Box",
+    "block-platebox-open":  "Plate Box",
+    "blockdesc-platebox":   "Stores and protects prepared plates. Use <icon>rightmousebutton</icon> on slots with a plate to store. <icon>rightmousebutton</icon> on a stored plate to retrieve it.",
+    "phototesting:heldhelp-platebox-insert":   "Store plate in slot",
+    "phototesting:heldhelp-platebox-take":     "Take plate from slot",
+
+
+    "block-photographframepainting-north":  "Photo Frame",
+    "block-photographframepainting-east":   "Photo Frame",
+    "block-photographframepainting-south":  "Photo Frame",
+    "block-photographframepainting-west":   "Photo Frame",
+    "blockdesc-photographframepainting":    "A wall-mounted frame. Hold a finished photo plate and <icon>rightmousebutton</icon> to insert; <icon>rightmousebutton</icon> with empty hand to remove.",
+
+    "block-photographframeborderless-north": "Photo Frame (Borderless)",
+    "block-photographframeborderless-east":  "Photo Frame (Borderless)",
+    "block-photographframeborderless-south": "Photo Frame (Borderless)",
+    "block-photographframeborderless-west":  "Photo Frame (Borderless)",
+    "blockdesc-photographframeborderless":   "A borderless wall-mounted frame. Hold a finished photo plate and <icon>rightmousebutton</icon> to insert; <icon>rightmousebutton</icon> with empty hand to remove.",
+
+    "block-photographframestand-north": "Photo Frame Stand",
+    "block-photographframestand-east":  "Photo Frame Stand",
+    "block-photographframestand-south": "Photo Frame Stand",
+    "block-photographframestand-west":  "Photo Frame Stand",
+    "blockdesc-photographframestand":   "A free-standing photo frame. Hold a finished photo plate and <icon>rightmousebutton</icon> to insert; <icon>rightmousebutton</icon> with empty hand to remove.",
+
+    "phototesting:heldhelp-frame-insert": "Insert photo into frame",
+    "phototesting:heldhelp-frame-take":   "Take photo from frame",
+
+
+    "item-drycollodionmix":     "Dry Collodion Mix",
+    "itemdesc-drycollodionmix": "A dry mix that can be sealed with water in a barrel to make collodion.",
+
+    "item-collodionportion":                    "Collodion",
+    "incontainer-item-collodionportion":        "Collodion",
+    "game:incontainer-item-collodionportion":   "Collodion",
+    "itemdesc-collodionportion":                "A syrupy chemical used to coat plates.",
+
+    "item-silversolutionportion":                   "Silvering Solution",
+    "incontainer-item-silversolutionportion":       "Silvering Solution",
+    "game:incontainer-item-silversolutionportion":  "Silvering Solution",
+    "itemdesc-silversolutionportion":               "A sensitizing solution for collodion-coated plates.",
+
+    "item-chloridesolutionportion":                   "Chloride Solution",
+    "incontainer-item-chloridesolutionportion":       "Chloride Solution",
+    "game:incontainer-item-chloridesolutionportion":  "Chloride Solution",
+    "itemdesc-chloridesolutionportion":               "An ammonium chloride solution used for chloride plate coating.",
+
+    "item-developerportion":                    "Developer",
+    "incontainer-item-developerportion":        "Developer",
+    "game:incontainer-item-developerportion":   "Developer",
+    "itemdesc-developerportion":                "Begins to reveal the latent image on an exposed plate.",
+
+    "item-fixerportion":                    "Fixer",
+    "incontainer-item-fixerportion":        "Fixer",
+    "game:incontainer-item-fixerportion":   "Fixer",
+    "itemdesc-fixerportion":                "Stabilizes a developed plate so it can be handled in light.",
+
+
+    "block-plate-rough":        "Rough Glass Plate",
+    "block-plate-clean":        "Clean Glass Plate",
+
+    "item-glassplate": "Glass Plate",
+    "itemdesc-glassplate": "Rough/Clean/Coated glass plate.",
+    "item-sensitizedplate": "Sensitized Plate",
+    "itemdesc-sensitizedplate": "Sensitized/(Partially) Exposed plate.",
+    "item-photoplate": "Photo Plate",
+    "itemdesc-photoplate": "Developed/Fixed plate.",
+
+    "phototesting:plate-name-glass": "Rough Glass Plate",
+    "phototesting:plate-name-glass-clean": "Clean Glass Plate",
+    "phototesting:plate-name-glass-sensitizing": "Coated Glass Plate",
+    "phototesting:plate-name-iodide-coated": "Iodide Coated Plate",
+    "phototesting:plate-name-chloride-coated": "Chloride Coated Plate",
+    "phototesting:plate-name-bromide-coated": "Bromide Coated Plate",
+    "phototesting:plate-name-dried-coated": "Dried Coated Plate",
+    "phototesting:plate-name-sensitized": "Sensitized Plate",
+    "phototesting:plate-name-exposed": "Exposed Plate",
+    "phototesting:plate-name-photo": "Photo Plate",
+    "phototesting:plate-name-photo-finished": "Finished Photo Plate",
+
+    "phototesting:heldhelp-cleanroughglass":     "Polish rough glass plate",
+    "phototesting:heldhelp-coatglassplate":      "Start sensitization with matching solution",
+    "phototesting:heldhelp-plate-sensitize-dry": "Pick up to speed up drying",
+    "phototesting:heldhelp-plate-sensitize-next": "Continue sensitization process",
+
+    "wetplate-wetness": "Still wet: {0} min",
+    "wetplate-dry":     "The plate has dried.",
+
+
+    "item-framedphotograph":    "Framed Photograph",
+    "itemdesc-framedphotograph":"A photograph mounted in a simple wooden frame.",
+    "block-framedphotographwall":   "Framed Photograph",
+    "phototesting:heldhelp-framedphoto-add":   "Add framed photo",
+    "phototesting:heldhelp-framedphoto-remove":"Remove framed photo",
+
+
+    "block-developmenttray-red":    "Development Tray (Red Clay)",
+    "block-developmenttray-blue":   "Development Tray (Blue Clay)",
+    "block-developmenttray-fire":   "Development Tray (Fire Clay)",
+    "blockdesc-developmenttray-blue":"A shallow tray for developing and fixing wet plates.",
+    "blockdesc-developmenttray-red": "A shallow tray for developing and fixing wet plates.",
+    "blockdesc-developmenttray-fire":"A shallow tray for developing and fixing wet plates.",
+
+    "block-developmenttray-red-exposed":    "Development Tray (Needs Developing)",
+    "block-developmenttray-blue-exposed":   "Development Tray (Needs Developing)",
+    "block-developmenttray-fire-exposed":   "Development Tray (Needs Developing)",
+
+    "block-developmenttray-red-developed":  "Development Tray (Being Developed)",
+    "block-developmenttray-blue-developed": "Development Tray (Being Developed)",
+    "block-developmenttray-fire-developed": "Development Tray (Being Developed)",
+
+    "block-developmenttray-red-finished":   "Development Tray (Finished)",
+    "block-developmenttray-blue-finished":  "Development Tray (Finished)",
+    "block-developmenttray-fire-finished":  "Development Tray (Finished)",
+
+    "item-developmenttray-raw-red":     "Unfired Development Tray (Red Clay)",
+    "item-developmenttray-raw-blue":    "Unfired Development Tray (Blue Clay)",
+    "item-developmenttray-raw-fire":    "Unfired Development Tray (Fire Clay)",
+    "itemdesc-developmenttray-raw-blue":"A clay tray that must be fired before use.",
+    "itemdesc-developmenttray-raw-red": "A clay tray that must be fired before use.",
+    "itemdesc-developmenttray-raw-fire":"A clay tray that must be fired before use.",
+
+    "phototesting:heldhelp-developmenttray-insertplate":   "Place plate in tray",
+    "phototesting:heldhelp-developmenttray-takeplate":     "Take plate from tray",
+    "phototesting:heldhelp-developmenttray-develop":       "Develop exposed plate",
+    "phototesting:heldhelp-developmenttray-fix":           "Fix developed plate"
+}
+

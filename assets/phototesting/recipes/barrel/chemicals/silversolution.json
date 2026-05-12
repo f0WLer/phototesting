@@ -1,0 +1,20 @@
+[
+  {
+    "code": "phototesting-silversolution-10l",
+    "sealHours": 1,
+    "ingredients": [
+      { "type": "item", "code": "game:waterportion", "litres": 10 },
+      { "type": "item", "code": "game:metalbit-silver", "quantity": 1 }
+    ],
+    "output": { "type": "item", "code": "phototesting:silversolutionportion", "litres": 10 }
+  },
+  {
+    "code": "phototesting-silversolution-50l",
+    "sealHours": 1,
+    "ingredients": [
+      { "type": "item", "code": "game:waterportion", "litres": 50 },
+      { "type": "item", "code": "game:metalbit-silver", "quantity": 5 }
+    ],
+    "output": { "type": "item", "code": "phototesting:silversolutionportion", "litres": 50 }
+  }
+]

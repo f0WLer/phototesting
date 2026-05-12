@@ -1,0 +1,31 @@
+{
+  "code": "photooverlaywall",
+  "class": "Block",
+  "drawtype": "json",
+  "blockmaterial": "Wood",
+  "shape": {
+    "base": "phototesting:block/photos/photooverlaywall",
+    "rotateYByType": {
+      "*-north": 0,
+      "*-east": 270,
+      "*-south": 180,
+      "*-west": 90
+    }
+  },
+  "faceCullMode": "NeverCull",
+  "sideao": { "all": false },
+  "textures": {
+    "photo": { "base": "game:block/cloth/linen/normal1" }
+  },
+  "variantgroups": [
+    {
+      "code": "side",
+      "loadFromProperties": "abstract/horizontalorientation"
+    }
+  ],
+  "collisionbox": null,
+  "selectionbox": null,
+  "lightAbsorption": 0,
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" }
+}

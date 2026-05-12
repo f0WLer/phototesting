@@ -1,0 +1,391 @@
+using Phototesting.AdminTooling;
+using Phototesting.CameraCapture.Contracts;
+using Phototesting.CameraCapture.Integration;
+using Phototesting.CameraCapture.Rendering;
+using Phototesting.ImageEffects;
+using Phototesting.PhotoSync.Integration;
+using Phototesting.PlateLifecycle;
+using Vintagestory.API.Client;
+using Vintagestory.API.Common;
+
+namespace Phototesting.CameraCapture
+{
+    // Client-side bridge: bootstrap, config sync, cleanup, and capture runtime coordination.
+    internal sealed partial class CameraCaptureModSystemBridge
+    {
+        internal PhotoCaptureRenderer? _captureRenderer;
+        private ViewfinderDebugPreviewRenderer? _debugPreviewRenderer;
+
+        // Composes full client-side camera-capture startup behind one feature bootstrap entrypoint.
+        internal void ConfigureClientCameraCaptureStartup(ICoreClientAPI api)
+        {
+            ConfigureClientCameraCaptureChannelHandlers();
+            ConfigureClientCameraCaptureRenderers(api);
+            ConfigureClientCameraCaptureInputAndProjection(api);
+        }
+
+        // Registers client camera-capture packet handlers on the existing phototesting channel.
+        private void ConfigureClientCameraCaptureChannelHandlers()
+        {
+            if (ClientChannel == null) return;
+
+            ConfigureClientPhotoSyncTransferChannelHandlers();
+            CameraCaptureChannelRegistration.ConfigureClientHandlers(ClientChannel, OnPhotoCaptureConfigReceived);
+        }
+
+        // Wires client camera-capture renderers and requests server-authoritative capture config.
+        private void ConfigureClientCameraCaptureRenderers(ICoreClientAPI api)
+        {
+            // Capture screenshots after the 3D scene is blitted to the default framebuffer,
+            // but before GUI/HUD is rendered (EnumRenderStage.AfterBlit).
+            _captureRenderer = new PhotoCaptureRenderer(api);
+            _captureRenderer.SetCaptureMaxDimension(Config.Viewfinder.PhotoCaptureMaxDimension);
+            api.Event.RegisterRenderer(_captureRenderer, EnumRenderStage.AfterBlit, "phototesting-photocapture");
+
+            _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive);
+            api.Event.RegisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho, "phototesting-viewfinder-preview");
+
+            // Ask server for authoritative capture sizing in multiplayer.
+            // Some load orders/world joins invoke StartClientSide before the channel reports connected.
+            // Defer send until connected so startup never aborts.
+            TrySendPhotoCaptureConfigRequest(api);
+        }
+
+        // Wires camera-capture input polling and zoom projection patching.
+        private void ConfigureClientCameraCaptureInputAndProjection(ICoreClientAPI api)
+        {
+            // Some client setups don't reliably invoke OnHeldInteractStart for held items
+            // (especially when aiming at air). Poll RMB state as a fallback.
+            _viewfinderTickListenerId = api.Event.RegisterGameTickListener(dt => CaptureClientRuntime.OnClientViewfinderTick(dt), 20, 0);
+
+            // Patch Set3DProjection so viewfinder can zoom reliably.
+            ViewfinderZoomHarmony.TryInstall(api, ClientConfig);
+            // Note: do NOT also force RenderAPI.Set3DProjection per-frame; that can lead to
+            // mismatched projections (e.g., skybox-only zoom). The hook on
+            // ClientMain.Set3DProjection affects the actual world projection.
+        }
+        private long? _clientCaptureConfigRetryTickListenerId;
+
+        // Applies the server-authoritative capture size so multiplayer clients capture at the same resolution policy.
+        private void OnPhotoCaptureConfigReceived(PhotoCaptureConfigPacket packet)
+        {
+            if (packet == null) return;
+
+            Config = OperatorToolingConfigLifecycle.EnsureNormalized(Config);
+            Config.Viewfinder.PhotoCaptureMaxDimension = packet.MaxDimension;
+            Config.Viewfinder.ClampInPlace();
+
+            _captureRenderer?.SetCaptureMaxDimension(Config.Viewfinder.PhotoCaptureMaxDimension);
+        }
+
+        // Sends the capture-config request immediately when connected or defers it until the client channel comes up.
+        private void TrySendPhotoCaptureConfigRequest(ICoreClientAPI capi)
+        {
+            if (ClientChannel == null) return;
+
+            if (ClientChannel.Connected)
+            {
+                try
+                {
+                    ClientChannel.SendPacket(new PhotoCaptureConfigRequestPacket());
+                }
+                catch
+                {
+                    // Retry via tick listener below.
+                }
+
+                if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
+                {
+                    BestEffort.Try(BestEffortLogger, "unregister immediate capture config retry listener", () => capi.Event.UnregisterGameTickListener(_clientCaptureConfigRetryTickListenerId.Value));
+                    _clientCaptureConfigRetryTickListenerId = null;
+                }
+
+                return;
+            }
+
+            if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
+            {
+                return;
+            }
+
+            _clientCaptureConfigRetryTickListenerId = capi.Event.RegisterGameTickListener(_ =>
+            {
+                if (ClientChannel == null || !ClientChannel.Connected) return;
+
+                try
+                {
+                    ClientChannel.SendPacket(new PhotoCaptureConfigRequestPacket());
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
+                {
+                    BestEffort.Try(BestEffortLogger, "unregister delayed capture config retry listener", () => capi.Event.UnregisterGameTickListener(_clientCaptureConfigRetryTickListenerId.Value));
+                    _clientCaptureConfigRetryTickListenerId = null;
+                }
+            }, 200, 200);
+        }
+        // Unregisters and disposes client renderers used by camera-capture and viewfinder preview flows.
+        internal void DisposeClientCameraCaptureRenderers()
+        {
+            if (ClientApi == null) return;
+
+            if (_captureRenderer != null)
+            {
+                BestEffort.Try(BestEffortLogger, "unregister capture renderer", () => ClientApi.Event.UnregisterRenderer(_captureRenderer, EnumRenderStage.AfterBlit));
+                BestEffort.Try(BestEffortLogger, "dispose capture renderer", () => _captureRenderer.Dispose());
+            }
+
+            if (_debugPreviewRenderer != null)
+            {
+                BestEffort.Try(BestEffortLogger, "unregister debug preview renderer", () => ClientApi.Event.UnregisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho));
+                BestEffort.Try(BestEffortLogger, "dispose debug preview renderer", () => _debugPreviewRenderer.Dispose());
+            }
+        }
+
+        // Unregisters camera-capture client tick listeners created during startup.
+        internal void DisposeClientCameraCaptureTickListeners()
+        {
+            if (ClientApi == null) return;
+
+            if (_viewfinderTickListenerId > 0)
+            {
+                BestEffort.Try(BestEffortLogger, "unregister viewfinder tick listener", () => ClientApi.Event.UnregisterGameTickListener(_viewfinderTickListenerId));
+                _viewfinderTickListenerId = 0;
+            }
+
+            if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
+            {
+                long id = _clientCaptureConfigRetryTickListenerId.Value;
+                BestEffort.Try(BestEffortLogger, "unregister capture config retry tick listener", () => ClientApi.Event.UnregisterGameTickListener(id));
+                _clientCaptureConfigRetryTickListenerId = null;
+            }
+        }
+
+        // Clears camera-capture runtime references after disposal to prevent stale instance reuse.
+        internal void ClearClientCameraCaptureRuntimeReferences()
+        {
+            _captureRenderer = null;
+            _debugPreviewRenderer = null;
+            _cameraCaptureClientRuntime = null;
+        }
+    // Stateful client-side runtime for viewfinder input and shutter capture scheduling.
+    // Keeps per-tick input state and capture lifecycle transitions outside the mod-system partial surface.
+
+        private CameraCaptureClientRuntime? _cameraCaptureClientRuntime;
+        private CameraCaptureClientRuntime CaptureClientRuntime => _cameraCaptureClientRuntime ??= new CameraCaptureClientRuntime(this);
+
+        // Validates current camera state, schedules the screenshot, and queues the eventual authoritative PhotoTaken packet flow.
+        internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy = false)
+        {
+            return CaptureClientRuntime.RequestPhotoCaptureFromViewfinder(byEntity, silentIfBusy);
+        }
+
+        // Resolves capture effects override for the currently loaded camera plate, if present.
+        // Returns null to keep renderer on baseline profile when no loaded stack/process is available.
+        internal WetplateEffectsConfig? ResolveCaptureEffectsOverrideForLoadedCameraPlate()
+        {
+            return CaptureEffectsProfileLookup.ResolveForLoadedCamera(this);
+        }
+
+    }
+    internal sealed class CameraCaptureClientRuntime
+    {
+            private const float RmbReleaseGraceSeconds = 0.04f;
+
+            private readonly CameraCaptureModSystemBridge _owner;
+
+            private bool _suppressViewfinderUntilRmbReleased;
+            private bool _captureInProgress;
+            private float _rmbUpSeconds;
+            private bool _lastRmbDown;
+            private long _lastShutterGateChatMs;
+
+            internal CameraCaptureClientRuntime(CameraCaptureModSystemBridge owner)
+            {
+                _owner = owner;
+            }
+
+            internal void OnClientViewfinderTick(float dt)
+            {
+                if (_owner.ClientApi == null) return;
+
+                _owner.UpdateHoldStill(dt);
+
+                ItemSlot? activeCameraSlot = CameraItemHelper.GetActiveCameraSlot(_owner.ClientApi);
+                bool holdingCamera = activeCameraSlot != null;
+                bool timedExposurePending = CameraCaptureModSystemBridge.IsTimedExposurePending(_owner.ClientApi.World.Player?.Entity);
+
+                bool rightDown = GetRightMouseDown();
+
+                bool rightPressed = rightDown && !_lastRmbDown;
+                _lastRmbDown = rightDown;
+
+                // Shift+RMB is reserved for loading a plate into the camera (no zoom/viewfinder).
+                bool shiftDown = _owner.ClientApi.World.Player?.Entity?.Controls?.ShiftKey == true || _owner.ClientApi.World.Player?.Entity?.Controls?.Sneak == true;
+                bool ctrlDown = _owner.ClientApi.World.Player?.Entity?.Controls?.CtrlKey == true;
+
+                if (holdingCamera && shiftDown && !ctrlDown && rightDown && !_owner.IsViewfinderActive)
+                {
+                    // Prevent viewfinder from starting if the player releases shift while still holding RMB.
+                    _suppressViewfinderUntilRmbReleased = true;
+
+                    // Load/unload triggers only on edge press and only when networking is available.
+                    if (!rightPressed || _owner.ClientChannel == null)
+                    {
+                        return;
+                    }
+
+                    ItemSlot? offhand = _owner.ClientApi.World.Player?.InventoryManager?.OffhandHotbarSlot;
+                    ItemStack? offstack = offhand?.Itemstack;
+
+                    bool cameraLoaded = CameraCaptureModSystemBridge.CameraHasLoadedPlate(activeCameraSlot?.Itemstack);
+
+                    // Load: accept consolidated sensitized plates.
+                    if (!cameraLoaded)
+                    {
+                        if (CameraPlateEligibility.CanLoadIntoCamera(offstack)) _owner.ClientChannel.SendPacket(new CameraLoadPlatePacket { Load = true });
+                        return;
+                    }
+
+                    // Unload: only when offhand is empty.
+                    if (offhand == null || !offhand.Empty) return;
+
+                    if (_owner.IsHoldStillPending)
+                    {
+                        _owner.HoldStillNotifyPending();
+
+                        return;
+                    }
+
+                    _owner.ClientChannel.SendPacket(new CameraLoadPlatePacket { Load = false });
+
+                    return;
+                }
+
+                if (_owner.IsViewfinderActive) _owner.EnsureViewfinderZoomApplied();
+
+                if (!holdingCamera)
+                {
+                    if (_captureInProgress) return;
+
+                    _suppressViewfinderUntilRmbReleased = false;
+                    _rmbUpSeconds = 0f;
+                    if (_owner.IsViewfinderActive) _owner.EndViewfinderMode();
+                    return;
+                }
+
+                if (!rightDown)
+                {
+                    if (timedExposurePending)
+                    {
+                        // Exposure already started: keep viewfinder active until timer completes.
+                        _rmbUpSeconds = 0f;
+                        if (!_owner.IsViewfinderActive) _owner.BeginViewfinderMode();
+                        return;
+                    }
+
+                    _rmbUpSeconds += dt;
+                    if (!_captureInProgress && _rmbUpSeconds > RmbReleaseGraceSeconds)
+                    {
+                        _suppressViewfinderUntilRmbReleased = false;
+                        if (_owner.IsViewfinderActive) _owner.EndViewfinderMode();
+                    }
+                    return;
+                }
+
+                _rmbUpSeconds = 0f;
+
+                // RMB is down and camera is held.
+                if (_suppressViewfinderUntilRmbReleased) return;
+                if (!_owner.IsViewfinderActive) _owner.BeginViewfinderMode();
+
+                // Shutter capture is driven by ItemWetplateCamera held-interact callbacks while RMB
+                // viewfinder is active so we can use the engine's standard timed interaction meter.
+            }
+
+            internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy)
+            {
+                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(_owner, silentIfBusy, out ItemStack? loadedPlateStack)) return false;
+
+                var clientApi = _owner.ClientApi;
+                if (clientApi == null) return false;
+
+                PhotoCaptureRenderer? captureRenderer = _owner._captureRenderer;
+                if (captureRenderer == null) return false;
+
+                // If the player wants an immersive, HUD-free viewfinder, rely on the game's built-in gui-less mode.
+                _owner.MaybeShowF4GuiLessTip();
+
+                // After taking a shot we want to exit viewfinder and not instantly re-enter until RMB is released.
+                _suppressViewfinderUntilRmbReleased = true;
+
+                // Resolve the effects profile for the plate currently loaded in the camera.
+                // Falls back to the global config when no per-process profile file is found.
+                if (!captureRenderer.TryScheduleCapture(
+                    out string fileName,
+                    onSuccess: (fn) =>
+                    {
+                        _captureInProgress = false;
+                        // Send to server + play sound after capture completes.
+                        ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fn);
+                        clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
+
+                        _owner.HoldStillMarkCaptureReady(fn);
+
+                        // Keep viewfinder open while timed exposure is active so exposure completion
+                        // logic in ItemWetplateCamera can run to the end.
+                        if (!CameraCaptureModSystemBridge.IsTimedExposurePending(byEntity)) _owner.EndViewfinderMode();
+                    },
+                    onError: (ex) =>
+                    {
+                        _captureInProgress = false;
+                        _owner.HoldStillCancel();
+                        clientApi.Logger.Error("Wetplate HUD-less capture failed: " + ex);
+                        clientApi.ShowChatMessage("Wetplate: capture failed (see log). Falling back may be needed.");
+
+                        // Still exit viewfinder (error means no screenshot was taken).
+                        _owner.EndViewfinderMode();
+                    },
+                    effectsOverride: CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlateStack)
+                ))
+                {
+                    if (!silentIfBusy) clientApi.ShowChatMessage("Wetplate: capture already in progress...");
+                    return false;
+                }
+
+                _captureInProgress = true;
+                _owner.HoldStillStartTracking(byEntity, fileName);
+
+                return true;
+            }
+
+            internal void ShowShutterGateMessageThrottled(string message)
+            {
+                if (_owner.ClientApi == null) return;
+
+                long nowMs = Environment.TickCount64;
+                if (nowMs - _lastShutterGateChatMs <= 1000) return;
+
+                _lastShutterGateChatMs = nowMs;
+                _owner.ClientApi.ShowChatMessage(message);
+            }
+
+            internal bool GetRightMouseDown()
+            {
+                if (_owner.ClientApi == null) return false;
+
+                try
+                {
+                    return _owner.ClientApi.Input.InWorldMouseButton.Right || _owner.ClientApi.Input.MouseButton.Right;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+}

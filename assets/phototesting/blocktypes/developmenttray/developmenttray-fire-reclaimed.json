@@ -1,0 +1,35 @@
+{
+  "code": "developmenttray-fire-reclaimed",
+  "class": "DevelopmentTray",
+  "entityClass": "BlockEntityDevelopmentTray",
+  "blockmaterial": "Ceramic",
+  "drawtype": "json",
+  "shape": { "base": "phototesting:block/developmenttray/developmenttray-loaded" },
+  "faceCullMode": "NeverCull",
+  "sideao": { "all": false },
+  "textures": {
+    "all": { "base": "phototesting:block/dt-f2" },
+    "int-hi": { "base": "phototesting:block/dt-f3" },
+    "int-shadow": { "base": "phototesting:block/dt-f4" },
+    "ext-hi": { "base": "phototesting:block/dt-f1" },
+    "ext-shadow": { "base": "phototesting:block/dt-f2" },
+    "plate": { "base": "phototesting:item/plate-rough" }
+  },
+  "groundTransform": {
+    "translation": { "x": 0, "y": 0, "z": 0 },
+    "rotation": { "x": 0, "y": 0, "z": 0 },
+    "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+    "scale": 2.5
+  },
+  "resistance": 1.0,
+  "lightAbsorption": 0,
+  "sounds": {
+    "place": "game:block/glass",
+    "break": "game:block/glass",
+    "hit": "game:block/glass"
+  },
+  "collisionbox": { "x1": 0.0625, "y1": 0, "z1": 0.0625, "x2": 0.9375, "y2": 0.25, "z2": 0.9375 },
+  "selectionbox": { "x1": 0.0625, "y1": 0, "z1": 0.0625, "x2": 0.9375, "y2": 0.25, "z2": 0.9375 },
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" }
+}

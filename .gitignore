@@ -1,0 +1,35 @@
+# Build outputs
+bin/
+obj/
+
+# User- and IDE-specific files
+.vs/
+.vscode/
+.idea/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.code-workspace
+
+# Package/restore and tooling artifacts
+packages/
+TestResults/
+*.nupkg
+*.snupkg
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment overrides
+.env
+.env.*
+!.env.example

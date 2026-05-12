@@ -1,0 +1,21 @@
+{
+  "code": "photoplanepainting",
+  "blockmaterial": "Cloth",
+  "drawtype": "json",
+  "shape": {
+    "base": "phototesting:block/frame/photoplanepainting",
+    "rotateYByType": {
+      "*-north": 180,
+      "*-east": 90,
+      "*-south": 0,
+      "*-west": 270
+    }
+  },
+  "variantgroups": [
+    { "code": "side", "loadFromProperties": "abstract/horizontalorientation" }
+  ],
+  "creativeinventory": {},
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" },
+  "lightAbsorption": 0
+}

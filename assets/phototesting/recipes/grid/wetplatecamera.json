@@ -1,0 +1,38 @@
+[
+  {
+    "ingredientPattern": "BBB,QLQ,BNB",
+    "width": 3,
+    "height": 3,
+    "ingredients": {
+      "B": { "type": "item", "code": "game:plank-*", "quantity": 1 },
+      "Q": { "type": "item", "code": "game:clearquartz", "quantity": 1 },
+      "L": { "type": "item", "code": "game:leather-*", "quantity": 4 },
+      "N": { "type": "item", "code": "game:metalnailsandstrips-bismuthbronze", "quantity": 4 }
+    },
+    "output": { "type": "item", "code": "phototesting:wetplatecamera", "quantity": 1 }
+  },
+  {
+    "ingredientPattern": "BBB,QLQ,BNB",
+    "width": 3,
+    "height": 3,
+    "ingredients": {
+      "B": { "type": "item", "code": "game:plank-*", "quantity": 1 },
+      "Q": { "type": "item", "code": "game:clearquartz", "quantity": 1 },
+      "L": { "type": "item", "code": "game:leather-*", "quantity": 4 },
+      "N": { "type": "item", "code": "game:metalnailsandstrips-tinbronze", "quantity": 4 }
+    },
+    "output": { "type": "item", "code": "phototesting:wetplatecamera", "quantity": 1 }
+  },
+  {
+    "ingredientPattern": "BBB,QLQ,BNB",
+    "width": 3,
+    "height": 3,
+    "ingredients": {
+      "B": { "type": "item", "code": "game:plank-*", "quantity": 1 },
+      "Q": { "type": "item", "code": "game:clearquartz", "quantity": 1 },
+      "L": { "type": "item", "code": "game:leather-*", "quantity": 4 },
+      "N": { "type": "item", "code": "game:metalnailsandstrips-blackbronze", "quantity": 4 }
+    },
+    "output": { "type": "item", "code": "phototesting:wetplatecamera", "quantity": 1 }
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "type": "code",
+  "modid": "phototesting",
+  "name": "Photography Testing",
+  "authors": ["Moby_", "Fowl"],
+  "description": "Photography Dev Mod",
+  "version": "1.0.0",
+  "dependencies": {
+    "game": "1.21.6",
+    "chemistrylib": "1.2.2"
+  }
+}

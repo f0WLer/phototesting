@@ -1,0 +1,26 @@
+{
+  "code": "plate-coated",
+  "class": "GlassPlate",
+  "entityClass": "BlockEntityPlateProcessState",
+  "blockmaterial": "Glass",
+  "drawtype": "json",
+  "shape": { "base": "phototesting:block/plates/plate" },
+  "faceCullMode": "NeverCull",
+  "sideao": { "all": false },
+  "textures": {
+    "all": {
+      "base": "phototesting:item/plate-coated",
+      "alpha": 190
+    }
+  },
+  "sounds": {
+    "place": "game:block/plate",
+    "break": "game:block/glass",
+    "hit": "game:block/glass"
+  },
+  "collisionbox": { "x1": 0.125, "y1": 0, "z1": 0.125, "x2": 0.875, "y2": 0.0625, "z2": 0.875 },
+  "selectionbox": { "x1": 0.125, "y1": 0, "z1": 0.125, "x2": 0.875, "y2": 0.0625, "z2": 0.875 },
+  "lightAbsorption": 0,
+  "sidesolid": { "all": "false" },
+  "sideopaque": { "all": "false" }
+}

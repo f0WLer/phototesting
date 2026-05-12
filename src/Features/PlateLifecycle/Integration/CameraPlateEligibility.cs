@@ -1,0 +1,63 @@
+using Vintagestory.API.Common;
+
+namespace Phototesting.PlateLifecycle
+{
+    /// <summary>
+    /// Shared camera load/exposure plate eligibility rules used by both client and server paths.
+    /// Keeps stage-first logic in one place for consolidated plate item families.
+    /// </summary>
+    public static class CameraPlateEligibility
+    {
+        private static readonly AssetLocation _glassPlateItemCode = new("phototesting", "glassplate");
+        private static readonly AssetLocation _sensitizedPlateItemCode = new("phototesting", "sensitizedplate");
+        private static readonly AssetLocation _photoPlateItemCode = new("phototesting", "photoplate");
+
+        // Validates the compact loaded-plate code string used on camera item attributes.
+        public static bool IsLoadedCodeSensitized(string? loadedCode)
+        {
+            if (string.IsNullOrWhiteSpace(loadedCode)) return false;
+            return string.Equals(loadedCode, _sensitizedPlateItemCode.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Checks whether an item stack is a loadable sensitized plate for camera insertion.
+        public static bool CanLoadIntoCamera(ItemStack? stack)
+        {
+            AssetLocation? code = stack?.Collectible?.Code;
+            if (code == null) return false;
+            if (code != _sensitizedPlateItemCode) return false;
+
+            PlateStage stage = PlateStateService.GetStage(stack);
+            return stage == PlateStage.Sensitized || stage == PlateStage.Exposed;
+        }
+
+        // Checks whether a plate can be exposed now (must be sensitized stage, not just loadable).
+        public static bool IsPlateSensitizedForExposure(ItemStack? stack)
+        {
+            AssetLocation? code = stack?.Collectible?.Code;
+            if (code == null) return false;
+            if (code != _sensitizedPlateItemCode) return false;
+
+            return PlateStateService.GetStage(stack) == PlateStage.Sensitized;
+        }
+
+        // Checks whether a loaded plate should use the exposed-camera visual variant.
+        public static bool IsPlateExposedForCameraVisual(ItemStack? stack)
+        {
+            if (stack == null) return false;
+
+            PlateStage stage = PlateStateService.GetStage(stack);
+            return stage == PlateStage.Exposed;
+        }
+
+        // Identifies plate item codes managed by the consolidated plate pipeline.
+        public static bool IsKnownPlateCode(AssetLocation? code)
+        {
+            if (code == null) return false;
+            return code == _glassPlateItemCode
+                || code == _sensitizedPlateItemCode
+                || code == _photoPlateItemCode
+                ;
+        }
+    }
+}
+

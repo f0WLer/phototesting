@@ -1,0 +1,36 @@
+{
+  "code": "photoplate",
+  "class": "PhotoPlate",
+  "shape": { "base": "phototesting:item/plates/plate" },
+  "textures": {
+    "plate": { "base": "phototesting:item/plate-developed" }
+  },
+  "attributes": {
+    "handbook": { "groupBy": ["wetplateplate-*"] },
+    "renderPhotoOverlay": true,
+    "photoOverlayFace": "up",
+    "photoUvRotation": 180,
+    "plateStage": "developed"
+  },
+  "maxstacksize": 1,
+  "heldTpIdleAnimation": "holdbothhands",
+  "creativeinventory": { "general": ["*"] },
+  "guiTransform": {
+    "translation": { "x": 18, "y": 1, "z": 0 },
+    "rotation": { "x": 90, "y": 0, "z": -45 },
+    "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+    "scale": 1.8
+  },
+  "tpHandTransform": {
+    "translation": { "x": -0.1, "y": 0.2, "z": -0.4 },
+    "rotation": { "x": 20, "y": 110, "z": 0 },
+    "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+    "scale": 0.6
+  },
+  "groundTransform": {
+    "translation": { "x": 0, "y": 0.24, "z": 0 },
+    "rotation": { "x": 0, "y": 0, "z": 0 },
+    "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+    "scale": 1.6
+  }
+}

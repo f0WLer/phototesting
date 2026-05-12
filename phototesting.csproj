@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <AssemblyName>phototesting</AssemblyName>
+    <!-- Set this to your Vintage Story install directory. -->
+    <VINTAGE_STORY_PATH Condition=" '$(VINTAGE_STORY_PATH)' == '' "></VINTAGE_STORY_PATH>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)\.env')">
+    <_EnvText>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\.env'))</_EnvText>
+    <VINTAGE_STORY_PATH Condition=" '$(VINTAGE_STORY_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^VINTAGE_STORY_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</VINTAGE_STORY_PATH>
+    <MODS_PATH Condition=" '$(MODS_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^MODS_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</MODS_PATH>
+    <MODS_PATH Condition=" '$(MODS_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^VINTAGE_STORY_MODS_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</MODS_PATH>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- <PackageReference Include="Vintagestory.API" Version="1.21.6" /> -->
+  </ItemGroup>
+
+  <!-- Referenced DLLs from the game installation -->
+  <ItemGroup>
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VINTAGE_STORY_PATH)\VintagestoryAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="VintagestoryLib">
+      <HintPath>$(VINTAGE_STORY_PATH)\VintagestoryLib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="protobuf-net">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\protobuf-net.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SkiaSharp">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\SkiaSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="OpenTK.Graphics">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\OpenTK.Graphics.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="OpenTK.Core">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\OpenTK.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(VINTAGE_STORY_PATH)\Lib\Newtonsoft.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="modinfo.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Don't compile or deploy reference repos/tools checked into the workspace. -->
+  <ItemGroup>
+    <Compile Remove="reference\**\*.cs" />
+    <Compile Remove="obj\**\*.cs" />
+    <Compile Remove="bin\**\*.cs" />
+    <EmbeddedResource Remove="reference\**\*" />
+    <None Remove="reference\**\*" />
+  </ItemGroup>
+
+
+  <Target Name="ZipOutputToMods" AfterTargets="Build" Condition=" '$(MODS_PATH)' != '' AND '$(Configuration)' == 'Debug' ">
+        <Exec Command="powershell -NoProfile -Command &quot;&amp; { Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; $out = [System.IO.Path]::GetFullPath('$(TargetDir)'); $mods = '$(MODS_PATH)'; if (-not $out) { exit 1 }; if (-not $out.EndsWith([System.IO.Path]::DirectorySeparatorChar)) { $out += [System.IO.Path]::DirectorySeparatorChar }; if (-not (Test-Path $mods)) { New-Item -ItemType Directory -Path $mods | Out-Null }; $info = Get-Content '$(MSBuildProjectDirectory)\modinfo.json' | ConvertFrom-Json; $modId = $info.modid; $ver = $info.version; if (-not $modId) { $modId = 'phototesting' }; if (-not $ver) { $ver = 'dev' }; $zipName = ($modId + '-' + $ver + '-' + '$(Configuration)' + '.zip'); $zip = Join-Path $mods $zipName; if (Test-Path $zip) { Remove-Item $zip -Force }; Remove-Item -Path (Join-Path $out '*.pdb'), (Join-Path $out '*.deps.json') -Force -ErrorAction SilentlyContinue; $stream = [System.IO.File]::Open($zip, [System.IO.FileMode]::Create); $archive = New-Object System.IO.Compression.ZipArchive($stream, ([System.IO.Compression.ZipArchiveMode]::Create), $false); try { Get-ChildItem -Path $out -Recurse -File | Where-Object { $_.FullName -ne $zip } | ForEach-Object { $entryName = $_.FullName.Substring($out.Length).Replace([char][System.IO.Path]::DirectorySeparatorChar, [char]'/' ); [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null } } finally { $archive.Dispose(); $stream.Dispose() } }&quot;" />
+  </Target>
+
+</Project>
