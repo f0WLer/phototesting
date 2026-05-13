@@ -13,7 +13,8 @@ namespace Phototesting.PlateLifecycle.Blocks
             SensitizationStep nextStep = new("", null, 0, "");
 
             bool isPolish = isRough && IsPolishModifierDown(byPlayer) && IsHoldingPlainCloth(byPlayer);
-            bool isSensitize = isSensitizable && CanStartGroundSensitization(byPlayer, blockSel.Position, state, out nextStep);
+            bool isSensitize = isSensitizable && CanStartGroundSensitization(byPlayer, blockSel.Position, state, out nextStep)
+                               && nextStep.Kind == SensitizationStepKind.Chemical;
             bool isPickup = IsEmptyHand(byPlayer);
 
             if (world.Side == EnumAppSide.Client)

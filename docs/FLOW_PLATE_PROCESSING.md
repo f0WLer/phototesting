@@ -1,10 +1,11 @@
 # Plate Processing Flow
 
-Runtime map for ground plate sensitization and development tray progression. Updated: 2026-05-07.
+Runtime map for ground plate sensitization and development tray progression. Updated: 2026-05-12.
 
 ## Triggers
 
-- Right-click a placed glass plate with a chemical / dry / polish item.
+- Right-click a placed glass plate with a chemical / polish item.
+- Placed coated plate with a pending Dry sensitization step ticks down passively (no input).
 - Right-click the development tray with a plate or processing reagent.
 
 ## First entry points
@@ -14,11 +15,11 @@ Runtime map for ground plate sensitization and development tray progression. Upd
 
 ## Ground sensitization path
 
-1. `BlockGlassPlate.OnBlockInteractStart` (in `Interaction.cs`) routes the placed-plate interaction.
+1. `BlockGlassPlate.OnBlockInteractStart` (in `Interaction.cs`) routes the placed-plate interaction. RMB only engages for Chemical steps and polish; Dry steps fall through.
 2. The chemistry partial resolves the current process via [`ProcessRegistry`](../src/Features/PlateLifecycle/Chemistry/ProcessRegistry.cs) and the next expected step.
-3. [`PlateSensitizationService`](../src/Features/PlateLifecycle/Chemistry/PlateSensitizationService.cs) validates the next chemical or dry step and advances plate state.
+3. [`PlateSensitizationService`](../src/Features/PlateLifecycle/Chemistry/PlateSensitizationService.cs) validates the next chemical step (or skips a contiguous run of Dry steps when the player holds the next matching chemical) and advances plate state.
 4. [`PlateStateService`](../src/Features/PlateLifecycle/State/PlateStateService.cs) writes process / stage / naming attributes onto the resulting plate stack; [`PlateStateAttributes`](../src/Features/PlateLifecycle/State/PlateStateAttributes.cs) defines keys; [`PlateLifecycleStateCoordinator`](../src/Features/PlateLifecycle/State/PlateLifecycleStateCoordinator.cs) coordinates multi-attribute transitions.
-5. [`BlockEntityPlateProcessState`](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) persists process lock and step index for the placed ground plate.
+5. [`BlockEntityPlateProcessState`](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) persists process lock and step index for the placed ground plate, and runs the passive air-dry countdown (1 Hz server tick). On elapse it calls back into `BlockGlassPlate.OnDryWaitElapsed` which advances the Dry step (or finalizes the sensitized plate).
 6. Polish path is owned by [`BlockGlassPlate.PolishInteraction.cs`](../src/Features/PlateLifecycle/Integration/BlockGlassPlate.PolishInteraction.cs).
 
 ## Development tray path
@@ -37,8 +38,8 @@ Runtime map for ground plate sensitization and development tray progression. Upd
 | Sensitization step model + service | [`SensitizationStep`](../src/Features/PlateLifecycle/Chemistry/SensitizationStep.cs), [`PlateSensitizationService`](../src/Features/PlateLifecycle/Chemistry/PlateSensitizationService.cs) |
 | Development step model + service | [`DevelopmentStep`](../src/Features/PlateLifecycle/Chemistry/DevelopmentStep.cs), [`PlateDevelopmentService`](../src/Features/PlateLifecycle/Chemistry/PlateDevelopmentService.cs) |
 | Plate stage / process / name attributes | [`PlateStage`](../src/Features/PlateLifecycle/State/PlateStage.cs), [`PlateStateAttributes`](../src/Features/PlateLifecycle/State/PlateStateAttributes.cs), [`PlateStateService`](../src/Features/PlateLifecycle/State/PlateStateService.cs), [`PlateLifecycleStateCoordinator`](../src/Features/PlateLifecycle/State/PlateLifecycleStateCoordinator.cs) |
-| Wet-timer attribute keys on plate stacks | [`WetPlateAttrs`](../src/Shared/WetPlateAttrs.cs) |
-| Placed ground-plate process progress | [`BlockEntityPlateProcessState`](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) |
+| Wet-plate drying (vanilla `EnumTransitionType.Dry` wrapper) | [`PlateDryingTransition`](../src/Shared/PlateDryingTransition.cs), back-compat surface in [`WetPlateAttrs`](../src/Shared/WetPlateAttrs.cs); plate JSON `transitionableProps` blocks; per-stack overrides via `ItemPlateBase`. |
+| Placed ground-plate process progress + passive dry timer | [`BlockEntityPlateProcessState`](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) |
 | Tray inserted plate runtime | [`BlockEntityDevelopmentTray`](../src/Features/PlateLifecycle/Tray/BlockEntity/BlockEntityDevelopmentTray.cs) |
 | Tray timing + spec config | [`DevelopmentTrayInteractionConfig`](../src/Features/PlateLifecycle/Tray/Config/DevelopmentTrayInteractionConfig.cs), [`TimedInteractionConfig`](../src/Features/AdminTooling/Config/TimedInteractionConfig.cs) |
 | Camera/exposure rules feeding plates | [`ExposureParameters`](../src/Features/PlateLifecycle/Chemistry/ExposureParameters.cs), [`CameraPlateEligibility`](../src/Features/PlateLifecycle/Integration/CameraPlateEligibility.cs) |

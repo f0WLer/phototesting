@@ -8,9 +8,17 @@ namespace Phototesting.PlateLifecycle.Blocks
     public sealed partial class BlockGlassPlate
     {
         // Handles timed ground-plate sensitization progression once interaction state has been identified as clean/coated.
+        // Dry steps are no longer advanced by RMB-hold; they tick down passively in the
+        // block entity. Only Chemical steps (including dry-skip via held next-chemical)
+        // advance through the player interaction path.
         private bool HandleGroundSensitizationInteractionStep(float secondsUsed, IWorldAccessor world, IPlayer byPlayer, BlockPos pos, string state)
         {
             if (!TryGetGroundSensitizationContext(byPlayer, pos, state, out ItemSlot? chemicalSlot, out ItemStack plate, out PhotographyProcessDefinition process, out SensitizationStep step, out int nextStepIndex))
+            {
+                return false;
+            }
+
+            if (step.Kind != SensitizationStepKind.Chemical)
             {
                 return false;
             }
@@ -29,15 +37,13 @@ namespace Phototesting.PlateLifecycle.Blocks
             return false;
         }
 
-        // Resolves the timed interaction length for the next sensitization step, including dry waits.
+        // Resolves the timed interaction length for the next sensitization step. Dry steps
+        // never reach this path anymore; kept as a safety fallback for the chemical case.
         private float ResolveSensitizationStepSeconds(SensitizationStep step)
         {
             if (step.Kind == SensitizationStepKind.Dry)
             {
-                float seconds = step.WaitSeconds ?? GetSensitizationDrySeconds();
-                if (seconds < 0f) seconds = 0f;
-                if (seconds > 300f) seconds = 300f;
-                return seconds;
+                return 0f;
             }
 
             return GetSensitizationPourSeconds();
@@ -121,7 +127,60 @@ namespace Phototesting.PlateLifecycle.Blocks
             world.BlockAccessor.SetBlock(coatedBlock.Id, pos);
             world.BlockAccessor.MarkBlockDirty(pos);
             TrySetPlacedPlateProcessState(world, pos, process.Id, nextStepIndex);
+            MaybeStartDryWaitForUpcomingStep(world, pos, process, nextStepIndex);
             return true;
+        }
+
+        // If the very next sensitization step is a passive Dry wait, kick off the
+        // block entity's air-dry countdown so it auto-advances without player input.
+        private void MaybeStartDryWaitForUpcomingStep(IWorldAccessor world, BlockPos pos, PhotographyProcessDefinition process, int justAppliedStepIndex)
+        {
+            int upcomingIndex = justAppliedStepIndex + 1;
+            if (upcomingIndex < 0 || upcomingIndex >= process.SensitizationSteps.Count) return;
+
+            SensitizationStep upcoming = process.SensitizationSteps[upcomingIndex];
+            if (upcoming.Kind != SensitizationStepKind.Dry) return;
+
+            float waitSeconds = upcoming.WaitSeconds ?? GetSensitizationDrySeconds();
+            if (waitSeconds <= 0f) return;
+
+            if (world.BlockAccessor.GetBlockEntity(pos) is BlockEntityPlateProcessState be)
+            {
+                be.StartDryWait(waitSeconds);
+            }
+        }
+
+        // Server-side callback invoked by BlockEntityPlateProcessState when the passive
+        // air-dry timer elapses. Advances the plate past the Dry step and either spawns
+        // the finished sensitized plate at the block position or restarts the timer if
+        // another Dry step follows immediately.
+        internal void OnDryWaitElapsed(IWorldAccessor world, BlockPos pos)
+        {
+            if (world.Side != EnumAppSide.Server) return;
+            if (api?.ModLoader?.GetModSystem<PhotoTestingModSystem>() is not PhotoTestingModSystem modSys) return;
+            if (!TryGetPlacedPlateProcessState(world, pos, out string processId, out int currentStepIndex)) return;
+
+            PhotographyProcessDefinition process = modSys.Processes.ResolveOrDefault(processId);
+            int dryIndex = currentStepIndex + 1;
+            if (dryIndex < 0 || dryIndex >= process.SensitizationSteps.Count) return;
+
+            SensitizationStep dryStep = process.SensitizationSteps[dryIndex];
+            if (dryStep.Kind != SensitizationStepKind.Dry) return;
+
+            if (!TryCreateVirtualPlateStackFromPlacedState(world, pos, "coated", out ItemStack plate)) return;
+            if (!PlateSensitizationService.TryAdvancePlateState(plate, process, dryIndex, out bool complete)) return;
+
+            if (complete)
+            {
+                if (!PlateSensitizationService.TryCreateSensitizedPlateStack(world, plate, process, out ItemStack sensitized)) return;
+                world.SpawnItemEntity(sensitized, pos.ToVec3d().Add(0.5, 0.5, 0.5));
+                world.BlockAccessor.SetBlock(0, pos);
+                world.BlockAccessor.MarkBlockDirty(pos);
+                return;
+            }
+
+            TrySetPlacedPlateProcessState(world, pos, process.Id, dryIndex);
+            MaybeStartDryWaitForUpcomingStep(world, pos, process, dryIndex);
         }
 
         // Reconstructs a virtual plate stack from the placed block so shared plate services can run without block-specific branching.
@@ -159,8 +218,8 @@ namespace Phototesting.PlateLifecycle.Blocks
             {
                 interaction = new WorldInteraction
                 {
-                    ActionLangCode = "phototesting:heldhelp-plate-sensitize-dry",
-                    MouseButton = EnumMouseButton.Right
+                    ActionLangCode = "phototesting:heldhelp-plate-drying-wait",
+                    MouseButton = EnumMouseButton.None
                 };
 
                 return true;
