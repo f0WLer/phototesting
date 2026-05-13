@@ -110,6 +110,19 @@ namespace Phototesting.PlateLifecycle
             MarkDirty(true);
         }
 
+        public void RestoreDryWait(double finishTotalHours, double currentTotalHours)
+        {
+            if (finishTotalHours <= currentTotalHours)
+            {
+                CancelDryWait();
+                return;
+            }
+
+            _dryFinishTotalHours = finishTotalHours;
+            _dryTotalHours = Math.Max(0.0, finishTotalHours - currentTotalHours);
+            MarkDirty(true);
+        }
+
         public void CancelDryWait()
         {
             if (_dryFinishTotalHours <= 0.0 && _dryTotalHours == 0.0) return;

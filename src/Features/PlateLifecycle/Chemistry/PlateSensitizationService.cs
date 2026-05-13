@@ -14,6 +14,7 @@ namespace Phototesting.PlateLifecycle
         internal static bool TryResolveNextStep(
             ProcessRegistry registry,
             ItemStack plate,
+            double currentTotalHours,
             ItemSlot? chemicalSlot,
             out PhotographyProcessDefinition process,
             out SensitizationStep step,
@@ -34,6 +35,13 @@ namespace Phototesting.PlateLifecycle
                 step = process.SensitizationSteps[nextStepIndex];
                 if (step.Kind == SensitizationStepKind.Dry)
                 {
+                    if (PlateStateService.IsDryWaitActive(plate, currentTotalHours))
+                    {
+                        return true;
+                    }
+
+                    PlateStateService.ClearDryFinishTotalHours(plate);
+
                     if (TryResolveOptionalDrySkip(process, chemicalSlot, nextStepIndex + 1, out SensitizationStep skippedStep, out int skippedStepIndex))
                     {
                         step = skippedStep;

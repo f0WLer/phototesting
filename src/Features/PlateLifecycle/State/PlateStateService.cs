@@ -161,10 +161,10 @@ namespace Phototesting.PlateLifecycle
         /// <summary>
         /// True when the item carries an active dry-wait deadline that has not yet elapsed.
         /// </summary>
-        public static bool IsDryWaitActive(ItemStack? stack, IGameCalendar calendar)
+        public static bool IsDryWaitActive(ItemStack? stack, double currentTotalHours)
         {
             double finish = GetDryFinishTotalHours(stack);
-            return finish > 0.0 && calendar.TotalHours < finish;
+            return finish > 0.0 && currentTotalHours < finish;
         }
     }
 }

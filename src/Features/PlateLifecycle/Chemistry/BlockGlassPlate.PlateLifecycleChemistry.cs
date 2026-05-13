@@ -82,7 +82,7 @@ namespace Phototesting.PlateLifecycle.Blocks
             if (api?.ModLoader?.GetModSystem<PhotoTestingModSystem>() is not PhotoTestingModSystem modSys) return false;
             if (!TryCreateVirtualPlateStackFromPlacedState(api.World, pos, state, out plate)) return false;
 
-            return PlateSensitizationService.TryResolveNextStep(modSys.Processes, plate, chemicalSlot, out process, out step, out nextStepIndex);
+            return PlateSensitizationService.TryResolveNextStep(modSys.Processes, plate, api.World.Calendar.TotalHours, chemicalSlot, out process, out step, out nextStepIndex);
         }
 
         // Applies the resolved sensitization step, either advancing in place or replacing the block with the final sensitized plate item.
@@ -196,6 +196,14 @@ namespace Phototesting.PlateLifecycle.Blocks
             {
                 PlateLifecycleStateCoordinator.ApplyProcessProgress(plate, processId, stepIndex);
                 PlateLifecycleStateCoordinator.SetStageAndName(plate, PlateStage.Sensitizing, null);
+
+                // Mirror the block entity's active dry deadline onto the virtual plate so the
+                // resolver's calendar gate applies identically whether the plate is placed or in inventory.
+                if (world.BlockAccessor.GetBlockEntity(pos) is BlockEntityPlateProcessState be && be.IsDryWaitActive)
+                {
+                    PlateStateService.SetDryFinishTotalHours(plate, be.DryFinishTotalHours);
+                }
+
                 return true;
             }
 

@@ -41,6 +41,13 @@ namespace Phototesting.PlateLifecycle.Integration
                 if (!string.IsNullOrWhiteSpace(processId) && stepIndex >= 0)
                 {
                     stateBe.SetProcessState(processId, stepIndex);
+
+                    double dryFinishTotalHours = PlateStateService.GetDryFinishTotalHours(stack);
+                    if (dryFinishTotalHours > world.Calendar.TotalHours)
+                    {
+                        stateBe.RestoreDryWait(dryFinishTotalHours, world.Calendar.TotalHours);
+                    }
+
                     world.BlockAccessor.MarkBlockEntityDirty(placePos);
                 }
             }
