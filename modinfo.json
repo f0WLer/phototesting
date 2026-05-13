@@ -6,7 +6,7 @@
   "description": "Photography Dev Mod",
   "version": "1.0.0",
   "dependencies": {
-    "game": "1.21.6",
+    "game": "1.22.0",
     "chemistrylib": "1.2.2"
   }
 }
