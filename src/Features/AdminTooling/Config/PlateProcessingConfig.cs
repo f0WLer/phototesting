@@ -23,6 +23,9 @@ namespace Phototesting.AdminTooling
         /// <summary>How long a freshly-sensitized plate stays wet, in in-game hours. This is affected by the world's time speed. Default 0.66 (40 minutes). Server-authoritative.</summary>
         public double WetPlateDurationHours = 0.66;
 
+        /// <summary>How fast plates dry while inside a plate box. 0 = paused (default), 1 = full open-air rate.</summary>
+        public float PlateBoxDryingMultiplier = 0f;
+
         internal void ClampInPlace()
         {
             if (DevelopmentTrayChemicalUnitsPerUse < 1) DevelopmentTrayChemicalUnitsPerUse = 1;
@@ -42,6 +45,9 @@ namespace Phototesting.AdminTooling
 
             if (WetPlateDurationHours < 0.01) WetPlateDurationHours = 0.01;
             if (WetPlateDurationHours > 720.0) WetPlateDurationHours = 720.0;
+
+            if (PlateBoxDryingMultiplier < 0f) PlateBoxDryingMultiplier = 0f;
+            if (PlateBoxDryingMultiplier > 1f) PlateBoxDryingMultiplier = 1f;
         }
     }
 }

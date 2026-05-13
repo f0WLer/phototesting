@@ -91,9 +91,11 @@
     "phototesting:heldhelp-cleanroughglass":     "Polish rough glass plate",
     "phototesting:heldhelp-coatglassplate":      "Start sensitization with matching solution",
     "phototesting:heldhelp-plate-sensitize-dry": "Pick up to speed up drying",
+    "phototesting:heldhelp-plate-drying-wait": "Drying… leave the plate to finish",
     "phototesting:heldhelp-plate-sensitize-next": "Continue sensitization process",
 
     "wetplate-wetness": "Still wet: {0} min",
+    "wetplate-wetness-permanent": "Stays wet (sealed emulsion).",
     "wetplate-dry":     "The plate has dried.",
 
 

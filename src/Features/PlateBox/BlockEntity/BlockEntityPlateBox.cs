@@ -97,14 +97,19 @@ namespace Phototesting.PlateBox
             return count;
         }
 
-        // Inserts one plate into a slot and pauses wetness decay while stored.
+        // Inserts one plate into a slot. While stored the stack carries a marker that
+        // ItemPlateBase.GetTransitionRateMul reads to apply the configured plate-box
+        // drying multiplier (default 0 = full pause).
         internal bool TryInsertPlateAt(int slotIndex, ItemStack stack, IWorldAccessor world)
         {
             if ((uint)slotIndex >= SlotCount || stack == null || !IsInsertablePlate(stack)) return false;
 
             ItemStack insertStack = stack.Clone();
             insertStack.StackSize = 1;
-            WetPlateAttrs.PauseWetTimerForStorage(world, insertStack);
+            // Roll forward any pending decay before flipping into storage mode so the
+            // pre-storage period is accounted for at the open-air rate.
+            PlateDryingTransition.TickNow(world, insertStack);
+            PlateDryingTransition.SetStoredInPlateBox(insertStack, true);
 
             lock (_slotLock)
             {
@@ -116,7 +121,8 @@ namespace Phototesting.PlateBox
             return true;
         }
 
-        // Removes one stored plate from a slot and resumes wetness decay.
+        // Removes one stored plate from a slot. The storage marker is cleared after a
+        // final tick so any in-storage drying (when the multiplier is non-zero) is applied.
         internal ItemStack? TakePlateAt(int slotIndex, IWorldAccessor world)
         {
             if ((uint)slotIndex >= SlotCount) return null;
@@ -130,7 +136,10 @@ namespace Phototesting.PlateBox
             }
 
             ItemStack output = stack.Clone();
-            WetPlateAttrs.ResumeWetTimerFromStorage(world, output);
+            // Tick once more while the storage flag is still set, then clear it so the
+            // stack ages at the normal rate from now on.
+            PlateDryingTransition.TickNow(world, output);
+            PlateDryingTransition.SetStoredInPlateBox(output, false);
 
             OnSlotsChanged();
             return output;

@@ -7,13 +7,8 @@ namespace Phototesting.PlateLifecycle
         public override void OnModifiedInInventorySlot(IWorldAccessor world, ItemSlot slot, ItemStack? extractedStack = null)
         {
             base.OnModifiedInInventorySlot(world, slot, extractedStack);
-            if (world?.Side != EnumAppSide.Server) return;
-            if (slot?.Itemstack == null) return;
-
-            if (PlateStateService.GetStage(slot.Itemstack) == PlateStage.Finished) return;
-
-            double duration = WetPlateAttrs.ResolveWetDurationHours(api);
-            WetPlateAttrs.EnsureWetTimer(world, slot.Itemstack, duration);
+            // Drying state is initialized by PlateLifecycleStateCoordinator on sensitization
+            // and ticked by the vanilla transition pipeline; nothing to do here.
         }
 
         public override void GetHeldItemInfo(ItemSlot inSlot, System.Text.StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)

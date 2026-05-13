@@ -12,6 +12,15 @@
     "photoUvRotation": 180,
     "plateStage": "developed"
   },
+  "transitionableProps": [
+    {
+      "type": "Dry",
+      "freshHours": { "avg": 0.66 },
+      "transitionHours": { "avg": 0.001 },
+      "transitionedStack": { "type": "item", "code": "phototesting:photoplate" },
+      "transitionRatio": 1
+    }
+  ],
   "maxstacksize": 1,
   "heldTpIdleAnimation": "holdbothhands",
   "creativeinventory": { "general": ["*"] },

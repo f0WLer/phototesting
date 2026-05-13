@@ -20,12 +20,8 @@ namespace Phototesting.PlateLifecycle
 
             if (PlateStateService.GetStage(slot.Itemstack) == PlateStage.Finished)
             {
-                WetPlateAttrs.ClearWetTimer(slot.Itemstack);
-                return;
+                PlateDryingTransition.Clear(slot.Itemstack);
             }
-
-            double duration = WetPlateAttrs.ResolveWetDurationHours(api);
-            WetPlateAttrs.EnsureWetTimer(world, slot.Itemstack, duration);
         }
 
         public override void GetHeldItemInfo(ItemSlot inSlot, System.Text.StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
@@ -40,5 +36,9 @@ namespace Phototesting.PlateLifecycle
                 WetPlateAttrs.AppendWetnessInfo(world, stack, dsc);
             }
         }
+
+        // Once the plate is finished it's a permanent photograph; no longer dries.
+        protected override bool ShouldTrackDryness(ItemStack stack)
+            => PlateStateService.GetStage(stack) != PlateStage.Finished;
     }
 }

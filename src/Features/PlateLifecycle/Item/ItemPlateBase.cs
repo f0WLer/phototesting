@@ -96,6 +96,46 @@ namespace Phototesting.PlateLifecycle
             return PlateNameResolver.ResolveDisplayName(api, itemStack, fallback);
         }
 
+        // Suppress the JSON-defined Dry transition once the plate is marked dried,
+        // marked never-drying (e.g. bromide), or in a stage that doesn't track wetness.
+        public override TransitionableProperties[]? GetTransitionableProperties(IWorldAccessor world, ItemStack itemstack, Vintagestory.API.Common.Entities.Entity forEntity)
+        {
+            if (itemstack?.Attributes == null) return base.GetTransitionableProperties(world, itemstack, forEntity);
+            if (itemstack.Attributes.GetBool(PlateDryingTransition.AttrDried)) return null;
+            if (itemstack.Attributes.GetBool(PlateDryingTransition.AttrNeverDries)) return null;
+            if (!ShouldTrackDryness(itemstack)) return null;
+            return base.GetTransitionableProperties(world, itemstack, forEntity);
+        }
+
+        // Apply the plate-box storage multiplier when the stack is currently stored.
+        public override float GetTransitionRateMul(IWorldAccessor world, ItemSlot inSlot, EnumTransitionType transType)
+        {
+            if (transType == EnumTransitionType.Dry
+                && inSlot?.Itemstack?.Attributes?.GetBool(PlateDryingTransition.AttrStoredInPlateBox) == true)
+            {
+                return PlateDryingTransition.ResolveStorageDryingRateMul(api);
+            }
+            return base.GetTransitionRateMul(world, inSlot, transType);
+        }
+
+        // When the Dry transition completes, mark the stack dried in place rather than
+        // swapping to a transitioned item — keeps the stack as a dry sensitized/photo plate.
+        public override ItemStack OnTransitionNow(ItemSlot slot, TransitionableProperties props)
+        {
+            if (props?.Type == EnumTransitionType.Dry && slot?.Itemstack != null)
+            {
+                ItemStack stack = slot.Itemstack.Clone();
+                stack.Attributes.SetBool(PlateDryingTransition.AttrDried, true);
+                stack.Attributes.RemoveAttribute("transitionstate");
+                return stack;
+            }
+            return base.OnTransitionNow(slot, props);
+        }
+
+        // Subclasses opt out of dryness tracking for stages that no longer need it
+        // (e.g. a finished photo plate is permanent and doesn't dry).
+        protected virtual bool ShouldTrackDryness(ItemStack stack) => true;
+
         public override void OnUnloaded(ICoreAPI api)
         {
             base.OnUnloaded(api);
