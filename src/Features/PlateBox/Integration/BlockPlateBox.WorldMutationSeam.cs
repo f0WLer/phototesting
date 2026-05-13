@@ -70,10 +70,8 @@ namespace Phototesting.PlateBox
             {
                 newBe.FromTreeAttributes(snapshot, world);
                 newBe.MarkDirty(true);
-                try { world.BlockAccessor.MarkBlockEntityDirty(pos); }
-                catch (Exception ex) { Log.Debug(world.Logger, "ToggleOpenClose: MarkBlockEntityDirty failed: {0}", ex.Message); }
-                try { world.BlockAccessor.MarkBlockDirty(pos); }
-                catch (Exception ex) { Log.Debug(world.Logger, "ToggleOpenClose: MarkBlockDirty failed: {0}", ex.Message); }
+                world.BlockAccessor.MarkBlockEntityDirty(pos);
+                world.BlockAccessor.MarkBlockDirty(pos);
                 PlayOpenCloseSoundPair(world, pos);
                 return true;
             }

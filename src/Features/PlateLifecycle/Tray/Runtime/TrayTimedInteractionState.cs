@@ -26,15 +26,7 @@ namespace Phototesting.PlateLifecycle
             tree.SetInt(TimedYKey, pos.Y);
             tree.SetInt(TimedZKey, pos.Z);
 
-            long nowMs = 0;
-            try
-            {
-                nowMs = byPlayer.Entity?.World?.ElapsedMilliseconds ?? 0;
-            }
-            catch
-            {
-                nowMs = 0;
-            }
+            long nowMs = byPlayer.Entity?.World?.ElapsedMilliseconds ?? 0;
 
             if (nowMs <= 0) nowMs = Environment.TickCount64;
             tree.SetLong(TimedStartMsKey, nowMs);

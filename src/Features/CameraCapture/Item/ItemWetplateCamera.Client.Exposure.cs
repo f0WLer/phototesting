@@ -13,9 +13,8 @@ namespace Phototesting.CameraCapture
         // Returns world elapsed ms, falling back to TickCount64 if the world clock is unavailable.
         private static long GetWorldMs(EntityAgent byEntity)
         {
-            try { long ms = byEntity.World?.ElapsedMilliseconds ?? 0; if (ms > 0) return ms; }
-            catch { /* intentional: world may be unavailable */ }
-            return Environment.TickCount64;
+            return byEntity.World?.ElapsedMilliseconds is long ms && ms > 0
+                ? ms : Environment.TickCount64;
         }
 
         // Starts the timed exposure state.

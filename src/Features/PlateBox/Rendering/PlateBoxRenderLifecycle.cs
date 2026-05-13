@@ -23,14 +23,7 @@ namespace Phototesting.PlateBox
         {
             if (api?.Side != EnumAppSide.Client) return;
 
-            try
-            {
-                ((ICoreClientAPI)api).World.BlockAccessor.MarkBlockDirty(pos);
-            }
-            catch
-            {
-                // ignore
-            }
+            ((ICoreClientAPI)api).World.BlockAccessor.MarkBlockDirty(pos);
         }
 
         // Unregisters and disposes renderer resources when BE lifecycle ends.

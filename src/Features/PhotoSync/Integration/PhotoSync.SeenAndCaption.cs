@@ -31,15 +31,8 @@ namespace Phototesting.PhotoSync.Integration
             photoId = PhotoMetadataPolicy.NormalizePhotoId(photoId);
             if (string.IsNullOrEmpty(photoId)) return;
 
-            long nowMs;
-            try
-            {
-                nowMs = (long)_owner.ClientApi.World.ElapsedMilliseconds;
-            }
-            catch
-            {
-                return;
-            }
+            if (_owner.ClientApi.World == null) return;
+            long nowMs = (long)_owner.ClientApi.World.ElapsedMilliseconds;
 
             // Keep the dedupe map bounded during long sessions.
             if (nowMs - _clientPhotoSeenLastPruneMs >= 30_000)
