@@ -54,15 +54,14 @@ namespace Phototesting.CameraCapture
         // Wires camera-capture input polling and zoom projection patching.
         private void ConfigureClientCameraCaptureInputAndProjection(ICoreClientAPI api)
         {
-            // Some client setups don't reliably invoke OnHeldInteractStart for held items
-            // (especially when aiming at air). Poll RMB state as a fallback.
+            // Tick listener drives HoldStill timer + viewfinder lifecycle. RMB state is fed by
+            // MouseDown/MouseUp events (below) so we never poll Input properties.
             _viewfinderTickListenerId = api.Event.RegisterGameTickListener(dt => CaptureClientRuntime.OnClientViewfinderTick(dt), 20, 0);
 
-            // Patch Set3DProjection so viewfinder can zoom reliably.
-            ViewfinderZoomHarmony.TryInstall(api, ClientConfig);
-            // Note: do NOT also force RenderAPI.Set3DProjection per-frame; that can lead to
-            // mismatched projections (e.g., skybox-only zoom). The hook on
-            // ClientMain.Set3DProjection affects the actual world projection.
+            CaptureClientRuntime.SubscribeMouseEvents(api);
+
+            // Viewfinder zoom is applied directly via ClientMain.MainCamera.Fov in
+            // BeginViewfinderMode/EndViewfinderMode (see Client.Viewfinder.State.cs).
         }
         private long? _clientCaptureConfigRetryTickListenerId;
 
@@ -151,6 +150,8 @@ namespace Phototesting.CameraCapture
         {
             if (ClientApi == null) return;
 
+            CaptureClientRuntime.UnsubscribeMouseEvents(ClientApi);
+
             if (_viewfinderTickListenerId > 0)
             {
                 BestEffort.Try(BestEffortLogger, "unregister viewfinder tick listener", () => ClientApi.Event.UnregisterGameTickListener(_viewfinderTickListenerId));
@@ -202,11 +203,40 @@ namespace Phototesting.CameraCapture
             private bool _captureInProgress;
             private float _rmbUpSeconds;
             private bool _lastRmbDown;
+            private bool _rightMouseDown;
+            private MouseEventDelegate? _mouseDownHandler;
+            private MouseEventDelegate? _mouseUpHandler;
             private long _lastShutterGateChatMs;
 
             internal CameraCaptureClientRuntime(CameraCaptureModSystemBridge owner)
             {
                 _owner = owner;
+            }
+
+            // Subscribes to MouseDown/MouseUp so RMB state is event-driven (no Input polling / no try-catch).
+            internal void SubscribeMouseEvents(ICoreClientAPI api)
+            {
+                _mouseDownHandler = (MouseEvent e) => { if (e.Button == EnumMouseButton.Right) _rightMouseDown = true; };
+                _mouseUpHandler = (MouseEvent e) => { if (e.Button == EnumMouseButton.Right) _rightMouseDown = false; };
+                api.Event.MouseDown += _mouseDownHandler;
+                api.Event.MouseUp += _mouseUpHandler;
+            }
+
+            internal void UnsubscribeMouseEvents(ICoreClientAPI api)
+            {
+                if (_mouseDownHandler != null)
+                {
+                    var d = _mouseDownHandler;
+                    BestEffort.Try(_owner.BestEffortLogger, "unsubscribe viewfinder mousedown", () => api.Event.MouseDown -= d);
+                    _mouseDownHandler = null;
+                }
+                if (_mouseUpHandler != null)
+                {
+                    var u = _mouseUpHandler;
+                    BestEffort.Try(_owner.BestEffortLogger, "unsubscribe viewfinder mouseup", () => api.Event.MouseUp -= u);
+                    _mouseUpHandler = null;
+                }
+                _rightMouseDown = false;
             }
 
             internal void OnClientViewfinderTick(float dt)
@@ -376,16 +406,7 @@ namespace Phototesting.CameraCapture
 
             internal bool GetRightMouseDown()
             {
-                if (_owner.ClientApi == null) return false;
-
-                try
-                {
-                    return _owner.ClientApi.Input.InWorldMouseButton.Right || _owner.ClientApi.Input.MouseButton.Right;
-                }
-                catch
-                {
-                    return false;
-                }
+                return _rightMouseDown;
             }
         }
 }

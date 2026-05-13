@@ -1,15 +1,16 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
+using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture
 {
-    // Client-side viewfinder: state machine, hold-still coordinator, capture gate, effects profile, and zoom harmony patch.
+    // Client-side viewfinder: state machine, hold-still coordinator, capture gate, effects profile, and FOV zoom.
     internal sealed partial class CameraCaptureModSystemBridge
     {
 
-    // Viewfinder mode state machine and zoom mechanism lifecycle.
-    // Manages enter/exit behavior, zoom persistence, and FOV/projection recovery.
+    // Viewfinder mode state machine and zoom lifecycle.
+    // Manages enter/exit behavior, zoom persistence, and FOV recovery via direct MainCamera.Fov mutation.
 
         private long _viewfinderTickListenerId;
 
@@ -19,14 +20,13 @@ namespace Phototesting.CameraCapture
         private bool _f4TipShownThisViewfinder;
         private bool _f4TipShownEver;
 
-        private static readonly string[] _viewfinderZoomSettingKeys = { "fieldOfView", "fpHandsFoV" };
         private static readonly AssetLocation _viewfinderEnterSound = new AssetLocation("phototesting", "sounds/rustle");
 
-        // Viewfinder effect: FOV zoom
+        // Viewfinder effect: FOV zoom via direct MainCamera.Fov mutation.
         private readonly object _viewfinderLock = new object();
         private int _viewfinderDepth;
-        private readonly Dictionary<string, float> _viewfinderOldFloatSettings = new Dictionary<string, float>();
-        private readonly Dictionary<string, float> _viewfinderTargetFloatSettings = new Dictionary<string, float>();
+        private float? _viewfinderSavedFov;
+        private float _viewfinderTargetFov;
 
         private bool _zoomMechanismTipShownThisViewfinder;
 
@@ -72,8 +72,7 @@ namespace Phototesting.CameraCapture
                 _viewfinderDepth++;
                 if (_viewfinderDepth > 1) return;
 
-                _viewfinderOldFloatSettings.Clear();
-                _viewfinderTargetFloatSettings.Clear();
+                _viewfinderSavedFov = null;
                 _zoomMechanismTipShownThisViewfinder = false;
 
                 _f4TipShownThisViewfinder = false;
@@ -86,31 +85,38 @@ namespace Phototesting.CameraCapture
                     AudioUtils.FireAndForgetEntitySound(world, _viewfinderEnterSound, playerEnt, AudioUtils.NextRandomPitch(world));
                 }
 
-                // Preferred zoom: Spyglass-style patch of Set3DProjection(float,float).
-                // This is the most reliable way to force a visual zoom on clients where settings
-                // changes do not apply live.
-                if (ViewfinderZoomHarmony.TryInstall(ClientApi, ClientConfig))
-                {
-                    ViewfinderZoomHarmony.Refresh(ClientApi);
-                    return;
-                }
-
-                // Fallback: zoom via client settings keys.
-                foreach (string key in _viewfinderZoomSettingKeys)
-                {
-                    if (!ClientApi.Settings.Float.Exists(key)) continue;
-                    float old = ClientApi.Settings.Float.Get(key, 70f);
-                    _viewfinderOldFloatSettings[key] = old;
-
-                    float newFov = old * ViewfinderZoomMultiplierCfg;
-                    newFov = Math.Max(30f, Math.Min(110f, newFov));
-                    _viewfinderTargetFloatSettings[key] = newFov;
-                    ClientApi.Settings.Float.Set(key, newFov, true);
-                }
+                ApplyZoomedFov();
             }
         }
 
-        // Exits viewfinder mode and restores whichever zoom path was active for the outermost entry.
+        // Saves current MainCamera.Fov (radians) and applies the zoom multiplier directly.
+        // This replaces the prior Harmony IL transpiler on ClientMain.Set3DProjection.
+        private void ApplyZoomedFov()
+        {
+            if (ClientApi?.World is not ClientMain client || client.MainCamera == null) return;
+
+            float current = client.MainCamera.Fov;
+            if (_viewfinderSavedFov == null) _viewfinderSavedFov = current;
+
+            float baseFov = _viewfinderSavedFov.Value;
+            float zoomed = ClampZoomedFov(baseFov * ViewfinderZoomMultiplierCfg, baseFov);
+            client.MainCamera.Fov = zoomed;
+            _viewfinderTargetFov = zoomed;
+
+            ClientApi.Render?.Reset3DProjection();
+        }
+
+        private static float ClampZoomedFov(float proposed, float oldValue)
+        {
+            // MainCamera.Fov is stored in radians (~0.3..2.5 rad covers typical FOV range).
+            if (oldValue > 0f && oldValue < 10f)
+            {
+                return Math.Max(0.3f, Math.Min(2.5f, proposed));
+            }
+            return Math.Max(30f, Math.Min(110f, proposed));
+        }
+
+        // Exits viewfinder mode and restores the saved FOV for the outermost entry.
         public void EndViewfinderMode()
         {
             if (ClientApi == null) return;
@@ -121,21 +127,14 @@ namespace Phototesting.CameraCapture
                 _viewfinderDepth--;
                 if (_viewfinderDepth > 0) return;
 
-                if (ViewfinderZoomHarmony.IsActive)
+                if (_viewfinderSavedFov is float saved && ClientApi.World is ClientMain client && client.MainCamera != null)
                 {
-                    ViewfinderZoomHarmony.Refresh(ClientApi);
+                    client.MainCamera.Fov = saved;
+                    ClientApi.Render?.Reset3DProjection();
                 }
 
-                foreach (var kvp in _viewfinderOldFloatSettings)
-                {
-                    if (ClientApi.Settings.Float.Exists(kvp.Key))
-                    {
-                        ClientApi.Settings.Float.Set(kvp.Key, kvp.Value, true);
-                    }
-                }
-
-                _viewfinderOldFloatSettings.Clear();
-                _viewfinderTargetFloatSettings.Clear();
+                _viewfinderSavedFov = null;
+                _viewfinderTargetFov = 0f;
             }
         }
 
@@ -151,29 +150,10 @@ namespace Phototesting.CameraCapture
             ClientApi.ShowChatMessage("Wetplate: Tip - press F4 to toggle gui-less mode (hide HUD) while using the viewfinder.");
         }
 
-        // Best-effort reflection lookup for the engine's gui-less mode flag across client versions.
-        private bool IsGuiLessModeActive()
-        {
-            if (ClientApi == null) return false;
+        // True when the player has toggled HUD-less mode (F4). Reads the public engine flag.
+        private bool IsGuiLessModeActive() => ClientApi?.HideGuis ?? false;
 
-            try
-            {
-                var type = ClientApi.GetType();
-                var property = type.GetProperty("HideGuis") ?? type.GetProperty("HideGUIs") ?? type.GetProperty("HideGui");
-                if (property != null && property.PropertyType == typeof(bool))
-                {
-                    return (bool)(property.GetValue(ClientApi) ?? false);
-                }
-            }
-            catch
-            {
-                // ignore
-            }
-
-            return false;
-        }
-
-        // Reapplies the current zoom mechanism when the engine resets FOV or projection during active viewfinder mode.
+        // Reapplies the zoomed FOV if the engine reset MainCamera.Fov (e.g. user changed the FOV slider).
         internal void EnsureViewfinderZoomApplied()
         {
             if (ClientApi == null) return;
@@ -187,35 +167,14 @@ namespace Phototesting.CameraCapture
                     _zoomMechanismTipShownThisViewfinder = true;
                     if (ClientConfig?.ShowDebugLogs == true)
                     {
-                        string? mechanism = ViewfinderZoomHarmony.MechanismDescription;
-                        if (!string.IsNullOrEmpty(mechanism))
-                        {
-                            ClientApi.ShowChatMessage($"Wetplate: viewfinder zoom via {mechanism}");
-                        }
-                        else
-                        {
-                            ClientApi.ShowChatMessage("Wetplate: viewfinder zoom via Settings.Float (fallback)");
-                        }
+                        ClientApi.ShowChatMessage("Wetplate: viewfinder zoom via MainCamera.Fov");
                     }
                 }
 
-                if (ViewfinderZoomHarmony.IsActive && _viewfinderTargetFloatSettings.Count == 0)
+                if (ClientApi.World is not ClientMain client || client.MainCamera == null) return;
+                if (Math.Abs(client.MainCamera.Fov - _viewfinderTargetFov) > 0.001f)
                 {
-                    if (!ViewfinderZoomHarmony.WasScaledRecently(250))
-                    {
-                        ViewfinderZoomHarmony.Refresh(ClientApi);
-                    }
-                    return;
-                }
-
-                foreach (var kvp in _viewfinderTargetFloatSettings)
-                {
-                    if (!ClientApi.Settings.Float.Exists(kvp.Key)) continue;
-                    float current = ClientApi.Settings.Float.Get(kvp.Key, kvp.Value);
-                    if (Math.Abs(current - kvp.Value) > 0.001f)
-                    {
-                        ClientApi.Settings.Float.Set(kvp.Key, kvp.Value, true);
-                    }
+                    ApplyZoomedFov();
                 }
             }
         }

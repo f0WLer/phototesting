@@ -1,66 +1,39 @@
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
 
 namespace Phototesting.PlateLifecycle.Tray
 {
     internal sealed class DevelopmentTrayModSystemBridge
     {
         private readonly PhotoTestingModSystem _owner;
-        private long? _clientDevTrayLatchTickListenerId;
+        private MouseEventDelegate? _mouseUpHandler;
 
         internal DevelopmentTrayModSystemBridge(PhotoTestingModSystem owner)
         {
             _owner = owner;
         }
 
-        // Registers client listener(s) owned by DevelopmentTray latch flow.
+        // Subscribes to the engine's MouseUp event so the RMB-release latch clears without polling.
         internal void ConfigureClientDevelopmentTrayInputListeners(ICoreClientAPI api)
         {
-            _clientDevTrayLatchTickListenerId = api.Event.RegisterGameTickListener(OnClientDevTrayLatchTick, 20, 0);
+            _mouseUpHandler = (MouseEvent e) =>
+            {
+                if (e.Button != EnumMouseButton.Right) return;
+                BestEffort.Try(_owner.BestEffortLogger,
+                    "clear dev tray release latch",
+                    () => TrayTimedInteractionState.ClearNeedsRelease(api.World?.Player));
+            };
+            api.Event.MouseUp += _mouseUpHandler;
         }
 
-        // Unregisters client listener(s) owned by DevelopmentTray latch flow.
+        // Unsubscribes the MouseUp listener.
         internal void DisposeClientDevelopmentTrayTickListeners()
         {
-            if (_owner.ClientApi == null) return;
+            if (_owner.ClientApi == null || _mouseUpHandler == null) return;
 
-            if (_clientDevTrayLatchTickListenerId.HasValue && _clientDevTrayLatchTickListenerId.Value > 0)
-            {
-                long id = _clientDevTrayLatchTickListenerId.Value;
-                BestEffort.Try(_owner.BestEffortLogger, "unregister dev tray latch tick listener", () => _owner.ClientApi.Event.UnregisterGameTickListener(id));
-                _clientDevTrayLatchTickListenerId = null;
-            }
-        }
-
-        private void OnClientDevTrayLatchTick(float dt)
-        {
-            if (_owner.ClientApi == null) return;
-
-            BestEffort.Try(_owner.BestEffortLogger,
-                "clear dev tray release latch",
-                () => DevelopmentTrayLatchRuntimeCoordinator.TryClearNeedsRelease(_owner.ClientApi));
-        }
-    }
-
-    internal static class DevelopmentTrayLatchRuntimeCoordinator
-    {
-        // Clears tray latch only when RMB is no longer held.
-        internal static void TryClearNeedsRelease(ICoreClientAPI api)
-        {
-            if (api == null || IsRightMouseDown(api)) return;
-            TrayTimedInteractionState.ClearNeedsRelease(api.World?.Player);
-        }
-
-        // Reads right mouse state without throwing across API-version input differences.
-        private static bool IsRightMouseDown(ICoreClientAPI api)
-        {
-            try
-            {
-                return api.Input.InWorldMouseButton.Right || api.Input.MouseButton.Right;
-            }
-            catch
-            {
-                return false;
-            }
+            var handler = _mouseUpHandler;
+            BestEffort.Try(_owner.BestEffortLogger, "unsubscribe dev tray mouseup", () => _owner.ClientApi.Event.MouseUp -= handler);
+            _mouseUpHandler = null;
         }
     }
 }
