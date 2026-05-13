@@ -86,6 +86,13 @@ namespace Phototesting.PlateLifecycle.Blocks
             {
                 PlateStateService.SetProcessId(stack, processId);
                 PlateStateService.SetSensitizationStepIndex(stack, stepIndex);
+
+                // If a block-side dry wait is still active, carry its absolute deadline onto the
+                // item so the dry step can be enforced before the next chemical is applied.
+                if (world.BlockAccessor.GetBlockEntity(pos) is BlockEntityPlateProcessState be && be.IsDryWaitActive)
+                {
+                    PlateStateService.SetDryFinishTotalHours(stack, be.DryFinishTotalHours);
+                }
             }
 
             if (stage == PlateStage.Rough)

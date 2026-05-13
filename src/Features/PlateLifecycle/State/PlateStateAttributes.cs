@@ -37,6 +37,14 @@ namespace Phototesting.PlateLifecycle
         /// When absent, name resolution falls back to stage/process defaults.
         /// </summary>
         public const string NameLangCode = "phototestingPlateNameLangCode";
+
+        /// <summary>
+        /// Absolute in-game Calendar.TotalHours at which the in-progress block-side air-dry step
+        /// completes. Copied from the block entity onto the item when the plate is picked up mid-dry
+        /// so the dry wait can continue in inventory (or be enforced before the next step).
+        /// Absent when no dry wait is active.
+        /// </summary>
+        public const string DryFinishTotalHours = "phototestingDryFinishTotalHours";
     }
 }
 

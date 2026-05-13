@@ -12,21 +12,46 @@ namespace Phototesting.PlateLifecycle
     {
         private const string ProcessIdAttr = "phototestingProcessId";
         private const string StepIndexAttr = "phototestingSensitizationStep";
-        private const string DryRemainingSecondsAttr = "phototestingDryRemainingSeconds";
+        private const string DryFinishTotalHoursAttr = "phototestingDryFinishTotalHours";
+        private const string DryTotalHoursAttr = "phototestingDryTotalHours";
 
         public string ProcessId { get; private set; } = string.Empty;
         public int SensitizationStepIndex { get; private set; } = -1;
 
         public bool HasProcessState => !string.IsNullOrWhiteSpace(ProcessId) && SensitizationStepIndex >= 0;
 
-        // Negative when no dry timer is running. Counted down on the server tick.
-        private float _dryRemainingSeconds = -1f;
-        private float _dryTotalSeconds = 0f;
+        // Absolute in-game hours deadline. Negative when no dry wait is active.
+        // Compared against Calendar.TotalHours on each server tick, so it survives
+        // chunk unload, save/reload, and calendar speed changes.
+        private double _dryFinishTotalHours = -1.0;
+        private double _dryTotalHours = 0.0;
         private long _serverTickListenerId;
 
-        public bool IsDryWaitActive => _dryRemainingSeconds > 0f;
-        public float DryRemainingSeconds => _dryRemainingSeconds < 0f ? 0f : _dryRemainingSeconds;
-        public float DryTotalSeconds => _dryTotalSeconds;
+        public bool IsDryWaitActive => _dryFinishTotalHours > 0.0;
+        public double DryFinishTotalHours => _dryFinishTotalHours;
+
+        public float DryRemainingSeconds
+        {
+            get
+            {
+                if (_dryFinishTotalHours <= 0.0 || Api?.World?.Calendar == null) return 0f;
+                var cal = Api.World.Calendar;
+                double remainHours = Math.Max(0.0, _dryFinishTotalHours - cal.TotalHours);
+                double speedFactor = cal.SpeedOfTime * cal.CalendarSpeedMul;
+                return speedFactor > 0f ? (float)(remainHours * 3600.0 / speedFactor) : 0f;
+            }
+        }
+
+        public float DryTotalSeconds
+        {
+            get
+            {
+                if (_dryTotalHours <= 0.0 || Api?.World?.Calendar == null) return 0f;
+                var cal = Api.World.Calendar;
+                double speedFactor = cal.SpeedOfTime * cal.CalendarSpeedMul;
+                return speedFactor > 0f ? (float)(_dryTotalHours * 3600.0 / speedFactor) : 0f;
+            }
+        }
 
         public override void Initialize(ICoreAPI api)
         {
@@ -64,44 +89,43 @@ namespace Phototesting.PlateLifecycle
             MarkDirty(true);
         }
 
-        // Starts a passive air-dry countdown. Called by BlockGlassPlate when a chemical
+        // Starts a passive air-dry wait. Called by BlockGlassPlate when a chemical
         // step completes and the next step is a Dry wait.
+        // Stores an absolute TotalHours deadline so the wait survives chunk unload and
+        // save/reload, matching the behaviour of EnumTransitionType.Dry on items.
         public void StartDryWait(float waitSeconds)
         {
-            if (waitSeconds <= 0f)
+            if (waitSeconds <= 0f || Api?.World?.Calendar == null)
             {
-                _dryRemainingSeconds = -1f;
-                _dryTotalSeconds = 0f;
+                _dryFinishTotalHours = -1.0;
+                _dryTotalHours = 0.0;
             }
             else
             {
-                _dryRemainingSeconds = waitSeconds;
-                _dryTotalSeconds = waitSeconds;
+                var cal = Api.World.Calendar;
+                double waitHours = waitSeconds * cal.SpeedOfTime * cal.CalendarSpeedMul / 3600.0;
+                _dryFinishTotalHours = cal.TotalHours + waitHours;
+                _dryTotalHours = waitHours;
             }
             MarkDirty(true);
         }
 
         public void CancelDryWait()
         {
-            if (_dryRemainingSeconds < 0f && _dryTotalSeconds == 0f) return;
-            _dryRemainingSeconds = -1f;
-            _dryTotalSeconds = 0f;
+            if (_dryFinishTotalHours <= 0.0 && _dryTotalHours == 0.0) return;
+            _dryFinishTotalHours = -1.0;
+            _dryTotalHours = 0.0;
             MarkDirty(true);
         }
 
         private void OnServerTick(float dt)
         {
-            if (_dryRemainingSeconds < 0f) return;
+            if (_dryFinishTotalHours <= 0.0) return;
 
-            _dryRemainingSeconds -= dt;
-            if (_dryRemainingSeconds > 0f)
-            {
-                MarkDirty(false);
-                return;
-            }
+            if (Api.World.Calendar.TotalHours < _dryFinishTotalHours) return;
 
-            _dryRemainingSeconds = -1f;
-            _dryTotalSeconds = 0f;
+            _dryFinishTotalHours = -1.0;
+            _dryTotalHours = 0.0;
             MarkDirty(true);
 
             if (Block is BlockGlassPlate plateBlock && Api?.World != null)
@@ -120,7 +144,8 @@ namespace Phototesting.PlateLifecycle
             }
 
             tree.SetInt(StepIndexAttr, SensitizationStepIndex);
-            tree.SetFloat(DryRemainingSecondsAttr, _dryRemainingSeconds);
+            tree.SetDouble(DryFinishTotalHoursAttr, _dryFinishTotalHours);
+            tree.SetDouble(DryTotalHoursAttr, _dryTotalHours);
         }
 
         public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldAccessForResolve)
@@ -131,8 +156,8 @@ namespace Phototesting.PlateLifecycle
             SensitizationStepIndex = tree.GetInt(StepIndexAttr, -1);
             if (SensitizationStepIndex < -1) SensitizationStepIndex = -1;
 
-            _dryRemainingSeconds = tree.GetFloat(DryRemainingSecondsAttr, -1f);
-            if (_dryRemainingSeconds > 0f && _dryTotalSeconds <= 0f) _dryTotalSeconds = _dryRemainingSeconds;
+            _dryFinishTotalHours = tree.GetDouble(DryFinishTotalHoursAttr, -1.0);
+            _dryTotalHours = tree.GetDouble(DryTotalHoursAttr, 0.0);
         }
     }
 }

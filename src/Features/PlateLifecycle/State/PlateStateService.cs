@@ -127,6 +127,45 @@ namespace Phototesting.PlateLifecycle
         {
             stack.Attributes.SetString(PlateStateAttributes.Stage, PlateStageUtil.ToAttributeString(stage));
         }
+
+        /// <summary>
+        /// Returns the absolute Calendar.TotalHours deadline at which the in-progress block-side
+        /// air-dry completes, or a negative value when no dry wait is active.
+        /// </summary>
+        public static double GetDryFinishTotalHours(ItemStack? stack)
+        {
+            return stack?.Attributes?.GetDouble(PlateStateAttributes.DryFinishTotalHours, -1.0) ?? -1.0;
+        }
+
+        /// <summary>
+        /// Stores the absolute Calendar.TotalHours dry-wait deadline on the item.
+        /// Pass a negative value (or call <see cref="ClearDryFinishTotalHours"/>) to remove it.
+        /// </summary>
+        public static void SetDryFinishTotalHours(ItemStack stack, double totalHours)
+        {
+            if (totalHours <= 0.0)
+            {
+                stack.Attributes.RemoveAttribute(PlateStateAttributes.DryFinishTotalHours);
+                return;
+            }
+
+            stack.Attributes.SetDouble(PlateStateAttributes.DryFinishTotalHours, totalHours);
+        }
+
+        /// <summary>Removes the dry-wait deadline attribute from <paramref name="stack"/>.</summary>
+        public static void ClearDryFinishTotalHours(ItemStack stack)
+        {
+            stack.Attributes.RemoveAttribute(PlateStateAttributes.DryFinishTotalHours);
+        }
+
+        /// <summary>
+        /// True when the item carries an active dry-wait deadline that has not yet elapsed.
+        /// </summary>
+        public static bool IsDryWaitActive(ItemStack? stack, IGameCalendar calendar)
+        {
+            double finish = GetDryFinishTotalHours(stack);
+            return finish > 0.0 && calendar.TotalHours < finish;
+        }
     }
 }
 
