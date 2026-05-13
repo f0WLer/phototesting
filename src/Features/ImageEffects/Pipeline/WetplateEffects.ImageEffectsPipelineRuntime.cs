@@ -1,3 +1,5 @@
+using Vintagestory.API.MathTools;
+
 namespace Phototesting.ImageEffects
 {
     public static partial class WetplateEffects
@@ -36,15 +38,10 @@ namespace Phototesting.ImageEffects
             return (float)(1.0 + t * scale);
         }
 
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
+        private static float Clamp01(float v) => GameMath.Clamp(v, 0f, 1f);
 
         // Clamps a float into byte-channel bounds.
-        private static float ClampByte(float v)
-        {
-            if (v < 0f) return 0f;
-            if (v > 255f) return 255f;
-            return v;
-        }
+        private static float ClampByte(float v) => GameMath.Clamp(v, 0f, 255f);
 
         // Computes a stable FNV-1a hash for deterministic random seeding.
         private static int StableHash(string s)

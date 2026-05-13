@@ -1,3 +1,5 @@
+using Vintagestory.API.MathTools;
+
 namespace Phototesting.ImageEffects
 {
     public sealed class WetplateEffectsConfig
@@ -339,15 +341,10 @@ namespace Phototesting.ImageEffects
             CurveBlueShoulder = ClampRange(CurveBlueShoulder, 0.75f, 1.0f);
         }
 
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
+        private static float Clamp01(float v) => GameMath.Clamp(v, 0f, 1f);
 
         // Clamps a value to an explicit inclusive range.
-        private static float ClampRange(float v, float min, float max)
-        {
-            if (v < min) return min;
-            if (v > max) return max;
-            return v;
-        }
+        private static float ClampRange(float v, float min, float max) => GameMath.Clamp(v, min, max);
 
         // Creates a shallow copy suitable for runtime snapshots and preset duplication.
         public WetplateEffectsConfig Clone()
