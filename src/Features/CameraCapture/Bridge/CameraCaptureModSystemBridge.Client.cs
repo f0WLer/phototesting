@@ -80,52 +80,52 @@ namespace Phototesting.CameraCapture
         // Sends the capture-config request immediately when connected or defers it until the client channel comes up.
         private void TrySendPhotoCaptureConfigRequest(ICoreClientAPI capi)
         {
-            if (ClientChannel == null) return;
-
-            if (ClientChannel.Connected)
+            if (TrySendPhotoCaptureConfigRequestNow())
             {
-                try
-                {
-                    ClientChannel.SendPacket(new PhotoCaptureConfigRequestPacket());
-                }
-                catch
-                {
-                    // Retry via tick listener below.
-                }
-
-                if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
-                {
-                    BestEffort.Try(BestEffortLogger, "unregister immediate capture config retry listener", () => capi.Event.UnregisterGameTickListener(_clientCaptureConfigRetryTickListenerId.Value));
-                    _clientCaptureConfigRetryTickListenerId = null;
-                }
-
+                UnregisterClientCaptureConfigRetry(capi, "unregister immediate capture config retry listener");
                 return;
             }
 
-            if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
+            EnsureClientCaptureConfigRetry(capi);
+        }
+
+        // Attempts one immediate config request send and reports whether startup sync completed.
+        private bool TrySendPhotoCaptureConfigRequestNow()
+        {
+            if (ClientChannel == null || !ClientChannel.Connected) return false;
+
+            try
             {
-                return;
+                ClientChannel.SendPacket(new PhotoCaptureConfigRequestPacket());
+                return true;
             }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Registers one retry tick listener so config sync can wait for the client channel to connect.
+        private void EnsureClientCaptureConfigRetry(ICoreClientAPI capi)
+        {
+            if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0) return;
 
             _clientCaptureConfigRetryTickListenerId = capi.Event.RegisterGameTickListener(_ =>
             {
-                if (ClientChannel == null || !ClientChannel.Connected) return;
+                if (!TrySendPhotoCaptureConfigRequestNow()) return;
 
-                try
-                {
-                    ClientChannel.SendPacket(new PhotoCaptureConfigRequestPacket());
-                }
-                catch
-                {
-                    return;
-                }
-
-                if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
-                {
-                    BestEffort.Try(BestEffortLogger, "unregister delayed capture config retry listener", () => capi.Event.UnregisterGameTickListener(_clientCaptureConfigRetryTickListenerId.Value));
-                    _clientCaptureConfigRetryTickListenerId = null;
-                }
+                UnregisterClientCaptureConfigRetry(capi, "unregister delayed capture config retry listener");
             }, 200, 200);
+        }
+
+        // Removes the deferred config retry listener after success or during client shutdown.
+        private void UnregisterClientCaptureConfigRetry(ICoreClientAPI capi, string operation)
+        {
+            if (!_clientCaptureConfigRetryTickListenerId.HasValue || _clientCaptureConfigRetryTickListenerId.Value <= 0) return;
+
+            long id = _clientCaptureConfigRetryTickListenerId.Value;
+            BestEffort.Try(BestEffortLogger, operation, () => capi.Event.UnregisterGameTickListener(id));
+            _clientCaptureConfigRetryTickListenerId = null;
         }
         // Unregisters and disposes client renderers used by camera-capture and viewfinder preview flows.
         internal void DisposeClientCameraCaptureRenderers()
@@ -158,12 +158,7 @@ namespace Phototesting.CameraCapture
                 _viewfinderTickListenerId = 0;
             }
 
-            if (_clientCaptureConfigRetryTickListenerId.HasValue && _clientCaptureConfigRetryTickListenerId.Value > 0)
-            {
-                long id = _clientCaptureConfigRetryTickListenerId.Value;
-                BestEffort.Try(BestEffortLogger, "unregister capture config retry tick listener", () => ClientApi.Event.UnregisterGameTickListener(id));
-                _clientCaptureConfigRetryTickListenerId = null;
-            }
+            UnregisterClientCaptureConfigRetry(ClientApi, "unregister capture config retry tick listener");
         }
 
         // Clears camera-capture runtime references after disposal to prevent stale instance reuse.
@@ -357,29 +352,8 @@ namespace Phototesting.CameraCapture
                 // Falls back to the global config when no per-process profile file is found.
                 if (!captureRenderer.TryScheduleCapture(
                     out string fileName,
-                    onSuccess: (fn) =>
-                    {
-                        _captureInProgress = false;
-                        // Send to server + play sound after capture completes.
-                        ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fn);
-                        clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
-
-                        _owner.HoldStillMarkCaptureReady(fn);
-
-                        // Keep viewfinder open while timed exposure is active so exposure completion
-                        // logic in ItemWetplateCamera can run to the end.
-                        if (!CameraCaptureModSystemBridge.IsTimedExposurePending(byEntity)) _owner.EndViewfinderMode();
-                    },
-                    onError: (ex) =>
-                    {
-                        _captureInProgress = false;
-                        _owner.HoldStillCancel();
-                        clientApi.Logger.Error("Wetplate HUD-less capture failed: " + ex);
-                        clientApi.ShowChatMessage("Wetplate: capture failed (see log). Falling back may be needed.");
-
-                        // Still exit viewfinder (error means no screenshot was taken).
-                        _owner.EndViewfinderMode();
-                    },
+                    onSuccess: fn => OnCaptureSuccess(clientApi, byEntity, fn),
+                    onError: ex => OnCaptureFailure(clientApi, ex),
                     effectsOverride: CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlateStack)
                 ))
                 {
@@ -391,6 +365,34 @@ namespace Phototesting.CameraCapture
                 _owner.HoldStillStartTracking(byEntity, fileName);
 
                 return true;
+            }
+
+            // Completes local post-capture flow once the renderer finishes writing the screenshot.
+            private void OnCaptureSuccess(ICoreClientAPI clientApi, EntityAgent byEntity, string fileName)
+            {
+                _captureInProgress = false;
+
+                // Send to server + play sound after capture completes.
+                ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
+                clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
+
+                _owner.HoldStillMarkCaptureReady(fileName);
+
+                // Keep viewfinder open while timed exposure is active so exposure completion
+                // logic in ItemWetplateCamera can run to the end.
+                if (!CameraCaptureModSystemBridge.IsTimedExposurePending(byEntity)) _owner.EndViewfinderMode();
+            }
+
+            // Cancels hold-still state and exits viewfinder when the scheduled capture fails.
+            private void OnCaptureFailure(ICoreClientAPI clientApi, Exception ex)
+            {
+                _captureInProgress = false;
+                _owner.HoldStillCancel();
+                clientApi.Logger.Error("Wetplate HUD-less capture failed: " + ex);
+                clientApi.ShowChatMessage("Wetplate: capture failed (see log). Falling back may be needed.");
+
+                // Still exit viewfinder (error means no screenshot was taken).
+                _owner.EndViewfinderMode();
             }
 
             internal void ShowShutterGateMessageThrottled(string message)
