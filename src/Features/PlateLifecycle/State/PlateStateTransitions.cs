@@ -6,7 +6,7 @@ namespace Phototesting.PlateLifecycle
     /// Multi-step plate state transitions that compose several <see cref="PlateStateService"/> writes.
     /// Single-call wrappers live on <see cref="PlateStateService"/> directly.
     /// </summary>
-    internal static class PlateLifecycleStateCoordinator
+    internal static class PlateStateTransitions
     {
         internal static bool IsDevelopingFamily(ItemStack? plate)
         {

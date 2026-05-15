@@ -8,7 +8,7 @@ using Phototesting.ImageEffects;
 using Phototesting.PhotoSync.Integration;
 using Phototesting.PlateBox;
 using Phototesting.PlateLifecycle;
-using Phototesting.PlateLifecycle.Blocks;
+using Phototesting.PlateLifecycle.GroundPlate;
 using Phototesting.PlateLifecycle.Tray;
 using Phototesting.Frame;
 
@@ -52,7 +52,6 @@ namespace Phototesting
 
             api.RegisterItemClass("WetplateCamera", typeof(ItemWetplateCamera));
             api.RegisterItemClass("GlassPlate", typeof(ItemGlassPlate));
-            api.RegisterItemClass("GenericPlate", typeof(ItemGenericPlate));
             api.RegisterItemClass("SensitizedPlate", typeof(ItemSensitizedPlate));
             api.RegisterItemClass("PhotoPlate", typeof(ItemPhotoPlate));
 

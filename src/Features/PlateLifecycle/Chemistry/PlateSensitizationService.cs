@@ -142,7 +142,7 @@ namespace Phototesting.PlateLifecycle
 
         internal static bool TryAdvancePlateState(ItemStack plate, PhotographyProcessDefinition process, int nextStepIndex, out bool complete)
         {
-            return PlateLifecycleStateCoordinator.TryAdvanceSensitizationStep(plate, process, nextStepIndex, out complete);
+            return PlateStateTransitions.TryAdvanceSensitizationStep(plate, process, nextStepIndex, out complete);
         }
 
         internal static bool TryCreateSensitizedPlateStack(IWorldAccessor world, ItemStack sourcePlate, PhotographyProcessDefinition process, out ItemStack sensitizedPlate)
@@ -153,7 +153,7 @@ namespace Phototesting.PlateLifecycle
 
             sensitizedPlate = new ItemStack(sensitizedItem, 1);
             sensitizedPlate.Attributes.MergeTree(sourcePlate.Attributes.Clone());
-            PlateLifecycleStateCoordinator.InitializeSensitizedPlate(world, sensitizedPlate, process);
+            PlateStateTransitions.InitializeSensitizedPlate(world, sensitizedPlate, process);
 
             return true;
         }

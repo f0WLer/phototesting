@@ -3,7 +3,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Phototesting.AdminTooling;
 
-namespace Phototesting.PlateLifecycle.Blocks
+namespace Phototesting.PlateLifecycle.GroundPlate
 {
     // Placed glass plate block behavior and top-level interaction routing.
     // Starts from block interaction or placement code and owns shared config lookups for ground plates.

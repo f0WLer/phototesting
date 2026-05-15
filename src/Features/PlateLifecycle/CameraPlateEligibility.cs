@@ -39,25 +39,5 @@ namespace Phototesting.PlateLifecycle
 
             return PlateStateService.GetStage(stack) == PlateStage.Sensitized;
         }
-
-        // Checks whether a loaded plate should use the exposed-camera visual variant.
-        public static bool IsPlateExposedForCameraVisual(ItemStack? stack)
-        {
-            if (stack == null) return false;
-
-            PlateStage stage = PlateStateService.GetStage(stack);
-            return stage == PlateStage.Exposed;
-        }
-
-        // Identifies plate item codes managed by the consolidated plate pipeline.
-        public static bool IsKnownPlateCode(AssetLocation? code)
-        {
-            if (code == null) return false;
-            return code == _glassPlateItemCode
-                || code == _sensitizedPlateItemCode
-                || code == _photoPlateItemCode
-                ;
-        }
     }
 }
-

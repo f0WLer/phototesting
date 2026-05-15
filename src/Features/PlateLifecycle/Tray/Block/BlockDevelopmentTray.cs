@@ -63,11 +63,11 @@ namespace Phototesting.PlateLifecycle.Tray
             return selectedPos.AddCopy(blockSel.Face);
         }
 
-        // Shared tray interaction entry point that routes to client prediction or server authority depending on side.
+        // Routes tray interaction start to client prediction or server authority depending on side.
         public override bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
         {
             if (world == null || byPlayer == null || blockSel == null) return false;
-            return HandlePlateLifecycleInteractionStart(world, byPlayer, blockSel);
+            return HandleWorldObjectInteractionStart(world, byPlayer, blockSel);
         }
 
         // Drops the base tray block plus any inserted plate so stage-specific tray block variants do not leak into inventory.
@@ -130,11 +130,5 @@ namespace Phototesting.PlateLifecycle.Tray
         {
             return TrayDurationProvider.GetChemicalUnitsPerUse(Cfg, DefaultChemicalUnitsPerUse);
         }
-        // PlateLifecycle seam: routes tray interaction start through a single entry orchestration point.
-        private bool HandlePlateLifecycleInteractionStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
-        {
-            return HandleWorldObjectInteractionStart(world, byPlayer, blockSel);
-        }
-
     }
 }

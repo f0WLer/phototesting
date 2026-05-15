@@ -1,7 +1,7 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 
-namespace Phototesting.PlateLifecycle.Blocks
+namespace Phototesting.PlateLifecycle.GroundPlate
 {
     public sealed partial class BlockGlassPlate
     {
@@ -39,7 +39,7 @@ namespace Phototesting.PlateLifecycle.Blocks
 
             if ((state == "clean" || state == "coated") && TryGetGroundSensitizationHelp(world, selection?.Position, state, forPlayer, out WorldInteraction interaction))
             {
-                return new[] { interaction };
+                return [interaction];
             }
 
             return base.GetPlacedBlockInteractionHelp(world, selection, forPlayer);

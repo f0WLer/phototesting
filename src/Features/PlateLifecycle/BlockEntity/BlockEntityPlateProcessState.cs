@@ -1,6 +1,6 @@
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
-using Phototesting.PlateLifecycle.Blocks;
+using Phototesting.PlateLifecycle.GroundPlate;
 
 namespace Phototesting.PlateLifecycle
 {

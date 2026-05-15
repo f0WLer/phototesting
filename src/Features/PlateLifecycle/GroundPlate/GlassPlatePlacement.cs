@@ -1,9 +1,9 @@
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 
-namespace Phototesting.PlateLifecycle.Integration
+namespace Phototesting.PlateLifecycle.GroundPlate
 {
-    internal static class GlassPlatePlacementIntegration
+    internal static class GlassPlatePlacement
     {
         // Places the plate item as the matching state block on the ground and preserves process metadata.
         internal static void HandlePlacement(ICoreAPI api, ItemSlot slot, BlockSelection blockSel, string defaultPlateBlockState)

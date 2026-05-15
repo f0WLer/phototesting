@@ -83,7 +83,7 @@ namespace Phototesting.PlateLifecycle.Tray
                     PlateDevelopmentService.SetCurrentStepApplications(newPlate, newPours);
                 }
 
-                PlateLifecycleStateCoordinator.ResetWetTimerForMultiplier(owner.api, world!, newPlate, spec.WetDurationMultiplier);
+                PlateStateTransitions.ResetWetTimerForMultiplier(owner.api, world!, newPlate, spec.WetDurationMultiplier);
                 return TrayActionApplyResult.Success(newPlate);
             }
 
@@ -135,7 +135,7 @@ namespace Phototesting.PlateLifecycle.Tray
                 if (glassPlateItem == null) return TrayActionApplyResult.Failure();
 
                 ItemStack reclaimedPlate = new ItemStack(glassPlateItem);
-                PlateLifecycleStateCoordinator.TransitionToRough(reclaimedPlate, "phototesting:plate-name-glass");
+                PlateStateTransitions.TransitionToRough(reclaimedPlate, "phototesting:plate-name-glass");
                 reclaimedPlate.Attributes.SetString("plateBlockState", "rough");
                 PlateDevelopmentService.ResetDevelopmentProgress(reclaimedPlate);
                 return TrayActionApplyResult.Success(reclaimedPlate, stageVariantOverride: "reclaimed");

@@ -1,10 +1,10 @@
 using Vintagestory.API.Common;
 
-namespace Phototesting.PlateLifecycle.Blocks
+namespace Phototesting.PlateLifecycle.GroundPlate
 {
     public sealed partial class BlockGlassPlate
     {
-        // PlateLifecycle seam: routes glass-plate interaction start through a single entry orchestration point.
+        // Routes glass-plate interaction start: decides between polish, sensitize, and pickup based on plate state and held item.
         private bool HandlePlateLifecycleInteractionStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
         {
             string state = GetPlateState();
@@ -49,4 +49,3 @@ namespace Phototesting.PlateLifecycle.Blocks
         }
     }
 }
-

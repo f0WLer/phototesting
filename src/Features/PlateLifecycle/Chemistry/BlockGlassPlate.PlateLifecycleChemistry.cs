@@ -3,7 +3,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
-namespace Phototesting.PlateLifecycle.Blocks
+namespace Phototesting.PlateLifecycle.GroundPlate
 {
     public sealed partial class BlockGlassPlate
     {
@@ -194,8 +194,8 @@ namespace Phototesting.PlateLifecycle.Blocks
 
             if (TryGetPlacedPlateProcessState(world, pos, out string processId, out int stepIndex))
             {
-                PlateLifecycleStateCoordinator.ApplyProcessProgress(plate, processId, stepIndex);
-                PlateLifecycleStateCoordinator.SetStageAndName(plate, PlateStage.Sensitizing, null);
+                PlateStateTransitions.ApplyProcessProgress(plate, processId, stepIndex);
+                PlateStateTransitions.SetStageAndName(plate, PlateStage.Sensitizing, null);
 
                 // Mirror the block entity's active dry deadline onto the virtual plate so the
                 // resolver's calendar gate applies identically whether the plate is placed or in inventory.

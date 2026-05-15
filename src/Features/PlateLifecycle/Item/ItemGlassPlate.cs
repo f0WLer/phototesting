@@ -1,12 +1,12 @@
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
-using Phototesting.PlateLifecycle.Integration;
+using Phototesting.PlateLifecycle.GroundPlate;
 
 namespace Phototesting.PlateLifecycle
 {
     /// <summary>
     /// Glass plate item that places the matching plate block on the ground.
-    /// Sensitization chemistry is handled by ground-block interactions in <see cref="BlockGlassPlate"/>.
+    /// Sensitization chemistry is handled by ground-block interactions in <see cref="Phototesting.PlateLifecycle.GroundPlate.BlockGlassPlate"/>.
     /// </summary>
     public sealed partial class ItemGlassPlate : ItemPlateBase
     {
@@ -21,7 +21,7 @@ namespace Phototesting.PlateLifecycle
             if (api.Side != EnumAppSide.Server) return;
 
             string defaultPlateBlockState = Attributes?["plateBlockState"].AsString("rough") ?? "rough";
-            GlassPlatePlacementIntegration.HandlePlacement(api, slot, blockSel, defaultPlateBlockState);
+            GlassPlatePlacement.HandlePlacement(api, slot, blockSel, defaultPlateBlockState);
         }
     }
 }

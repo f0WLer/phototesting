@@ -129,6 +129,14 @@ namespace Phototesting.PlateLifecycle
         }
 
         /// <summary>
+        /// Returns true when the plate is in the exposed lifecycle stage.
+        /// </summary>
+        public static bool IsPlateExposed(ItemStack? stack)
+        {
+            return GetStage(stack) == PlateStage.Exposed;
+        }
+
+        /// <summary>
         /// Returns the absolute Calendar.TotalHours deadline at which the in-progress block-side
         /// air-dry completes, or a negative value when no dry wait is active.
         /// </summary>
