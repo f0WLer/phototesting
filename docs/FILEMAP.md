@@ -63,10 +63,11 @@ Sole "mounted display" surface in the mod. Holds any photo-bearing item (any sta
 
 - [Chemistry/](../src/Features/PlateLifecycle/Chemistry) — process registry, sensitization/development steps, chemistry progression services, exposure parameters.
 - [State/](../src/Features/PlateLifecycle/State) — plate stage/process attributes and state coordination.
-- [Integration/](../src/Features/PlateLifecycle/Integration) — `BlockGlassPlate.*` partials plus camera/placement helpers (`CameraPlateEligibility`).
-- [Blocks/](../src/Features/PlateLifecycle/Blocks) — `BlockGlassPlate` + interaction partial.
+- [GroundPlate/](../src/Features/PlateLifecycle/GroundPlate) — `BlockGlassPlate` partials and interaction helpers.
+- [CameraPlateEligibility.cs](../src/Features/PlateLifecycle/CameraPlateEligibility.cs) — shared camera eligibility rules.
+- [GroundPlate/GlassPlatePlacement.cs](../src/Features/PlateLifecycle/GroundPlate/GlassPlatePlacement.cs) — item-to-ground-plate placement bridge.
 - [BlockEntity/BlockEntityPlateProcessState.cs](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) — placed glass-plate process state.
-- [Item/](../src/Features/PlateLifecycle/Item) — `ItemPlateBase` + `ItemGlassPlate`/`ItemSensitizedPlate`/`ItemPhotoPlate`/`ItemGenericPlate` plus `PlateNameResolver`.
+- [Item/](../src/Features/PlateLifecycle/Item) — `ItemPlateBase` + `ItemGlassPlate`/`ItemSensitizedPlate`/`ItemPhotoPlate` plus `PlateNameResolver`.
 - [Rendering/](../src/Features/PlateLifecycle/Rendering) — `PhotoPlateRenderUtil.{cs,Block.cs,Item.cs,Cache.cs}`, `PhotoMeshUtil`, `PhotoMeshRenderCache`, `PhotoImageProcessor`. Shared photo-on-plate rendering used by plate items, photo plates, and the Frame block entity.
 - [Tray/](../src/Features/PlateLifecycle/Tray) — development-tray code (block, blockentity, runtime spec/duration/timed-state, client latch, config).
 

@@ -41,7 +41,7 @@ Runtime map for camera capture interactions. Updated: 2026-05-07.
 | Server camera authority | [`Bridge/CameraCaptureModSystemBridge.Server.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Server.cs) |
 | Channel + handler registration | [`CameraCaptureChannelRegistration`](../src/Features/CameraCapture/Integration/CameraCaptureChannelRegistration.cs) |
 | Capture-side packet DTOs | [`PhotoNetworkPackets`](../src/Features/CameraCapture/Contracts/PhotoNetworkPackets.cs) |
-| Plate-eligibility checks | [`CameraPlateEligibility`](../src/Features/PlateLifecycle/Integration/CameraPlateEligibility.cs) |
+| Plate-eligibility checks | [`CameraPlateEligibility`](../src/Features/PlateLifecycle/CameraPlateEligibility.cs) |
 | Camera-slot resolution shared client/server | [`CameraItemHelper`](../src/Shared/CameraItemHelper.cs) |
 
 ## Client / server boundary

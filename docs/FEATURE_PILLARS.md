@@ -23,9 +23,10 @@ Moves plate state through sensitization, exposure, development, and final plate 
 Primary paths:
 - [src/Features/PlateLifecycle/Chemistry/](../src/Features/PlateLifecycle/Chemistry)
 - [src/Features/PlateLifecycle/State/](../src/Features/PlateLifecycle/State)
-- [src/Features/PlateLifecycle/Blocks/](../src/Features/PlateLifecycle/Blocks)
+- [src/Features/PlateLifecycle/GroundPlate/](../src/Features/PlateLifecycle/GroundPlate)
 - [src/Features/PlateLifecycle/BlockEntity/](../src/Features/PlateLifecycle/BlockEntity)
-- [src/Features/PlateLifecycle/Integration/](../src/Features/PlateLifecycle/Integration)
+- [src/Features/PlateLifecycle/CameraPlateEligibility.cs](../src/Features/PlateLifecycle/CameraPlateEligibility.cs)
+- [src/Features/PlateLifecycle/GroundPlate/GlassPlatePlacement.cs](../src/Features/PlateLifecycle/GroundPlate/GlassPlatePlacement.cs)
 - [src/Features/PlateLifecycle/Tray/](../src/Features/PlateLifecycle/Tray)
 - [src/Features/PlateLifecycle/Item/](../src/Features/PlateLifecycle/Item)
 - [src/Features/PlateBox/](../src/Features/PlateBox)
