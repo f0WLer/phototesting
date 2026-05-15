@@ -12,6 +12,7 @@ obj/
 *.userosscache
 *.sln.docstates
 *.code-workspace
+*.lscache
 
 # Package/restore and tooling artifacts
 packages/
