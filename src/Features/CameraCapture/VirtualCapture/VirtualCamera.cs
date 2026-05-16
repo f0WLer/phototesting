@@ -1,4 +1,3 @@
-using HarmonyLib;
 using OpenTK.Graphics.OpenGL;
 using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
@@ -26,8 +25,6 @@ namespace Phototesting.CameraCapture
         public float Fov = 0f;
 
         public int Dimension = 0;
-
-        public bool Rendering = true;
 
         public FrameBufferRef fbo = null!; // Assigned by InitBuffer() before first use
 
@@ -122,11 +119,53 @@ namespace Phototesting.CameraCapture
             _platform.LoadFrameBuffer((ShaderProgramBase.CurrentShaderProgram?.PassName == "gui") ? EnumFrameBuffer.Default : EnumFrameBuffer.Primary);
         }
 
+        private void SyncPerspectiveState(BlockPos frustumPos)
+        {
+            _main.GlMatrixModeModelView();
+            _main.GlLoadMatrix(_main.MainCamera.CameraMatrix);
+
+            double[] projectionMatrix = _capi.Render.PMatrix.Top;
+            double[] modelViewMatrix = _capi.Render.MvMatrix.Top;
+
+            for (int i = 0; i < 16; i++)
+            {
+                _main.PerspectiveProjectionMat[i] = projectionMatrix[i];
+                _main.PerspectiveViewMat[i] = modelViewMatrix[i];
+            }
+
+            _main.frustumCuller.CalcFrustumEquations(frustumPos, projectionMatrix, modelViewMatrix);
+        }
+
+        private void RestoreMainCamera(
+            PlayerCamera camera,
+            double savedYaw,
+            double savedPitch,
+            double savedRoll,
+            Vec3d savedCamSourcePos,
+            Vec3d savedOriginPos,
+            Vec3d savedEntityCameraPos,
+            DefaultShaderUniforms shUniforms,
+            float savedPlayerPosX,
+            float savedPlayerPosY,
+            float savedPlayerPosZ)
+        {
+            _capi.World.Player.Entity.CameraPos.Set(savedEntityCameraPos);
+            camera.CamSourcePosition.Set(savedCamSourcePos);
+            camera.OriginPosition.Set(savedOriginPos);
+            camera.Yaw = savedYaw;
+            camera.Pitch = savedPitch;
+            camera.Roll = savedRoll;
+            camera.Update(float.Epsilon, _main.interesectionTester);
+
+            _main.Reset3DProjection();
+            SyncPerspectiveState(savedEntityCameraPos.AsBlockPos);
+            shUniforms.PlayerPos.Set(savedPlayerPosX, savedPlayerPosY, savedPlayerPosZ);
+        }
+
         internal void UpdateCamera()
         {
-            _capi.World.Player.Entity.CameraPos = CameraPos.Clone();
+            _capi.World.Player.Entity.CameraPos.Set(CameraPos);
             PlayerCamera camera = _main.MainCamera;
-            Traverse cameraTraverse = Traverse.Create(camera);
             camera.CamSourcePosition.Set(CameraPos);
             camera.OriginPosition.Set(0, 0, 0);
 
@@ -134,15 +173,15 @@ namespace Phototesting.CameraCapture
             camera.Pitch = this.Pitch;
             camera.Roll = this.Roll;
 
-            float oldZNear = (float)cameraTraverse.Field("ZNear").GetValue();
-            float oldZFar = (float)cameraTraverse.Field("ZFar").GetValue();
-            float oldFov = (float)cameraTraverse.Field("Fov").GetValue();
+            float oldZNear = camera.ZNear;
+            float oldZFar = camera.ZFar;
+            float oldFov = camera.Fov;
 
-            if (ZNear != 0) cameraTraverse.Field("ZNear").SetValue(ZNear);
-            if (ZFar != 0) cameraTraverse.Field("ZFar").SetValue(ZFar);
-            if (Fov != 0) cameraTraverse.Field("Fov").SetValue(Fov);
+            if (ZNear != 0) camera.ZNear = ZNear;
+            if (ZFar != 0) camera.ZFar = ZFar;
+            if (Fov != 0) camera.Fov = Fov;
 
-            cameraTraverse.Method("Update", float.Epsilon, _main.interesectionTester).GetValue();
+            camera.Update(float.Epsilon, _main.interesectionTester);
 
             DefaultShaderUniforms shUniforms = _capi.Render.ShaderUniforms;
 
@@ -161,23 +200,11 @@ namespace Phototesting.CameraCapture
                 (float)(CameraPos.Y - shUniforms.playerReferencePos.Y),
                 (float)(CameraPos.Z - shUniforms.playerReferencePos.Z));
 
-            _main.GlMatrixModeModelView();
-            _main.GlLoadMatrix(cameraTraverse.Field("CameraMatrix").GetValue() as double[]);
+            SyncPerspectiveState(CameraPos.AsBlockPos);
 
-            double[] top = _capi.Render.PMatrix.Top;
-            double[] top2 = _capi.Render.MvMatrix.Top;
-
-            _main.frustumCuller.CalcFrustumEquations(CameraPos.AsBlockPos, top, top2);
-
-            for (int i = 0; i < 16; i++)
-            {
-                _main.PerspectiveProjectionMat[i] = top[i];
-                _main.PerspectiveViewMat[i] = top2[i];
-            }
-
-            cameraTraverse.Field("ZNear").SetValue(oldZNear);
-            cameraTraverse.Field("ZFar").SetValue(oldZFar);
-            cameraTraverse.Field("Fov").SetValue(oldFov);
+            camera.ZNear = oldZNear;
+            camera.ZFar = oldZFar;
+            camera.Fov = oldFov;
         }
 
         internal void RenderCamera(float dt)
@@ -189,7 +216,6 @@ namespace Phototesting.CameraCapture
             // Restored at the end so all remaining Before-stage renderers (e.g. SystemRenderTerrain
             // at RenderOrder 0.995) and the main render loop see the player's camera matrices.
             PlayerCamera camera = _main.MainCamera;
-            Traverse cameraTraverse = Traverse.Create(camera);
             double savedYaw = camera.Yaw;
             double savedPitch = camera.Pitch;
             double savedRoll = camera.Roll;
@@ -229,16 +255,7 @@ namespace Phototesting.CameraCapture
                 // Shadow stages use their own MVP and can modify the GL modelview matrix.
                 // Re-establish the virtual camera matrices before the opaque pass, mirroring
                 // what the main render loop does after its shadow stages.
-                _main.GlMatrixModeModelView();
-                _main.GlLoadMatrix(_main.MainCamera.CameraMatrix);
-                double[] pmat = _capi.Render.PMatrix.Top;
-                double[] mvmat = _capi.Render.MvMatrix.Top;
-                for (int i = 0; i < 16; i++)
-                {
-                    _main.PerspectiveProjectionMat[i] = pmat[i];
-                    _main.PerspectiveViewMat[i] = mvmat[i];
-                }
-                _main.frustumCuller.CalcFrustumEquations(CameraPos.AsBlockPos, pmat, mvmat);
+                SyncPerspectiveState(CameraPos.AsBlockPos);
 
                 // ShadowDone restores GL to the screen FBO; redirect back to our virtual FBO.
                 _platform.CurrentFrameBuffer = fbo;
@@ -296,29 +313,20 @@ namespace Phototesting.CameraCapture
             {
                 _capi.World.Player.Entity.IsRendered = playerWasRendered;
 
-                _capi.World.Player.Entity.CameraPos = savedEntityCameraPos;
-                camera.CamSourcePosition = savedCamSourcePos;
-                camera.OriginPosition = savedOriginPos;
-                camera.Yaw = savedYaw;
-                camera.Pitch = savedPitch;
-                camera.Roll = savedRoll;
-                cameraTraverse.Method("Update", float.Epsilon, _main.interesectionTester).GetValue();
-                shUniforms.PlayerPos.Set(savedPlayerPosX, savedPlayerPosY, savedPlayerPosZ);
-
-                _main.Reset3DProjection();
-                _main.GlMatrixModeModelView();
-                _main.GlLoadMatrix(cameraTraverse.Field("CameraMatrix").GetValue() as double[]);
-
-                double[] top = _capi.Render.PMatrix.Top;
-                double[] top2 = _capi.Render.MvMatrix.Top;
-
-                _main.frustumCuller.CalcFrustumEquations(savedEntityCameraPos.AsBlockPos, top, top2);
-
-                for (int i = 0; i < 16; i++)
-                {
-                    _main.PerspectiveProjectionMat[i] = top[i];
-                    _main.PerspectiveViewMat[i] = top2[i];
-                }
+                // Restore the main camera so all remaining Before-stage renderers and the main
+                // render loop see the player's camera matrices, not the virtual camera's.
+                RestoreMainCamera(
+                    camera,
+                    savedYaw,
+                    savedPitch,
+                    savedRoll,
+                    savedCamSourcePos,
+                    savedOriginPos,
+                    savedEntityCameraPos,
+                    shUniforms,
+                    savedPlayerPosX,
+                    savedPlayerPosY,
+                    savedPlayerPosZ);
 
                 GL.Disable(EnableCap.ClipDistance0);
                 GL.Disable(EnableCap.DepthTest);
