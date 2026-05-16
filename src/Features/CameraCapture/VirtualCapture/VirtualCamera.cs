@@ -53,7 +53,7 @@ namespace Phototesting.CameraCapture
                 DepthTextureId = GL.GenTexture()
             };
 
-            _platform.LoadFrameBuffer(fbo);
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.FboId);
 
             // Depth.
             GL.BindTexture(TextureTarget.Texture2D, fbo.DepthTextureId);
