@@ -5,10 +5,18 @@ using SkiaSharp;
 namespace Phototesting.CameraCapture.Exposure
 {
     // HDR floating-point accumulation buffer for multi-frame virtual camera exposure.
-    // Accumulates per-channel linear sums from rendered frames.
-    // Develop() divides by referenceFrameCount (the target exposure length), not the actual
-    // frame count, so a shorter exposure is darker and a longer exposure is brighter,
-    // with highlight clipping as the sums exceed the reference level.
+    //
+    // Accumulate() converts input pixels and adds them to per-channel float sums.
+    // Develop() maps those sums to a BGRA8888 bitmap through up to three physics stages,
+    // each independently togglable:
+    //
+    //   LinearizeInput      — sRGB→linear conversion before accumulating
+    //   ApplySpectralWeights — collapse RGB to a single silver-density value using
+    //                          historical emulsion sensitivity (produces grayscale)
+    //   ApplyHDCurve         — Hurter–Driffield response curve instead of linear mapping
+    //                          (shadows lift, highlights compress, strong photographic shoulder)
+    //
+    // All three default to true. Set any flag to false to isolate the effect of the others.
     internal sealed class ExposureAccumulationBuffer
     {
         private readonly int _width;
@@ -17,18 +25,48 @@ namespace Phototesting.CameraCapture.Exposure
         private readonly float[] _sumG;
         private readonly float[] _sumR;
         private int _frameCount;
-
-        // The denominator used in Develop(). Fixed at construction time so output brightness
-        // scales with accumulated frames relative to the intended exposure length.
         private readonly int _referenceFrameCount;
 
+        // Precomputed sRGB→linear LUT (index = 0-255 sRGB byte value).
+        private static readonly float[] SRgbToLinear = BuildLinearTable();
+
+        // ── Feature toggles ──────────────────────────────────────────────────────
+
+        // Convert sRGB input pixels to linear light before accumulating.
+        // Disabling accumulates in gamma space — faster but physically incorrect.
+        public bool LinearizeInput = true;
+
+        // Collapse RGB to a single silver-density value using historical spectral weights.
+        // Produces grayscale output matching orthochromatic emulsions (blue-sensitive, red-blind).
+        // Disabling preserves full colour in the developed output.
+        public bool ApplySpectralWeights = true;
+
+        // Wet-plate collodion spectral sensitivity (used when ApplySpectralWeights = true).
+        // Weights are normalized internally so a grey pixel always maps to the same energy.
+        public float RedSensitivity   = 0.12f;
+        public float GreenSensitivity = 0.45f;
+        public float BlueSensitivity  = 1.00f;
+
+        // Apply Hurter–Driffield nonlinear emulsion response in Develop().
+        // Highlights compress into a natural shoulder instead of hard-clipping to white.
+        // Disabling uses the original linear sum/reference mapping.
+        public bool ApplyHDCurve = true;
+
+        // H&D curve parameters (used when ApplyHDCurve = true).
+        //   DevelopmentStrength: controls how quickly the curve rises — higher = brighter overall
+        //   HDGamma:             contrast of the developed image — higher = more contrasty
+        public float DevelopmentStrength = 8.0f;
+        public float HDGamma             = 1.6f;
+
+        // ────────────────────────────────────────────────────────────────────────
+
         internal int FramesAccumulated => _frameCount;
-        internal int Width => _width;
+        internal int Width  => _width;
         internal int Height => _height;
 
         internal ExposureAccumulationBuffer(int width, int height, int referenceFrameCount)
         {
-            _width = width;
+            _width  = width;
             _height = height;
             _referenceFrameCount = Math.Max(1, referenceFrameCount);
             int count = width * height;
@@ -47,25 +85,38 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         // Accumulates one BGRA8888 frame into the running channel sums.
+        // Applies sRGB→linear conversion when LinearizeInput is true.
         // Frames with dimensions other than Width × Height are ignored.
         internal void Accumulate(SKBitmap frame)
         {
             if (frame.Width != _width || frame.Height != _height) return;
 
             int pixelCount = _width * _height;
-            int byteCount = pixelCount * 4;
-            byte[] bytes = ArrayPool<byte>.Shared.Rent(byteCount);
+            int byteCount  = pixelCount * 4;
+            byte[] bytes   = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
                 Marshal.Copy(frame.GetPixels(), bytes, 0, byteCount);
 
-                for (int i = 0; i < pixelCount; i++)
+                if (LinearizeInput)
                 {
-                    int b = i * 4;
-                    _sumB[i] += bytes[b + 0] / 255f;
-                    _sumG[i] += bytes[b + 1] / 255f;
-                    _sumR[i] += bytes[b + 2] / 255f;
-                    // alpha (b+3) is ignored — virtual camera FBO output is always fully opaque
+                    for (int i = 0; i < pixelCount; i++)
+                    {
+                        int b = i * 4;
+                        _sumB[i] += SRgbToLinear[bytes[b + 0]];
+                        _sumG[i] += SRgbToLinear[bytes[b + 1]];
+                        _sumR[i] += SRgbToLinear[bytes[b + 2]];
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < pixelCount; i++)
+                    {
+                        int b = i * 4;
+                        _sumB[i] += bytes[b + 0] / 255f;
+                        _sumG[i] += bytes[b + 1] / 255f;
+                        _sumR[i] += bytes[b + 2] / 255f;
+                    }
                 }
             }
             finally
@@ -77,31 +128,65 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         // Develops accumulated frames into a new BGRA8888 SKBitmap.
-        // Output brightness is scaled against referenceFrameCount, not actual frame count:
+        //
+        // Exposure level is always relative to referenceFrameCount:
         //   frames < reference  → underexposed (dark)
         //   frames = reference  → normally exposed
-        //   frames > reference  → overexposed (bright, highlights clip to white)
+        //   frames > reference  → overexposed (bright, highlights roll off via H&D or hard-clip)
+        //
+        // With ApplySpectralWeights: output is grayscale (silver density image).
+        // With ApplyHDCurve: output can exceed 1.0 for overexposed pixels; ToByte clamps to 255.
         // Returns a black image when no frames have been accumulated.
         // Caller owns and is responsible for disposing the returned bitmap.
         internal SKBitmap Develop()
         {
-            var info = new SKImageInfo(_width, _height, SKColorType.Bgra8888, SKAlphaType.Opaque);
+            var info   = new SKImageInfo(_width, _height, SKColorType.Bgra8888, SKAlphaType.Opaque);
             var bitmap = new SKBitmap(info);
 
             int pixelCount = _width * _height;
-            int byteCount = pixelCount * 4;
-            byte[] bytes = ArrayPool<byte>.Shared.Rent(byteCount);
+            int byteCount  = pixelCount * 4;
+            byte[] bytes   = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
-                float invFrames = 1f / _referenceFrameCount;
+                float invRef = 1f / _referenceFrameCount;
+
+                // Capture flags as locals — avoids repeated field reads in the hot loop.
+                bool spectral = ApplySpectralWeights;
+                bool hd       = ApplyHDCurve;
+                float devStr  = DevelopmentStrength;
+                float gamma   = HDGamma;
+
+                // Normalize spectral weights so a neutral grey pixel always maps to
+                // the same exposure energy regardless of the sensitivity values.
+                float rw = RedSensitivity, gw = GreenSensitivity, bw = BlueSensitivity;
+                float wSum = rw + gw + bw;
+                if (wSum > 1e-6f) { rw /= wSum; gw /= wSum; bw /= wSum; }
 
                 for (int i = 0; i < pixelCount; i++)
                 {
-                    int b = i * 4;
-                    bytes[b + 0] = ToByte(_sumB[i] * invFrames);
-                    bytes[b + 1] = ToByte(_sumG[i] * invFrames);
-                    bytes[b + 2] = ToByte(_sumR[i] * invFrames);
-                    bytes[b + 3] = 255;
+                    int idx = i * 4;
+
+                    if (spectral)
+                    {
+                        // Collapse RGB to a single silver-density exposure value.
+                        float E = (_sumR[i] * rw + _sumG[i] * gw + _sumB[i] * bw) * invRef;
+                        byte  v = ToByte(hd ? HDCurve(E, devStr, gamma) : E);
+                        bytes[idx + 0] = v;
+                        bytes[idx + 1] = v;
+                        bytes[idx + 2] = v;
+                    }
+                    else
+                    {
+                        // Keep full colour.
+                        float Eb = _sumB[i] * invRef;
+                        float Eg = _sumG[i] * invRef;
+                        float Er = _sumR[i] * invRef;
+                        bytes[idx + 0] = ToByte(hd ? HDCurve(Eb, devStr, gamma) : Eb);
+                        bytes[idx + 1] = ToByte(hd ? HDCurve(Eg, devStr, gamma) : Eg);
+                        bytes[idx + 2] = ToByte(hd ? HDCurve(Er, devStr, gamma) : Er);
+                    }
+
+                    bytes[idx + 3] = 255;
                 }
 
                 Marshal.Copy(bytes, 0, bitmap.GetPixels(), byteCount);
@@ -112,6 +197,28 @@ namespace Phototesting.CameraCapture.Exposure
             }
 
             return bitmap;
+        }
+
+        // Hurter–Driffield emulsion response: log10(1 + E×k)^γ
+        // Output naturally exceeds 1.0 for overexposed pixels — caller clamps via ToByte.
+        private static float HDCurve(float E, float k, float gamma)
+        {
+            float density = MathF.Log10(1f + E * k);
+            return MathF.Pow(MathF.Max(density, 0f), gamma);
+        }
+
+        // Precomputes the standard sRGB-to-linear LUT (256 entries).
+        private static float[] BuildLinearTable()
+        {
+            float[] t = new float[256];
+            for (int i = 0; i < 256; i++)
+            {
+                float c = i / 255f;
+                t[i] = c <= 0.04045f
+                    ? c / 12.92f
+                    : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
+            }
+            return t;
         }
 
         private static byte ToByte(float v)

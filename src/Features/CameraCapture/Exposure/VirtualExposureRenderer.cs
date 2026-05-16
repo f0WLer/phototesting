@@ -39,6 +39,34 @@ namespace Phototesting.CameraCapture.Exposure
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
         internal int TargetFrameCount => _targetFrameCount;
 
+        // Physics layer toggles — persisted across Start()/Reset() and applied to each new buffer.
+        internal bool PhysicsLinearize      = true;
+        internal bool PhysicsSpectralWeights = true;
+        internal bool PhysicsHDCurve         = true;
+
+        // Copies the current physics settings onto a buffer.
+        private void ApplyPhysicsToBuffer(ExposureAccumulationBuffer buf)
+        {
+            buf.LinearizeInput      = PhysicsLinearize;
+            buf.ApplySpectralWeights = PhysicsSpectralWeights;
+            buf.ApplyHDCurve         = PhysicsHDCurve;
+        }
+
+        // Updates a named physics flag on both the renderer and the live buffer (if any).
+        // Returns false if name is unrecognised.
+        internal bool SetPhysics(string flag, bool value)
+        {
+            switch (flag)
+            {
+                case "linearize":   PhysicsLinearize      = value; break;
+                case "spectral":    PhysicsSpectralWeights = value; break;
+                case "hdcurve":     PhysicsHDCurve         = value; break;
+                default: return false;
+            }
+            if (_buffer != null) ApplyPhysicsToBuffer(_buffer);
+            return true;
+        }
+
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
@@ -67,6 +95,7 @@ namespace Phototesting.CameraCapture.Exposure
             _camera = cam;
 
             _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _targetFrameCount);
+            ApplyPhysicsToBuffer(_buffer);
             State = ExposureState.Capturing;
         }
 
@@ -176,6 +205,7 @@ namespace Phototesting.CameraCapture.Exposure
                 _camera.InitBuffer();
                 _buffer.Reset();
                 _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _targetFrameCount);
+                ApplyPhysicsToBuffer(_buffer);
                 _capi.Logger.Warning("Phototesting: window resized during exposure — accumulated frames discarded.");
             }
 

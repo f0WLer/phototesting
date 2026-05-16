@@ -115,9 +115,52 @@ namespace Phototesting.AdminTooling
                         $"Wetplate: exposure — state={renderer.State}, frames={renderer.FramesAccumulated}/{renderer.TargetFrameCount}");
                     return;
 
+                case "physics":
+                case "phys":
+                {
+                    string? physFlag = args.PopWord()?.ToLowerInvariant();
+
+                    // No flag — print current settings
+                    if (string.IsNullOrEmpty(physFlag) || physFlag == "status")
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: physics — " +
+                            $"linearize={(renderer.PhysicsLinearize ? "on" : "off")}, " +
+                            $"spectral={(renderer.PhysicsSpectralWeights ? "on" : "off")}, " +
+                            $"hdcurve={(renderer.PhysicsHDCurve ? "on" : "off")}");
+                        return;
+                    }
+
+                    string? onOffStr = args.PopWord()?.ToLowerInvariant();
+                    bool? onOff = onOffStr switch
+                    {
+                        "on"  or "true"  or "1" or "yes" or "enable"  => true,
+                        "off" or "false" or "0" or "no"  or "disable" => false,
+                        _ => null
+                    };
+
+                    if (onOff == null)
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            "Wetplate: usage: .phototesting exposure physics <linearize|spectral|hdcurve> <on|off>");
+                        return;
+                    }
+
+                    if (!renderer.SetPhysics(physFlag, onOff.Value))
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: unknown physics flag '{physFlag}'. Valid: linearize, spectral, hdcurve");
+                        return;
+                    }
+
+                    _owner.ClientApi.ShowChatMessage(
+                        $"Wetplate: physics {physFlag} = {(onOff.Value ? "on" : "off")}");
+                    return;
+                }
+
                 default:
                     _owner.ClientApi.ShowChatMessage(
-                        "Wetplate: usage: .phototesting exposure <start [frames]|stop|pause|resume|reset|export|status>");
+                        "Wetplate: usage: .phototesting exposure <start [frames]|stop|pause|resume|reset|export|status|physics>");
                     return;
             }
         }
