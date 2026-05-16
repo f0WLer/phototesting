@@ -185,89 +185,146 @@ namespace Phototesting.CameraCapture
             FrameBufferRef currentFbo = _platform.CurrentFrameBuffer;
             FrameBufferRef primaryFbo = _platform.FrameBuffers[0];
 
-            _main.PerspectiveMode();
-            UpdateCamera();
-            _main.Reset3DProjection();
-
-            GL.Enable(EnableCap.DepthTest);
-
-            // Rebuild shadow maps for the virtual camera's view frustum.
-            // Without this, the cascade coverage is computed from the player's current heading
-            // each frame, producing hard-edged dark regions in the virtual camera view when
-            // the player is looking a different direction.
-            if (_main.AmbientManager.ShadowQuality > 0)
-            {
-                _main.TriggerRenderStage(EnumRenderStage.ShadowFar, dt);
-                _main.TriggerRenderStage(EnumRenderStage.ShadowFarDone, dt);
-                if (_main.AmbientManager.ShadowQuality > 1)
-                {
-                    _main.TriggerRenderStage(EnumRenderStage.ShadowNear, dt);
-                    _main.TriggerRenderStage(EnumRenderStage.ShadowNearDone, dt);
-                }
-            }
-
-            // Shadow stages use their own MVP and can modify the GL modelview matrix.
-            // Re-establish the virtual camera matrices before the opaque pass, mirroring
-            // what the main render loop does after its shadow stages.
-            _main.GlMatrixModeModelView();
-            _main.GlLoadMatrix(_main.MainCamera.CameraMatrix);
-            double[] pmat = _capi.Render.PMatrix.Top;
-            double[] mvmat = _capi.Render.MvMatrix.Top;
-            for (int i = 0; i < 16; i++)
-            {
-                _main.PerspectiveProjectionMat[i] = pmat[i];
-                _main.PerspectiveViewMat[i] = mvmat[i];
-            }
-            _main.frustumCuller.CalcFrustumEquations(CameraPos.AsBlockPos, pmat, mvmat);
-
-            // ShadowDone restores GL to the screen FBO; redirect back to our virtual FBO.
-            _platform.CurrentFrameBuffer = fbo;
-            _platform.FrameBuffers[0] = fbo;
-
-            GL.ClipPlane(ClipPlaneName.ClipDistance0, new double[] { 0d, 1d, 0d, 5d });
-            GL.Enable(EnableCap.ClipDistance0);
-
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-            // Disable player rendering so the virtual camera doesn't capture the player's model in its view.
+            // Save the main camera state that UpdateCamera() overwrites.
+            // Restored at the end so all remaining Before-stage renderers (e.g. SystemRenderTerrain
+            // at RenderOrder 0.995) and the main render loop see the player's camera matrices.
+            PlayerCamera camera = _main.MainCamera;
+            Traverse cameraTraverse = Traverse.Create(camera);
+            double savedYaw = camera.Yaw;
+            double savedPitch = camera.Pitch;
+            double savedRoll = camera.Roll;
+            Vec3d savedCamSourcePos = camera.CamSourcePosition.Clone();
+            Vec3d savedOriginPos = camera.OriginPosition.Clone();
+            Vec3d savedEntityCameraPos = _capi.World.Player.Entity.CameraPos.Clone();
+            DefaultShaderUniforms shUniforms = _capi.Render.ShaderUniforms;
+            float savedPlayerPosX = shUniforms.PlayerPos.X;
+            float savedPlayerPosY = shUniforms.PlayerPos.Y;
+            float savedPlayerPosZ = shUniforms.PlayerPos.Z;
             bool playerWasRendered = _capi.World.Player.Entity.IsRendered;
-            _capi.World.Player.Entity.IsRendered = false;
 
-            // Ensure depth writes are enabled for the opaque pass.
-            _platform.GlDepthMask(true);
-            _main.TriggerRenderStage(EnumRenderStage.Opaque, dt);
+            _main.PerspectiveMode();
 
-            if (_main.doTransparentRenderPass)
+            try
             {
-                ScreenManager.FrameProfiler.Mark("rendTransp-begin");
-                _platform.LoadFrameBuffer(EnumFrameBuffer.Transparent);
-                ScreenManager.FrameProfiler.Mark("rendTransp-fbloaded");
-                _platform.ClearFrameBuffer(EnumFrameBuffer.Transparent);
-                ScreenManager.FrameProfiler.Mark("rendTransp-bufscleared");
-                _main.TriggerRenderStage(EnumRenderStage.OIT, dt);
-                _platform.UnloadFrameBuffer(EnumFrameBuffer.Transparent);
-                ScreenManager.FrameProfiler.Mark("rendTranspDone");
-                _platform.MergeTransparentRenderPass();
-                ScreenManager.FrameProfiler.Mark("mergeTranspPassDone");
+                UpdateCamera();
+                _main.Reset3DProjection();
+
+                GL.Enable(EnableCap.DepthTest);
+
+                // Rebuild shadow maps for the virtual camera's view frustum.
+                // Without this, the cascade coverage is computed from the player's current heading
+                // each frame, producing hard-edged dark regions in the virtual camera view when
+                // the player is looking a different direction.
+                if (_main.AmbientManager.ShadowQuality > 0)
+                {
+                    _main.TriggerRenderStage(EnumRenderStage.ShadowFar, dt);
+                    _main.TriggerRenderStage(EnumRenderStage.ShadowFarDone, dt);
+                    if (_main.AmbientManager.ShadowQuality > 1)
+                    {
+                        _main.TriggerRenderStage(EnumRenderStage.ShadowNear, dt);
+                        _main.TriggerRenderStage(EnumRenderStage.ShadowNearDone, dt);
+                    }
+                }
+
+                // Shadow stages use their own MVP and can modify the GL modelview matrix.
+                // Re-establish the virtual camera matrices before the opaque pass, mirroring
+                // what the main render loop does after its shadow stages.
+                _main.GlMatrixModeModelView();
+                _main.GlLoadMatrix(_main.MainCamera.CameraMatrix);
+                double[] pmat = _capi.Render.PMatrix.Top;
+                double[] mvmat = _capi.Render.MvMatrix.Top;
+                for (int i = 0; i < 16; i++)
+                {
+                    _main.PerspectiveProjectionMat[i] = pmat[i];
+                    _main.PerspectiveViewMat[i] = mvmat[i];
+                }
+                _main.frustumCuller.CalcFrustumEquations(CameraPos.AsBlockPos, pmat, mvmat);
+
+                // ShadowDone restores GL to the screen FBO; redirect back to our virtual FBO.
+                _platform.CurrentFrameBuffer = fbo;
+                _platform.FrameBuffers[0] = fbo;
+
+                GL.ClipPlane(ClipPlaneName.ClipDistance0, new double[] { 0d, 1d, 0d, 5d });
+                GL.Enable(EnableCap.ClipDistance0);
+
+                GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
+                // Clear stale screen-space water data left by the previous frame's main camera.
+                // Without this, the opaque shader reads player-view liquid depth positions that
+                // don't correspond to the virtual camera's frustum, producing a dark mask artifact
+                // wherever the main view has water surface. SystemRenderTerrain.OnRenderBefore
+                // (RenderOrder 0.995) will repopulate this FBO for the main camera after we return.
+                _platform.LoadFrameBuffer(EnumFrameBuffer.LiquidDepth);
+                _platform.ClearFrameBuffer(EnumFrameBuffer.LiquidDepth);
+                _platform.UnloadFrameBuffer(EnumFrameBuffer.LiquidDepth);
+
+                // Disable player rendering so the virtual camera doesn't capture the player's model in its view.
+                _capi.World.Player.Entity.IsRendered = false;
+
+                // Ensure depth writes are enabled for the opaque pass.
+                _platform.GlDepthMask(true);
+                _main.TriggerRenderStage(EnumRenderStage.Opaque, dt);
+
+                if (_main.doTransparentRenderPass)
+                {
+                    ScreenManager.FrameProfiler.Mark("rendTransp-begin");
+                    _platform.LoadFrameBuffer(EnumFrameBuffer.Transparent);
+                    ScreenManager.FrameProfiler.Mark("rendTransp-fbloaded");
+                    _platform.ClearFrameBuffer(EnumFrameBuffer.Transparent);
+                    ScreenManager.FrameProfiler.Mark("rendTransp-bufscleared");
+                    _main.TriggerRenderStage(EnumRenderStage.OIT, dt);
+                    _platform.UnloadFrameBuffer(EnumFrameBuffer.Transparent);
+                    ScreenManager.FrameProfiler.Mark("rendTranspDone");
+                    _platform.MergeTransparentRenderPass();
+                    ScreenManager.FrameProfiler.Mark("mergeTranspPassDone");
+                }
+
+                GL.Disable(EnableCap.ClipPlane0);
+                _platform.GlDepthMask(true);
+                _platform.GlEnableDepthTest();
+                _platform.GlCullFaceBack();
+                _platform.GlEnableCullFace();
+                _main.TriggerRenderStage(EnumRenderStage.AfterOIT, dt);
+
+                _platform.RenderPostprocessingEffects(_main.CurrentProjectionMatrix);
+                _main.TriggerRenderStage(EnumRenderStage.AfterPostProcessing, dt);
+
+                _platform.RenderFinalComposition();
+                _main.TriggerRenderStage(EnumRenderStage.AfterFinalComposition, dt);
             }
+            finally
+            {
+                _capi.World.Player.Entity.IsRendered = playerWasRendered;
 
-            GL.Disable(EnableCap.ClipPlane0);
-            _platform.GlDepthMask(true);
-            _platform.GlEnableDepthTest();
-            _platform.GlCullFaceBack();
-            _platform.GlEnableCullFace();
-            _main.TriggerRenderStage(EnumRenderStage.AfterOIT, dt);
+                _capi.World.Player.Entity.CameraPos = savedEntityCameraPos;
+                camera.CamSourcePosition = savedCamSourcePos;
+                camera.OriginPosition = savedOriginPos;
+                camera.Yaw = savedYaw;
+                camera.Pitch = savedPitch;
+                camera.Roll = savedRoll;
+                cameraTraverse.Method("Update", float.Epsilon, _main.interesectionTester).GetValue();
+                shUniforms.PlayerPos.Set(savedPlayerPosX, savedPlayerPosY, savedPlayerPosZ);
 
-            _capi.World.Player.Entity.IsRendered = playerWasRendered;
+                _main.Reset3DProjection();
+                _main.GlMatrixModeModelView();
+                _main.GlLoadMatrix(cameraTraverse.Field("CameraMatrix").GetValue() as double[]);
 
-            _platform.RenderPostprocessingEffects(_main.CurrentProjectionMatrix);
-            _main.TriggerRenderStage(EnumRenderStage.AfterPostProcessing, dt);
+                double[] top = _capi.Render.PMatrix.Top;
+                double[] top2 = _capi.Render.MvMatrix.Top;
 
-            _platform.RenderFinalComposition();
-            _main.TriggerRenderStage(EnumRenderStage.AfterFinalComposition, dt);
-            GL.Disable(EnableCap.DepthTest);
-            _platform.FrameBuffers[0] = primaryFbo;
-            _platform.CurrentFrameBuffer = currentFbo;
+                _main.frustumCuller.CalcFrustumEquations(savedEntityCameraPos.AsBlockPos, top, top2);
+
+                for (int i = 0; i < 16; i++)
+                {
+                    _main.PerspectiveProjectionMat[i] = top[i];
+                    _main.PerspectiveViewMat[i] = top2[i];
+                }
+
+                GL.Disable(EnableCap.ClipDistance0);
+                GL.Disable(EnableCap.DepthTest);
+                _platform.FrameBuffers[0] = primaryFbo;
+                _platform.CurrentFrameBuffer = currentFbo;
+            }
         }
     }
 }
