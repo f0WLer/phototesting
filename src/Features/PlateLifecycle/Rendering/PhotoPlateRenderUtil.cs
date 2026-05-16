@@ -32,7 +32,7 @@ namespace Phototesting.PlateLifecycle.Rendering
         private static void ResolveDevelopedRenderProgress(ICoreClientAPI capi, ItemStack itemstack, out int developPours, out int maxDeveloperPours)
         {
             // Pull process defaults from config so item stacks render with the active process profile.
-            ProcessRegistry registry = PhotoTestingConfigAccess.ResolveClientModSystem(capi)?.Processes ?? new ProcessRegistry();
+            ProcessRegistry registry = PhotoTestingConfigAccess.ResolveModSystem(capi)?.Processes ?? new ProcessRegistry();
             PhotographyProcessDefinition process = registry.ResolveOrDefault(PlateStateService.GetProcessId(itemstack));
 
             maxDeveloperPours = 1;

@@ -147,7 +147,7 @@ namespace Phototesting.PlateLifecycle.Tray
         {
             try
             {
-                var modSys = PhotoTestingConfigAccess.ResolveClientModSystem(capi);
+                var modSys = PhotoTestingConfigAccess.ResolveModSystem(capi);
                 return modSys?.Config?.DevelopmentTrayInteractions;
             }
             catch (Exception ex)

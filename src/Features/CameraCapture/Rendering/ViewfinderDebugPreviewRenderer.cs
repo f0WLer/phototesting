@@ -43,7 +43,7 @@ namespace Phototesting.CameraCapture.Rendering
             if (nowMs - _lastPreviewRequestMs >= refreshMs)
             {
                 _lastPreviewRequestMs = nowMs;
-                _captureRenderer.RequestDebugPreviewFrame(cfg.DebugPreviewMaxDimension, PhotoTestingConfigAccess.ResolveClientModSystem(_capi)?.CameraCaptureBridge.ResolveCaptureEffectsOverrideForLoadedCameraPlate());
+                _captureRenderer.RequestDebugPreviewFrame(cfg.DebugPreviewMaxDimension, PhotoTestingConfigAccess.ResolveModSystem(_capi)?.CameraCaptureBridge.ResolveCaptureEffectsOverrideForLoadedCameraPlate());
             }
 
             if (_captureRenderer.TryConsumeDebugPreviewFrame(out int[] bgraPixels, out int width, out int height))

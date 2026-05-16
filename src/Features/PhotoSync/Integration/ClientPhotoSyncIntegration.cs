@@ -10,13 +10,13 @@ namespace Phototesting.PhotoSync.Integration
     {
         private static PhotoAssetSync? ResolveClientPhotoSync(ICoreClientAPI capi)
         {
-            return PhotoTestingConfigAccess.ResolveClientModSystem(capi)?.PhotoSyncBridge.Runtime;
+            return PhotoTestingConfigAccess.ResolveModSystem(capi)?.PhotoSyncBridge.Runtime;
         }
 
         internal static void MaybeSendPhotoSeen(ICoreClientAPI capi, string photoId)
         {
             if (capi == null || string.IsNullOrEmpty(photoId)) return;
-            PhotoTestingConfigAccess.ResolveClientModSystem(capi)?.PhotoSyncBridge.ClientMaybeSendPhotoSeen(photoId);
+            PhotoTestingConfigAccess.ResolveModSystem(capi)?.PhotoSyncBridge.ClientMaybeSendPhotoSeen(photoId);
         }
 
         internal static void NotifyPhotoCreated(ICoreClientAPI capi, string photoId)

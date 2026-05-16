@@ -13,12 +13,6 @@ namespace Phototesting.AdminTooling
             return api?.ModLoader?.GetModSystem<PhotoTestingModSystem>();
         }
 
-        // Resolves the client mod system, preferring the cached singleton when available.
-        internal static PhotoTestingModSystem? ResolveClientModSystem(ICoreClientAPI? capi)
-        {
-            return PhotoTestingModSystem.ClientInstance ?? capi?.ModLoader?.GetModSystem<PhotoTestingModSystem>();
-        }
-
         // Returns the shared runtime config snapshot for the provided API context.
         internal static PhotoTestingConfig? ResolveConfig(ICoreAPI? api)
         {
@@ -28,7 +22,7 @@ namespace Phototesting.AdminTooling
         // Returns the client-side config snapshot for rendering/input code paths.
         internal static PhotoTestingConfig? ResolveClientConfig(ICoreClientAPI? capi)
         {
-            return ResolveClientModSystem(capi)?.Config;
+            return ResolveModSystem(capi)?.Config;
         }
     }
 }

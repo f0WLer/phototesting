@@ -165,7 +165,7 @@ namespace Phototesting.ImageEffects
         // Loads active config from mod system, ensuring an effects profile exists and is clamped.
         internal static WetplateEffectsConfig LoadOrCreate(ICoreClientAPI capi)
         {
-            PhotoTestingModSystem? modSys = PhotoTestingConfigAccess.ResolveClientModSystem(capi);
+            PhotoTestingModSystem? modSys = PhotoTestingConfigAccess.ResolveModSystem(capi);
             if (modSys == null)
             {
                 return CreateRuntimeSnapshot(null);
