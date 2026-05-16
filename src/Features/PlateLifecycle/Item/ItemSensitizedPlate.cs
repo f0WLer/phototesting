@@ -11,7 +11,7 @@ namespace Phototesting.PlateLifecycle
             ItemStack? stack = inSlot?.Itemstack;
             if (stack == null) return;
 
-            WetPlateAttrs.AppendWetnessInfo(world, stack, dsc);
+            PlateDryingTransition.AppendInfo(world, stack, dsc);
         }
     }
 }

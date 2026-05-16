@@ -19,7 +19,7 @@ namespace Phototesting.PlateLifecycle.Tray
                         if (!TryGetDeveloperPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack devPlate, out _, out _, out int currentPours)) return false;
 
                         if (currentPours >= spec.DeveloperApplicationsRequired) return false;
-                        if (WetPlateAttrs.IsDry(world, devPlate))
+                        if (PlateDryingTransition.IsDry(world, devPlate))
                         {
                             Tell(byPlayer, "Wetplate: the plate has dried and can no longer be used.", pos);
                             return false;
@@ -29,7 +29,7 @@ namespace Phototesting.PlateLifecycle.Tray
                     case TrayActionKind.Fixer:
                         if (!TryGetFixerPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack fixPlate, out int pours)) return false;
 
-                        if (WetPlateAttrs.IsDry(world, fixPlate))
+                        if (PlateDryingTransition.IsDry(world, fixPlate))
                         {
                             Tell(byPlayer, "Wetplate: the plate has dried and can no longer be used.", pos);
                             return false;

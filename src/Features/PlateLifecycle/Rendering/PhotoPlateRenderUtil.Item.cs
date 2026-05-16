@@ -40,7 +40,7 @@ namespace Phototesting.PlateLifecycle.Rendering
                 overlayFace = "south";
             }
 
-            string photoId = itemstack.Attributes?.GetString(WetPlateAttrs.PhotoId) ?? string.Empty;
+            string photoId = itemstack.Attributes?.GetString(PlateAttrs.PhotoId) ?? string.Empty;
             if (string.IsNullOrEmpty(photoId)) return false;
 
             string effectsProfile = string.Empty;

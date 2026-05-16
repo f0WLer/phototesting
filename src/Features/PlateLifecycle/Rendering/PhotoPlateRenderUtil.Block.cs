@@ -16,7 +16,7 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             if (capi == null || itemstack == null) return false;
 
-            string photoId = itemstack.Attributes?.GetString(WetPlateAttrs.PhotoId) ?? string.Empty;
+            string photoId = itemstack.Attributes?.GetString(PlateAttrs.PhotoId) ?? string.Empty;
             if (string.IsNullOrEmpty(photoId)) return false;
 
             // Keep server-side photo-seen telemetry up to date while blocks are displayed.

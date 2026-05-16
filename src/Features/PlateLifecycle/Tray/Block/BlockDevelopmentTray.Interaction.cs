@@ -66,7 +66,7 @@ namespace Phototesting.PlateLifecycle.Tray
                     if (!TryGetDeveloperPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack clientDevPlate, out _, out _, out int currentPours)) return false;
 
                     if (currentPours >= spec.DeveloperApplicationsRequired) return false;
-                    if (WetPlateAttrs.IsDry(world, clientDevPlate))
+                    if (PlateDryingTransition.IsDry(world, clientDevPlate))
                     {
                         (world.Api as ICoreClientAPI)?.ShowChatMessage("Wetplate: the plate has dried and can no longer be used.");
                         return false;
@@ -81,7 +81,7 @@ namespace Phototesting.PlateLifecycle.Tray
                 if (IsHoldingChemical(activeSlot, spec.FixerPortionCode))
                 {
                     if (!TryGetFixerPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack clientFixPlate, out _)) return false;
-                    if (WetPlateAttrs.IsDry(world, clientFixPlate))
+                    if (PlateDryingTransition.IsDry(world, clientFixPlate))
                     {
                         (world.Api as ICoreClientAPI)?.ShowChatMessage("Wetplate: the plate has dried and can no longer be used.");
                         return false;
@@ -405,7 +405,7 @@ namespace Phototesting.PlateLifecycle.Tray
         private static bool IsReclaimablePlate(IWorldAccessor world, ItemStack? stack)
         {
             if (stack == null) return false;
-            return PlateStateTransitions.IsWetStage(stack) && WetPlateAttrs.IsDry(world, stack);
+            return PlateStateTransitions.IsWetStage(stack) && PlateDryingTransition.IsDry(world, stack);
         }
 
         // Extracts the tray plate only when it qualifies for the reclaim-with-water path.
@@ -522,7 +522,7 @@ namespace Phototesting.PlateLifecycle.Tray
         // Identifies a dry sensitized plate that can still be reclaimed with a water rinse.
         private static bool IsDrySensitizedForReclaim(IWorldAccessor world, ItemStack? stack)
         {
-            if (stack == null || !WetPlateAttrs.IsDry(world, stack)) return false;
+            if (stack == null || !PlateDryingTransition.IsDry(world, stack)) return false;
 
             return PlateStateService.GetStage(stack) == PlateStage.Sensitized;
         }

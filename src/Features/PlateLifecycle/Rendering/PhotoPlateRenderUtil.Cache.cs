@@ -122,7 +122,7 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             try
             {
-                double movement = itemstack.Attributes.GetDouble(WetPlateAttrs.HoldStillMovement, 0);
+                double movement = itemstack.Attributes.GetDouble(PlateAttrs.HoldStillMovement, 0);
                 if (movement <= 0) return 0f;
                 if (movement > 1000) movement = 1000;
                 return (float)movement;

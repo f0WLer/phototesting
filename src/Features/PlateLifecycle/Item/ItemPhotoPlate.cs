@@ -33,7 +33,7 @@ namespace Phototesting.PlateLifecycle
 
             if (PlateStateService.GetStage(stack) != PlateStage.Finished)
             {
-                WetPlateAttrs.AppendWetnessInfo(world, stack, dsc);
+                PlateDryingTransition.AppendInfo(world, stack, dsc);
             }
         }
 
