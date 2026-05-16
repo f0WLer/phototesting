@@ -4,6 +4,7 @@ using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 using Vintagestory.Client.NoObf;
 using Phototesting.AdminTooling;
+using Phototesting.CameraCapture.Exposure;
 using Phototesting.CameraCapture.Rendering;
 using Phototesting.ImageEffects;
 
@@ -13,7 +14,7 @@ namespace Phototesting.CameraCapture
     // Holds a fixed-position off-screen VirtualCamera and re-renders it on a timed interval,
     // storing processed frames in a ViewfinderPreviewFrameBuffer for ViewfinderDebugPreviewRenderer to display.
     // Registered at EnumRenderStage.Before so it can call TriggerRenderStage(Opaque) safely.
-    internal sealed class VirtualCameraPreviewRenderer : IRenderer, IDisposable
+    internal sealed class VirtualCameraPreviewRenderer : IRenderer, IDisposable, IExposurePreviewSink
     {
         private readonly ICoreClientAPI _capi;
         private readonly ClientPlatformWindows _platform;
@@ -30,8 +31,33 @@ namespace Phototesting.CameraCapture
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
-        // True when a virtual camera is currently active and will render on the next due tick.
-        internal bool IsActive => _camera != null;
+        // True when a virtual camera is currently active, or while the exposure renderer is feeding frames.
+        internal bool IsActive => _camera != null || _exposurePassthrough;
+
+        // When true this renderer skips its own camera rendering and accepts frames pushed by VirtualExposureRenderer.
+        private bool _exposurePassthrough;
+
+        // Exposure preview takes ownership of this renderer's output surface and releases any live camera.
+        public void BeginExposurePassthrough()
+        {
+            StopCamera();
+            _exposurePassthrough = true;
+        }
+
+        // Re-enables normal mode and clears the last pushed exposure frame.
+        public void EndExposurePassthrough()
+        {
+            _exposurePassthrough = false;
+            _previewBuffer.Clear();
+        }
+
+        // Stores an already-developed exposure bitmap into the preview buffer.
+        // Ignored unless BeginExposurePassthrough() was called.
+        public void StoreExposureFrame(SKBitmap bmp)
+        {
+            if (_exposurePassthrough)
+                _previewBuffer.StoreFrame(bmp);
+        }
 
         internal VirtualCameraPreviewRenderer(ICoreClientAPI capi)
         {
@@ -45,6 +71,7 @@ namespace Phototesting.CameraCapture
         // Destroys and replaces any previously active camera.
         internal void Start(Vec3d eyePos, float yaw, float pitch, float fov, int maxDimension, WetplateEffectsConfig? effectsOverride = null)
         {
+            EndExposurePassthrough();
             StopCamera();
             _maxDimension = maxDimension;
             _effectsOverride = effectsOverride;
@@ -64,8 +91,8 @@ namespace Phototesting.CameraCapture
         // Stops the virtual camera preview and clears buffered frames.
         internal void Stop()
         {
+            EndExposurePassthrough();
             StopCamera();
-            _previewBuffer.Clear();
         }
 
         private void StopCamera()
@@ -82,6 +109,8 @@ namespace Phototesting.CameraCapture
         // Re-renders the virtual scene and stores the result when the refresh interval has elapsed.
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
+            // Exposure renderer is the frame source — nothing for us to render.
+            if (_exposurePassthrough) return;
             if (_camera == null) return;
 
             ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;

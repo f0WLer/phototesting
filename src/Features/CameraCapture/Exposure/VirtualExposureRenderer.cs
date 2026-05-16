@@ -33,7 +33,12 @@ namespace Phototesting.CameraCapture.Exposure
         private VirtualCamera? _camera;
         private ExposureAccumulationBuffer? _buffer;
         private int _targetFrameCount;
+        private int _previewFrameInterval;
         private bool _disposed;
+
+        // When set, the exposure renderer pushes developed preview frames here while capturing,
+        // keeping the debug preview window live during long exposures.
+        internal IExposurePreviewSink? PreviewSink { get; set; }
 
         internal ExposureState State { get; private set; } = ExposureState.Idle;
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
@@ -96,6 +101,9 @@ namespace Phototesting.CameraCapture.Exposure
 
             _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _targetFrameCount);
             ApplyPhysicsToBuffer(_buffer);
+            // Update preview roughly 8 times across the exposure regardless of frame count.
+            _previewFrameInterval = Math.Max(1, _targetFrameCount / 8);
+            PreviewSink?.BeginExposurePassthrough();
             State = ExposureState.Capturing;
         }
 
@@ -118,6 +126,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             StopCamera();
             _buffer = null;
+            PreviewSink?.EndExposurePassthrough();
             State = ExposureState.Idle;
         }
 
@@ -192,6 +201,46 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
+        // Develops and shapes one debug-preview frame using the same crop/scale/effects policy
+        // as the normal virtual camera preview path.
+        private void PushPreviewFrame()
+        {
+            if (_buffer == null || PreviewSink == null || _buffer.FramesAccumulated == 0) return;
+
+            ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            int maxDimension = cfg?.DebugPreviewMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
+
+            using SKBitmap developed = _buffer.Develop();
+
+            float scale = Math.Min(1f, maxDimension / (float)Math.Max(developed.Width, developed.Height));
+            int outW = Math.Max(1, (int)(developed.Width * scale));
+            int outH = Math.Max(1, (int)(developed.Height * scale));
+
+            var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
+            using SKBitmap scaled = new SKBitmap(dstInfo);
+            using (var canvas = new SKCanvas(scaled))
+            {
+                canvas.Clear(SKColors.Black);
+                canvas.DrawBitmap(developed, new SKRect(0, 0, outW, outH));
+            }
+
+            SKBitmap cropped = PhotoCaptureRenderer.CenterCropToPlateAspect(scaled);
+            try
+            {
+                if (cfg?.DebugPreviewApplyEffects ?? true)
+                {
+                    WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, null);
+                    ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "exposure-preview", profile);
+                }
+
+                PreviewSink.StoreExposureFrame(cropped);
+            }
+            finally
+            {
+                if (!ReferenceEquals(cropped, scaled)) cropped.Dispose();
+            }
+        }
+
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing) return;
@@ -221,6 +270,16 @@ namespace Phototesting.CameraCapture.Exposure
 
                 using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
                 _buffer.Accumulate(raw);
+
+                // Push a preview update on the first frame and then every _previewFrameInterval frames.
+                if (PreviewSink != null)
+                {
+                    int n = _buffer.FramesAccumulated;
+                    if (n == 1 || n % _previewFrameInterval == 0)
+                    {
+                        PushPreviewFrame();
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -232,6 +291,8 @@ namespace Phototesting.CameraCapture.Exposure
             if (_buffer.FramesAccumulated >= _targetFrameCount)
             {
                 State = ExposureState.Done;
+                // Push the final fully-developed frame so the preview shows the complete exposure.
+                PushPreviewFrame();
                 _capi.Logger.Notification(
                     $"Phototesting: exposure complete — {_buffer.FramesAccumulated}/{_targetFrameCount} frames accumulated. " +
                     "Use '.phototesting exposure export' to save.");
@@ -251,6 +312,7 @@ namespace Phototesting.CameraCapture.Exposure
             _disposed = true;
             StopCamera();
             _buffer = null;
+            PreviewSink?.EndExposurePassthrough();
         }
     }
 }

@@ -50,6 +50,7 @@ namespace Phototesting.CameraCapture
             api.Event.RegisterRenderer(_virtualCameraPreviewRenderer, EnumRenderStage.Before, "phototesting-virtualcamera-preview");
 
             _virtualExposureRenderer = new VirtualExposureRenderer(api);
+            _virtualExposureRenderer.PreviewSink = _virtualCameraPreviewRenderer;
             api.Event.RegisterRenderer(_virtualExposureRenderer, EnumRenderStage.Before, "phototesting-virtualexposure");
 
             _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive, _virtualCameraPreviewRenderer);
