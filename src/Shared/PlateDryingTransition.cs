@@ -27,6 +27,13 @@ namespace Phototesting
                 ?? 0f;
         }
 
+        // Resolves the configured wet plate lifetime in hours with a safe fallback.
+        public static double ResolveWetDurationHours(ICoreAPI? api)
+        {
+            return PhotoTestingConfigAccess.ResolveConfig(api)?.PlateProcessing?.WetPlateDurationHours
+                ?? 0.66;
+        }
+
         // True once the underlying Dry transition has finished and the plate is sealed dry.
         public static bool IsDry(IWorldAccessor? world, ItemStack? stack)
         {

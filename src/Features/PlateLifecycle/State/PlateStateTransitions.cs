@@ -68,7 +68,7 @@ namespace Phototesting.PlateLifecycle
             PlateStateService.SetStage(plate, PlateStage.Sensitized);
             PlateStateService.SetNameLangCode(plate, process.SensitizedPlateNameLangCode);
 
-            double effectiveHours = WetPlateAttrs.ResolveWetDurationHours(world.Api) * process.WetDurationMultiplier;
+            double effectiveHours = PlateDryingTransition.ResolveWetDurationHours(world.Api) * process.WetDurationMultiplier;
             PlateDryingTransition.ResetTimer(world, plate, effectiveHours);
         }
 
@@ -80,7 +80,7 @@ namespace Phototesting.PlateLifecycle
 
         internal static void ResetWetTimerForMultiplier(ICoreAPI? api, IWorldAccessor world, ItemStack plate, double wetDurationMultiplier)
         {
-            double effectiveHours = WetPlateAttrs.ResolveWetDurationHours(api) * wetDurationMultiplier;
+            double effectiveHours = PlateDryingTransition.ResolveWetDurationHours(api) * wetDurationMultiplier;
             PlateDryingTransition.ResetTimer(world, plate, effectiveHours);
         }
     }

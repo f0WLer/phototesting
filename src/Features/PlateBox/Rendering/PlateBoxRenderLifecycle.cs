@@ -31,16 +31,12 @@ namespace Phototesting.PlateBox
         {
             if (api?.Side != EnumAppSide.Client || renderer == null) return renderer;
 
-            try
+            BestEffort.Try(api?.Logger, "dispose-platebox-renderer", () =>
             {
-                ICoreClientAPI capi = (ICoreClientAPI)api;
+                ICoreClientAPI capi = (ICoreClientAPI)api!;
                 capi.Event.UnregisterRenderer(renderer, EnumRenderStage.Opaque);
                 renderer.Dispose();
-            }
-            catch
-            {
-                // ignore
-            }
+            });
 
             return null;
         }
