@@ -17,7 +17,7 @@ namespace Phototesting.ImageEffects
                 owner.ClientApi,
                 rootCfg,
                 args,
-                cfg => OperatorToolingCommandConfigPersistence.PersistEffectsConfig(owner, cfg));
+                cfg => { if (owner.ClientApi == null) return; cfg.Effects ??= new WetplateEffectsConfig(); cfg.Effects.ClampInPlace(); owner.SaveClientConfig(owner.ClientApi); });
         }
 
         // Handles legacy .phototesting effect aliases and profile save/load by delegating to feature handlers.
@@ -31,7 +31,7 @@ namespace Phototesting.ImageEffects
                 owner.ClientApi,
                 rootCfg,
                 args,
-                cfg => OperatorToolingCommandConfigPersistence.PersistEffectsConfig(owner, cfg));
+                cfg => { if (owner.ClientApi == null) return; cfg.Effects ??= new WetplateEffectsConfig(); cfg.Effects.ClampInPlace(); owner.SaveClientConfig(owner.ClientApi); });
         }
     }
 }

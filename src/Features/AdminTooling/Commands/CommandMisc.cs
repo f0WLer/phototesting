@@ -167,9 +167,14 @@ namespace Phototesting.AdminTooling
                     return;
             }
 
-            OperatorToolingCommandConfigPersistence.PersistPreviewConfig(_owner, cfg, changed);
+            if (_owner.ClientApi != null && changed)
+            {
+                cfg.Viewfinder ??= new ViewfinderConfig();
+                cfg.Viewfinder.ClampInPlace();
+                _owner.SaveClientConfig(_owner.ClientApi);
+            }
 
-            _owner.ClientApi.ShowChatMessage(
+            _owner.ClientApi!.ShowChatMessage(
                 $"Wetplate: preview {(cfg.Viewfinder.DebugPreviewEnabled ? "on" : "off")}, "
                 + $"{cfg.Viewfinder.DebugPreviewWidth}x{cfg.Viewfinder.DebugPreviewHeight}, "
                 + $"refresh={cfg.Viewfinder.DebugPreviewRefreshMs}ms, anchor={cfg.Viewfinder.DebugPreviewAnchor}, "
