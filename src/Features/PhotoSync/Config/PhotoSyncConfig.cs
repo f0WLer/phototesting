@@ -1,4 +1,4 @@
-namespace Phototesting.AdminTooling
+namespace Phototesting.PhotoSync
 {
     public sealed class PhotoSyncConfig
     {

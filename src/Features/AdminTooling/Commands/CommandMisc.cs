@@ -1,4 +1,5 @@
 using System.Globalization;
+using Phototesting.CameraCapture;
 using Phototesting.PlateLifecycle.Rendering;
 
 namespace Phototesting.AdminTooling

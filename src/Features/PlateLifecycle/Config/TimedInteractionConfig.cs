@@ -1,4 +1,4 @@
-namespace Phototesting.AdminTooling
+namespace Phototesting.PlateLifecycle
 {
     public sealed class TimedInteractionConfig
     {

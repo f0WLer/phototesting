@@ -1,3 +1,4 @@
+using Phototesting.CameraCapture;
 using Phototesting.ImageEffects;
 
 namespace Phototesting.AdminTooling

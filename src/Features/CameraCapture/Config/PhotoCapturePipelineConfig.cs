@@ -1,4 +1,4 @@
-namespace Phototesting.AdminTooling
+namespace Phototesting.CameraCapture
 {
     // Capture-pipeline processing knobs shared by photo capture and preview paths.
     // Keeps blank-frame and png-encode tuning centralized.

@@ -1,5 +1,3 @@
-using Phototesting.AdminTooling;
-
 namespace Phototesting.PlateLifecycle.Tray.Config
 {
     public sealed class DevelopmentTrayInteractionConfig

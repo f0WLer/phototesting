@@ -1,3 +1,6 @@
+using Phototesting.CameraCapture;
+using Phototesting.PhotoSync;
+using Phototesting.PlateLifecycle;
 using Phototesting.PlateLifecycle.Tray.Config;
 using Phototesting.ImageEffects;
 
