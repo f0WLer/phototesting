@@ -46,7 +46,7 @@ namespace Phototesting.CameraCapture
                         return false;
                     }
 
-                    if (loadedPlateStack != null && WetPlateAttrs.IsDry(owner.ClientApi.World, loadedPlateStack))
+                    if (loadedPlateStack != null && PlateDryingTransition.IsDry(owner.ClientApi.World, loadedPlateStack))
                     {
                         owner.CaptureClientRuntime.ShowShutterGateMessageThrottled("Wetplate: the plate has dried and can no longer be used.");
                         return false;

@@ -25,7 +25,7 @@ namespace Phototesting.CameraCapture
             ServerChannel = api.Network.GetChannel("phototesting");
             CameraCaptureChannelRegistration.ConfigureServerCoreHandlers(ServerChannel, OnPhotoTakenReceived, OnCameraLoadPlateReceived);
 
-            ConfigureServerPhotoSyncRuntime(api);
+            _owner.PhotoSyncBridge.ConfigureServerPhotoSyncRuntime(api);
         }
 
         // Registers the remaining server packet handlers that route into sync, metadata, and config flows.
@@ -33,8 +33,8 @@ namespace Phototesting.CameraCapture
         {
             if (ServerChannel == null) return;
 
-            ConfigureServerPhotoSyncTransferChannelHandlers();
-            ConfigureServerPhotoSeenChannelHandler();
+            _owner.PhotoSyncBridge.ConfigureServerPhotoSyncTransferChannelHandlers();
+            _owner.PhotoSyncBridge.ConfigureServerPhotoSeenChannelHandler();
             CameraCaptureChannelRegistration.ConfigureServerSyncHandlers(
                 ServerChannel,
                 (player, p) => OnPhotoCaptureConfigRequested(player));
@@ -89,7 +89,7 @@ namespace Phototesting.CameraCapture
 
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return;
             if (!CameraPlateEligibility.IsPlateSensitizedForExposure(loadedPlate)) return;
-            if (WetPlateAttrs.IsDry(Api.World, loadedPlate)) return;
+            if (PlateDryingTransition.IsDry(Api.World, loadedPlate)) return;
 
             float maxHoldStillSeconds = Config?.Viewfinder?.HoldStillDurationSeconds ?? 30f;
             if (maxHoldStillSeconds < 0f) maxHoldStillSeconds = 0f;
@@ -97,15 +97,15 @@ namespace Phototesting.CameraCapture
             float holdStillMovement = ClampFiniteRange(packet.HoldStillMovement, 0f, 1000f);
 
             PlateStateService.SetStage(loadedPlate, PlateStage.Exposed);
-            loadedPlate.Attributes.SetString(WetPlateAttrs.PhotoId, photoId);
-            loadedPlate.Attributes.SetDouble(WetPlateAttrs.HoldStillSeconds, holdStillSeconds);
-            loadedPlate.Attributes.SetDouble(WetPlateAttrs.HoldStillMovement, holdStillMovement);
+            loadedPlate.Attributes.SetString(PlateAttrs.PhotoId, photoId);
+            loadedPlate.Attributes.SetDouble(PlateAttrs.HoldStillSeconds, holdStillSeconds);
+            loadedPlate.Attributes.SetDouble(PlateAttrs.HoldStillMovement, holdStillMovement);
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
             SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));
             cameraSlot.MarkDirty();
 
-            ServerTouchPhotoSeen(photoId);
+            _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);
 
             // Authorize the matching upload so the client's chunk packets are not rejected as unsolicited.
             _owner.PhotoSyncBridge.Runtime?.RegisterExpectedUpload(player.PlayerUID, photoId);

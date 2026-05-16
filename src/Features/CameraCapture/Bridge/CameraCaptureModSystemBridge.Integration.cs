@@ -43,21 +43,6 @@ namespace Phototesting.CameraCapture
         internal ILogger? BestEffortLogger => _owner.BestEffortLogger;
         internal bool IsBestEffortDebugLoggingEnabled => _owner.IsBestEffortDebugLoggingEnabled;
 
-        private void ConfigureClientPhotoSyncTransferChannelHandlers()
-            => _owner.PhotoSyncBridge.ConfigureClientPhotoSyncTransferChannelHandlers();
-
-        private void ConfigureServerPhotoSyncRuntime(ICoreServerAPI api)
-            => _owner.PhotoSyncBridge.ConfigureServerPhotoSyncRuntime(api);
-
-        private void ConfigureServerPhotoSyncTransferChannelHandlers()
-            => _owner.PhotoSyncBridge.ConfigureServerPhotoSyncTransferChannelHandlers();
-
-        private void ConfigureServerPhotoSeenChannelHandler()
-            => _owner.PhotoSyncBridge.ConfigureServerPhotoSeenChannelHandler();
-
-        private void ServerTouchPhotoSeen(string photoId)
-            => _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);
-
         // Applies camera-capture runtime reactions needed after client config persistence.
         internal void OnClientConfigSavedCameraCapture()
         {

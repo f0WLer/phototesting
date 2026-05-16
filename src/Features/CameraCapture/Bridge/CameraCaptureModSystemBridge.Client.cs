@@ -29,7 +29,7 @@ namespace Phototesting.CameraCapture
         {
             if (ClientChannel == null) return;
 
-            ConfigureClientPhotoSyncTransferChannelHandlers();
+            _owner.PhotoSyncBridge.ConfigureClientPhotoSyncTransferChannelHandlers();
             CameraCaptureChannelRegistration.ConfigureClientHandlers(ClientChannel, OnPhotoCaptureConfigReceived);
         }
 
