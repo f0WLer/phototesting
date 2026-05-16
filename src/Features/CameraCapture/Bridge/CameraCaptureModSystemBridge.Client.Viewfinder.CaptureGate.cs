@@ -10,11 +10,12 @@ namespace Phototesting.CameraCapture
         // Dedicated gate collaborator for validating whether a capture request is currently allowed.
         internal static class CaptureGateService
         {
-            internal static bool TryValidateCaptureRequest(CameraCaptureModSystemBridge owner, bool silentIfBusy, out ItemStack? loadedPlateStack)
+            internal static bool TryValidateCaptureRequest(CameraCaptureModSystemBridge owner, bool silentIfBusy, bool isMounted, out ItemStack? loadedPlateStack)
             {
                 loadedPlateStack = null;
 
-                if (owner.ClientApi == null || owner.ClientChannel == null || owner._captureRenderer == null) return false;
+                if (owner.ClientApi == null || owner.ClientChannel == null) return false;
+                if (!isMounted && owner._captureRenderer == null) return false;
 
                 // Prevent "late shutter" after RMB release.
                 if (!owner.CaptureClientRuntime.GetRightMouseDown()) return false;
@@ -58,7 +59,7 @@ namespace Phototesting.CameraCapture
                     return false;
                 }
 
-                if (owner.IsHoldStillPending)
+                if (owner.IsHoldStillPending && !isMounted)
                 {
                     if (!silentIfBusy) owner.ClientApi.ShowChatMessage("Wetplate: hold still to finish the exposure.");
                     return false;

@@ -15,6 +15,7 @@ namespace Phototesting.CameraCapture
     {
         internal PhotoCaptureRenderer? _captureRenderer;
         private ViewfinderDebugPreviewRenderer? _debugPreviewRenderer;
+        internal VirtualCaptureService? _virtualCaptureService;
 
         // Composes full client-side camera-capture startup behind one feature bootstrap entrypoint.
         internal void ConfigureClientCameraCaptureStartup(ICoreClientAPI api)
@@ -44,6 +45,8 @@ namespace Phototesting.CameraCapture
 
             _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive);
             api.Event.RegisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho, "phototesting-viewfinder-preview");
+
+            _virtualCaptureService = new VirtualCaptureService(api);
 
             // Ask server for authoritative capture sizing in multiplayer.
             // Some load orders/world joins invoke StartClientSide before the channel reports connected.
@@ -143,6 +146,8 @@ namespace Phototesting.CameraCapture
                 BestEffort.Try(BestEffortLogger, "unregister debug preview renderer", () => ClientApi.Event.UnregisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho));
                 BestEffort.Try(BestEffortLogger, "dispose debug preview renderer", () => _debugPreviewRenderer.Dispose());
             }
+
+            BestEffort.Try(BestEffortLogger, "dispose virtual capture service", () => _virtualCaptureService?.Dispose());
         }
 
         // Unregisters camera-capture client tick listeners created during startup.
@@ -334,13 +339,12 @@ namespace Phototesting.CameraCapture
 
             internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy)
             {
-                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(_owner, silentIfBusy, out ItemStack? loadedPlateStack)) return false;
+                bool isMounted = _owner._virtualCaptureService != null && IsHoldingTripod(_owner.ClientApi);
+
+                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(_owner, silentIfBusy, isMounted, out ItemStack? loadedPlateStack)) return false;
 
                 var clientApi = _owner.ClientApi;
                 if (clientApi == null) return false;
-
-                PhotoCaptureRenderer? captureRenderer = _owner._captureRenderer;
-                if (captureRenderer == null) return false;
 
                 // If the player wants an immersive, HUD-free viewfinder, rely on the game's built-in gui-less mode.
                 _owner.MaybeShowF4GuiLessTip();
@@ -348,13 +352,21 @@ namespace Phototesting.CameraCapture
                 // After taking a shot we want to exit viewfinder and not instantly re-enter until RMB is released.
                 _suppressViewfinderUntilRmbReleased = true;
 
-                // Resolve the effects profile for the plate currently loaded in the camera.
-                // Falls back to the global config when no per-process profile file is found.
+                WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlateStack);
+
+                if (isMounted)
+                {
+                    return RequestVirtualCapture(clientApi, byEntity, effectsOverride, silentIfBusy);
+                }
+
+                PhotoCaptureRenderer? captureRenderer = _owner._captureRenderer;
+                if (captureRenderer == null) return false;
+
                 if (!captureRenderer.TryScheduleCapture(
                     out string fileName,
                     onSuccess: fn => OnCaptureSuccess(clientApi, byEntity, fn),
                     onError: ex => OnCaptureFailure(clientApi, ex),
-                    effectsOverride: CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlateStack)
+                    effectsOverride: effectsOverride
                 ))
                 {
                     if (!silentIfBusy) clientApi.ShowChatMessage("Wetplate: capture already in progress...");
@@ -365,6 +377,41 @@ namespace Phototesting.CameraCapture
                 _owner.HoldStillStartTracking(byEntity, fileName);
 
                 return true;
+            }
+
+            private bool RequestVirtualCapture(ICoreClientAPI clientApi, EntityAgent byEntity, WetplateEffectsConfig? effectsOverride, bool silentIfBusy)
+            {
+                VirtualCaptureService service = _owner._virtualCaptureService!;
+                if (service.IsCapturing)
+                {
+                    if (!silentIfBusy) clientApi.ShowChatMessage("Wetplate: capture already in progress...");
+                    return false;
+                }
+
+                Vintagestory.API.MathTools.Vec3d eyePos = byEntity.Pos.XYZ.AddCopy(0, byEntity.LocalEyePos.Y, 0);
+                float yaw = byEntity.Pos.Yaw;
+                float pitch = byEntity.Pos.Pitch;
+                float fov = _owner._viewfinderTargetFov;
+                int maxDimension = _owner.Config?.Viewfinder?.PhotoCaptureMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
+
+                _captureInProgress = true;
+
+                service.TryCaptureOneShot(
+                    eyePos, yaw, pitch, fov, maxDimension, effectsOverride,
+                    onSuccess: fn => OnCaptureSuccess(clientApi, byEntity, fn),
+                    onError: ex => OnCaptureFailure(clientApi, ex));
+
+                return true;
+            }
+
+            // Returns true when the player's offhand slot holds an item whose code path contains "tripod".
+            // Placeholder until the tripod item exists; the check is intentionally loose.
+            private static bool IsHoldingTripod(ICoreClientAPI? clientApi)
+            {
+                if (clientApi == null) return false;
+                ItemSlot? offhand = clientApi.World.Player?.InventoryManager?.OffhandHotbarSlot;
+                if (offhand == null || offhand.Empty) return false;
+                return offhand.Itemstack?.Collectible?.Code?.Path?.Contains("tripod", StringComparison.OrdinalIgnoreCase) == true;
             }
 
             // Completes local post-capture flow once the renderer finishes writing the screenshot.

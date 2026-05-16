@@ -174,7 +174,7 @@ namespace Phototesting.CameraCapture.Rendering
         private int PngCompressionQuality => PipelineCfg?.PngCompressionQuality ?? 90;
 
         // Center-crops a capture to plate aspect.
-        private static SKBitmap CenterCropToPlateAspect(SKBitmap source)
+        internal static SKBitmap CenterCropToPlateAspect(SKBitmap source)
         {
             if (source.Width <= 0 || source.Height <= 0) return source;
 

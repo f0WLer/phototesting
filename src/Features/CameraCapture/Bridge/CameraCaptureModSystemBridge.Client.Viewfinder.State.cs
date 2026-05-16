@@ -26,7 +26,7 @@ namespace Phototesting.CameraCapture
         private readonly object _viewfinderLock = new object();
         private int _viewfinderDepth;
         private float? _viewfinderSavedFov;
-        private float _viewfinderTargetFov;
+        internal float _viewfinderTargetFov;
 
         private bool _zoomMechanismTipShownThisViewfinder;
 
