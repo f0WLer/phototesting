@@ -1,6 +1,8 @@
 using System.Globalization;
 using Phototesting.CameraCapture;
 using Phototesting.PlateLifecycle.Rendering;
+using Vintagestory.API.MathTools;
+using Vintagestory.Client.NoObf;
 
 namespace Phototesting.AdminTooling
 {
@@ -162,8 +164,48 @@ namespace Phototesting.AdminTooling
                         break;
                     }
 
+                case "virtualcamera":
+                case "vcam":
+                    {
+                        string vcamAction = args.PopWord()?.ToLowerInvariant() ?? "start";
+
+                        VirtualCameraPreviewRenderer? vcamRenderer = _owner.CameraCaptureBridge._virtualCameraPreviewRenderer;
+
+                        if (vcamAction == "stop")
+                        {
+                            vcamRenderer?.Stop();
+                            _owner.ClientApi.ShowChatMessage("Wetplate: virtual camera preview stopped.");
+                            return;
+                        }
+
+                        if (vcamRenderer == null)
+                        {
+                            _owner.ClientApi.ShowChatMessage("Wetplate: virtual camera preview renderer is not available.");
+                            return;
+                        }
+
+                        var player = _owner.ClientApi.World.Player;
+                        Vec3d eyePos = player.Entity.Pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
+                        float yaw = player.Entity.Pos.Yaw;
+                        float pitch = player.Entity.Pos.Pitch;
+                        float fov = ((ClientMain)_owner.ClientApi.World).MainCamera.Fov;
+
+                        vcamRenderer.Start(eyePos, yaw, pitch, fov, cfg.Viewfinder.DebugPreviewMaxDimension);
+
+                        if (!cfg.Viewfinder.DebugPreviewEnabled)
+                        {
+                            cfg.Viewfinder.DebugPreviewEnabled = true;
+                            cfg.Viewfinder.ClampInPlace();
+                            _owner.SaveClientConfig(_owner.ClientApi);
+                        }
+
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: virtual camera preview started (fov={fov:F2} rad, quality={cfg.Viewfinder.DebugPreviewMaxDimension}px, refresh={cfg.Viewfinder.DebugPreviewRefreshMs}ms)");
+                        return;
+                    }
+
                 default:
-                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|quality <pixels>>");
+                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|quality <pixels>|virtualcamera [stop]|vcam [stop]>");
                     return;
             }
 

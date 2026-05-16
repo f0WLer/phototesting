@@ -16,6 +16,7 @@ namespace Phototesting.CameraCapture
         internal PhotoCaptureRenderer? _captureRenderer;
         private ViewfinderDebugPreviewRenderer? _debugPreviewRenderer;
         internal VirtualCaptureService? _virtualCaptureService;
+        internal VirtualCameraPreviewRenderer? _virtualCameraPreviewRenderer;
 
         // Composes full client-side camera-capture startup behind one feature bootstrap entrypoint.
         internal void ConfigureClientCameraCaptureStartup(ICoreClientAPI api)
@@ -43,7 +44,10 @@ namespace Phototesting.CameraCapture
             _captureRenderer.SetCaptureMaxDimension(Config.Viewfinder.PhotoCaptureMaxDimension);
             api.Event.RegisterRenderer(_captureRenderer, EnumRenderStage.AfterBlit, "phototesting-photocapture");
 
-            _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive);
+            _virtualCameraPreviewRenderer = new VirtualCameraPreviewRenderer(api);
+            api.Event.RegisterRenderer(_virtualCameraPreviewRenderer, EnumRenderStage.Before, "phototesting-virtualcamera-preview");
+
+            _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive, _virtualCameraPreviewRenderer);
             api.Event.RegisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho, "phototesting-viewfinder-preview");
 
             _virtualCaptureService = new VirtualCaptureService(api);
@@ -147,6 +151,12 @@ namespace Phototesting.CameraCapture
                 BestEffort.Try(BestEffortLogger, "dispose debug preview renderer", () => _debugPreviewRenderer.Dispose());
             }
 
+            if (_virtualCameraPreviewRenderer != null)
+            {
+                BestEffort.Try(BestEffortLogger, "unregister virtual camera preview renderer", () => ClientApi.Event.UnregisterRenderer(_virtualCameraPreviewRenderer, EnumRenderStage.Before));
+                BestEffort.Try(BestEffortLogger, "dispose virtual camera preview renderer", () => _virtualCameraPreviewRenderer.Dispose());
+            }
+
             BestEffort.Try(BestEffortLogger, "dispose virtual capture service", () => _virtualCaptureService?.Dispose());
         }
 
@@ -171,6 +181,7 @@ namespace Phototesting.CameraCapture
         {
             _captureRenderer = null;
             _debugPreviewRenderer = null;
+            _virtualCameraPreviewRenderer = null;
             _cameraCaptureClientRuntime = null;
         }
     // Stateful client-side runtime for viewfinder input and shutter capture scheduling.

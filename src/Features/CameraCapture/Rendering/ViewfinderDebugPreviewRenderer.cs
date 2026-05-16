@@ -1,6 +1,7 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 using Phototesting.AdminTooling;
+using Phototesting.CameraCapture;
 
 namespace Phototesting.CameraCapture.Rendering
 {
@@ -11,16 +12,19 @@ namespace Phototesting.CameraCapture.Rendering
         private readonly ICoreClientAPI _capi;
         private readonly PhotoCaptureRenderer _captureRenderer;
         private readonly Func<bool> _isViewfinderActive;
+        private readonly VirtualCameraPreviewRenderer? _virtualPreviewRenderer;
 
         private LoadedTexture? _previewTexture;
         private long _lastPreviewRequestMs;
 
         // Wires preview rendering to the capture renderer and current viewfinder active-state probe.
-        public ViewfinderDebugPreviewRenderer(ICoreClientAPI capi, PhotoCaptureRenderer captureRenderer, Func<bool> isViewfinderActive)
+        // virtualPreviewRenderer is optional; when active it replaces the normal capture-renderer source.
+        public ViewfinderDebugPreviewRenderer(ICoreClientAPI capi, PhotoCaptureRenderer captureRenderer, Func<bool> isViewfinderActive, VirtualCameraPreviewRenderer? virtualPreviewRenderer = null)
         {
             this._capi = capi;
             this._captureRenderer = captureRenderer;
             this._isViewfinderActive = isViewfinderActive;
+            this._virtualPreviewRenderer = virtualPreviewRenderer;
         }
 
         private ViewfinderConfig? ViewfinderCfg => PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
@@ -29,24 +33,45 @@ namespace Phototesting.CameraCapture.Rendering
         public int RenderRange => 0;
 
         // Periodically requests and draws the optional processed preview overlay used for tuning capture effects.
+        // When a VirtualCameraPreviewRenderer is active it is the exclusive frame source; the normal
+        // capture-renderer request path is bypassed and DebugPreviewEnabled is not required.
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (stage != EnumRenderStage.Ortho) return;
 
             ViewfinderConfig? cfg = ViewfinderCfg;
             if (cfg == null) return;
-            if (!cfg.DebugPreviewEnabled) return;
-            if (!cfg.DebugPreviewPeak && !_isViewfinderActive()) return;
 
-            int refreshMs = cfg.DebugPreviewRefreshMs;
-            long nowMs = _capi.ElapsedMilliseconds;
-            if (nowMs - _lastPreviewRequestMs >= refreshMs)
+            bool virtualActive = _virtualPreviewRenderer?.IsActive == true;
+
+            if (!virtualActive)
             {
-                _lastPreviewRequestMs = nowMs;
-                _captureRenderer.RequestDebugPreviewFrame(cfg.DebugPreviewMaxDimension, PhotoTestingConfigAccess.ResolveModSystem(_capi)?.CameraCaptureBridge.ResolveCaptureEffectsOverrideForLoadedCameraPlate());
+                if (!cfg.DebugPreviewEnabled) return;
+                if (!cfg.DebugPreviewPeak && !_isViewfinderActive()) return;
+
+                int refreshMs = cfg.DebugPreviewRefreshMs;
+                long nowMs = _capi.ElapsedMilliseconds;
+                if (nowMs - _lastPreviewRequestMs >= refreshMs)
+                {
+                    _lastPreviewRequestMs = nowMs;
+                    _captureRenderer.RequestDebugPreviewFrame(cfg.DebugPreviewMaxDimension, PhotoTestingConfigAccess.ResolveModSystem(_capi)?.CameraCaptureBridge.ResolveCaptureEffectsOverrideForLoadedCameraPlate());
+                }
             }
 
-            if (_captureRenderer.TryConsumeDebugPreviewFrame(out int[] bgraPixels, out int width, out int height))
+            bool hasNewFrame;
+            int[] bgraPixels;
+            int width, height;
+
+            if (virtualActive)
+            {
+                hasNewFrame = _virtualPreviewRenderer!.TryConsumeLatestFrame(out bgraPixels, out width, out height);
+            }
+            else
+            {
+                hasNewFrame = _captureRenderer.TryConsumeDebugPreviewFrame(out bgraPixels, out width, out height);
+            }
+
+            if (hasNewFrame)
             {
                 if (_previewTexture == null || _previewTexture.Width != width || _previewTexture.Height != height)
                 {
