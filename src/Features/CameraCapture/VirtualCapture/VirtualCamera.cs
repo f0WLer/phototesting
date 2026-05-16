@@ -65,8 +65,10 @@ namespace Phototesting.CameraCapture
             GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment, TextureTarget.Texture2D, fbo.DepthTextureId, 0);
             GL.DepthFunc(DepthFunction.Less);
 
+            bool setupSsao = ClientSettings.SSAOQuality > 0;
+
             // Color 1.
-            fbo.ColorTextureIds = ArrayUtil.CreateFilled(2, (int n) => GL.GenTexture());
+            fbo.ColorTextureIds = ArrayUtil.CreateFilled(setupSsao ? 4 : 2, (int n) => GL.GenTexture());
             GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[0]);
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.UnsignedShort, IntPtr.Zero);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9728);
@@ -80,13 +82,42 @@ namespace Phototesting.CameraCapture
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9728);
             GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment1, TextureTarget.Texture2D, fbo.ColorTextureIds[1], 0);
 
-            // No SSAO, assign 2 color buffers.
-            DrawBuffersEnum[] bufferEnums = new DrawBuffersEnum[2]
+            if (setupSsao)
             {
-                DrawBuffersEnum.ColorAttachment0,
-                DrawBuffersEnum.ColorAttachment1
-            };
-            GL.DrawBuffers(2, bufferEnums);
+                // Color 3 (normals): Rgba16f, matches primary FBO layout for SSAO.
+                GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[2]);
+                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba16f, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.Float, IntPtr.Zero);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9729);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9729);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, 33069);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, 33069);
+                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment2, TextureTarget.Texture2D, fbo.ColorTextureIds[2], 0);
+
+                // Color 4 (position): Rgba16f.
+                GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[3]);
+                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba16f, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.Float, IntPtr.Zero);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9729);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9729);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, 33069);
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, 33069);
+                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment3, TextureTarget.Texture2D, fbo.ColorTextureIds[3], 0);
+
+                GL.DrawBuffers(4, new DrawBuffersEnum[] {
+                    DrawBuffersEnum.ColorAttachment0,
+                    DrawBuffersEnum.ColorAttachment1,
+                    DrawBuffersEnum.ColorAttachment2,
+                    DrawBuffersEnum.ColorAttachment3
+                });
+            }
+            else
+            {
+                GL.DrawBuffers(2, new DrawBuffersEnum[] {
+                    DrawBuffersEnum.ColorAttachment0,
+                    DrawBuffersEnum.ColorAttachment1
+                });
+            }
 
             _platform.LoadFrameBuffer((ShaderProgramBase.CurrentShaderProgram?.PassName == "gui") ? EnumFrameBuffer.Default : EnumFrameBuffer.Primary);
         }
@@ -182,6 +213,18 @@ namespace Phototesting.CameraCapture
             ScreenManager.FrameProfiler.Mark("mergeTranspPassDone");
 
             GL.Disable(EnableCap.ClipPlane0);
+            _platform.GlDepthMask(true);
+            _platform.GlEnableDepthTest();
+            _platform.GlCullFaceBack();
+            _platform.GlEnableCullFace();
+            _main.TriggerRenderStage(EnumRenderStage.AfterOIT, dt);
+
+            _platform.RenderPostprocessingEffects(_main.CurrentProjectionMatrix);
+            _main.TriggerRenderStage(EnumRenderStage.AfterPostProcessing, dt);
+
+            _platform.RenderFinalComposition();
+            _main.TriggerRenderStage(EnumRenderStage.AfterFinalComposition, dt);
+
             GL.Disable(EnableCap.DepthTest);
             _platform.FrameBuffers[0] = primaryFbo;
             _platform.CurrentFrameBuffer = currentFbo;
