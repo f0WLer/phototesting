@@ -124,8 +124,11 @@ namespace Phototesting.CameraCapture
                 SKBitmap croppedBitmap = PhotoCaptureRenderer.CenterCropToPlateAspect(scaledBitmap);
                 if (!ReferenceEquals(croppedBitmap, scaledBitmap)) scaledBitmap.Dispose();
 
-                WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
-                ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
+                if (cfg?.DebugPreviewApplyEffects ?? true)
+                {
+                    WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
+                    ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
+                }
 
                 _previewBuffer.StoreFrame(croppedBitmap);
                 croppedBitmap.Dispose();

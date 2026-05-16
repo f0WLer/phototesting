@@ -88,6 +88,36 @@ namespace Phototesting.AdminTooling
                     }
                     break;
 
+                case "effects":
+                    string effectsAction = args.PopWord()?.ToLowerInvariant() ?? "show";
+                    switch (effectsAction)
+                    {
+                        case "show":
+                            break;
+
+                        case "on":
+                        case "enable":
+                            cfg.Viewfinder.DebugPreviewApplyEffects = true;
+                            changed = true;
+                            break;
+
+                        case "off":
+                        case "disable":
+                            cfg.Viewfinder.DebugPreviewApplyEffects = false;
+                            changed = true;
+                            break;
+
+                        case "toggle":
+                            cfg.Viewfinder.DebugPreviewApplyEffects = !cfg.Viewfinder.DebugPreviewApplyEffects;
+                            changed = true;
+                            break;
+
+                        default:
+                            _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview effects [show|on|off|toggle]");
+                            return;
+                    }
+                    break;
+
                 case "on":
                 case "enable":
                     cfg.Viewfinder.DebugPreviewEnabled = true;
@@ -205,7 +235,7 @@ namespace Phototesting.AdminTooling
                     }
 
                 default:
-                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|quality <pixels>|virtualcamera [stop]|vcam [stop]>");
+                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|effects [show|on|off|toggle]|quality <pixels>|virtualcamera [stop]|vcam [stop]>");
                     return;
             }
 
@@ -221,6 +251,7 @@ namespace Phototesting.AdminTooling
                 + $"{cfg.Viewfinder.DebugPreviewWidth}x{cfg.Viewfinder.DebugPreviewHeight}, "
                 + $"refresh={cfg.Viewfinder.DebugPreviewRefreshMs}ms, anchor={cfg.Viewfinder.DebugPreviewAnchor}, "
                 + $"peak={(cfg.Viewfinder.DebugPreviewPeak ? "on" : "off")}, "
+                + $"effects={(cfg.Viewfinder.DebugPreviewApplyEffects ? "on" : "off")}, "
                 + $"quality={cfg.Viewfinder.DebugPreviewMaxDimension}px (plate={cfg.Viewfinder.PhotoCaptureMaxDimension}px)");
         }
     }

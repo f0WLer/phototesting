@@ -6,7 +6,7 @@ namespace Phototesting.AdminTooling
     // Dispatches to command partials without mixing command parsing into gameplay flows.
     internal sealed partial class AdminToolingModSystemBridge
     {
-        private const string WetplatePreviewCommandArgs = "show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|quality <px>|virtualcamera [stop]";
+        private const string WetplatePreviewCommandArgs = "show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|effects [show|on|off|toggle]|quality <px>|virtualcamera [stop]";
         private const string WetplateAvailableCommandsLine = "Phototesting: available commands: clearcache | preview (" + WetplatePreviewCommandArgs + ") | effects | effect <FieldName> <value> | effect save | effect load";
         private const string WetplateUnknownCommandTryLine = "Try: .phototesting clearcache | .phototesting preview (" + WetplatePreviewCommandArgs + ") | .phototesting effects | .phototesting effect <FieldName> <value>";
 
