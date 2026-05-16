@@ -44,7 +44,7 @@ Runtime map for placed photo display. Updated: 2026-05-07.
 | --- | --- |
 | Frame block class + interaction routing | [`BlockFrame`](../src/Features/Frame/Block/BlockFrame.cs) |
 | Frame inventory + main-thread mesh lifecycle | [`BlockEntityFrame`](../src/Features/Frame/BlockEntity/BlockEntityFrame.cs) |
-| Photograph attribute keys (PhotoId, Caption) | [`PhotographAttrs`](../src/Features/PhotoMetadata/Model/PhotographAttrs.cs) |
+| Photograph attribute keys (PhotoId, Caption) | [`PhotographAttrs`](../src/Features/PhotoSync/Metadata/PhotographAttrs.cs) |
 | Photo texture / atlas insertion | [`PhotoPlateRenderUtil`](../src/Features/PlateLifecycle/Rendering/PhotoPlateRenderUtil.cs) (+ `.Block.cs`, `.Item.cs`) |
 | Mesh / texture cache lifetime | [`PhotoMeshRenderCache`](../src/Features/PlateLifecycle/Rendering/PhotoMeshRenderCache.cs), [`PhotoPlateRenderUtil.Cache.cs`](../src/Features/PlateLifecycle/Rendering/PhotoPlateRenderUtil.Cache.cs) |
 | Image cropping / processing for plate texture | [`PhotoImageProcessor`](../src/Features/PlateLifecycle/Rendering/PhotoImageProcessor.cs) |

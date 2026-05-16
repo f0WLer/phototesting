@@ -1,6 +1,6 @@
 # Camera Flow
 
-Runtime map for camera capture interactions. Updated: 2026-05-07.
+Runtime map for camera capture interactions. Updated: 2026-05-15.
 
 ## First entry points
 
@@ -31,7 +31,7 @@ Runtime map for camera capture interactions. Updated: 2026-05-07.
 | Concern | Owner |
 | --- | --- |
 | Camera item attributes (loaded plate) | [`ItemWetplateCamera`](../src/Features/CameraCapture/Item/ItemWetplateCamera.cs) |
-| Plate item attributes (exposure metadata) | [`PlateStateService`](../src/Features/PlateLifecycle/State/PlateStateService.cs), [`WetPlateAttrs`](../src/Shared/WetPlateAttrs.cs) |
+| Plate item attributes (exposure metadata) | [`PlateStateService`](../src/Features/PlateLifecycle/State/PlateStateService.cs), [`PlateAttrs`](../src/Shared/PlateAttrs.cs) |
 | Viewfinder client state machine | [`Client.Viewfinder.State.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.State.cs) |
 | Capture gate validation | [`Client.Viewfinder.CaptureGate.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.CaptureGate.cs) |
 | Hold-still scoring + final packet send | [`Client.Viewfinder.HoldStill.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.HoldStill.cs) |
@@ -41,7 +41,7 @@ Runtime map for camera capture interactions. Updated: 2026-05-07.
 | Server camera authority | [`Bridge/CameraCaptureModSystemBridge.Server.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Server.cs) |
 | Channel + handler registration | [`CameraCaptureChannelRegistration`](../src/Features/CameraCapture/Integration/CameraCaptureChannelRegistration.cs) |
 | Capture-side packet DTOs | [`PhotoNetworkPackets`](../src/Features/CameraCapture/Contracts/PhotoNetworkPackets.cs) |
-| Plate-eligibility checks | [`CameraPlateEligibility`](../src/Features/PlateLifecycle/CameraPlateEligibility.cs) |
+| Plate-eligibility checks | [`CameraPlateEligibility`](../src/Features/PlateLifecycle/State/CameraPlateEligibility.cs) |
 | Camera-slot resolution shared client/server | [`CameraItemHelper`](../src/Shared/CameraItemHelper.cs) |
 
 ## Client / server boundary
@@ -56,7 +56,7 @@ Runtime map for camera capture interactions. Updated: 2026-05-07.
 | --- | --- |
 | Add a capture-side packet | DTO in [`PhotoNetworkPackets.cs`](../src/Features/CameraCapture/Contracts/PhotoNetworkPackets.cs); register in [`CameraCaptureChannelRegistration`](../src/Features/CameraCapture/Integration/CameraCaptureChannelRegistration.cs); handler on the server bridge. |
 | Change capture validation gates | [`Client.Viewfinder.CaptureGate.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.CaptureGate.cs) for client-side; `OnPhotoTakenReceived` in [bridge.Server](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Server.cs) for authoritative checks. |
-| Tune viewfinder / capture pipeline | [`ViewfinderConfig`](../src/Features/AdminTooling/Config/ViewfinderConfig.cs), [`PhotoCapturePipelineConfig`](../src/Features/AdminTooling/Config/PhotoCapturePipelineConfig.cs). |
+| Tune viewfinder / capture pipeline | [`ViewfinderConfig`](../src/Features/CameraCapture/Config/ViewfinderConfig.cs), [`PhotoCapturePipelineConfig`](../src/Features/CameraCapture/Config/PhotoCapturePipelineConfig.cs). |
 | Change zoom mechanism | [`ViewfinderZoomHarmony`](../src/Features/CameraCapture/Harmony/ViewfinderZoomHarmony.cs) for the Harmony path; fallback Settings.Float keys live in [`Client.Viewfinder.State.cs`](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.State.cs). |
 | Add capture-time effect stages | [src/Features/ImageEffects/Pipeline/](../src/Features/ImageEffects/Pipeline) and [Profiles/](../src/Features/ImageEffects/Profiles). |
 | Change what the server does on `PhotoTakenPacket` | `OnPhotoTakenReceived` in [bridge.Server](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Server.cs). Always call `RegisterExpectedUpload` after acceptance or the upload will be rejected. |

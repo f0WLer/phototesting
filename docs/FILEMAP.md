@@ -1,6 +1,6 @@
 # Phototesting File Map
 
-Maps major features to folders and key files. Updated: 2026-05-07.
+Maps major features to folders and key files. Updated: 2026-05-15.
 
 ## 1) Main entry points
 
@@ -23,13 +23,13 @@ Each `src/Features/<Feature>/` folder groups related runtime code. Common subfol
 
 ### `src/Features/AdminTooling/`
 
-- [Config/](../src/Features/AdminTooling/Config) — root config schema (`PhotoTestingConfig`), feature config models, and load/save helpers.
-- [Commands/](../src/Features/AdminTooling/Commands) — `/phototesting` command router and config persistence helpers.
+- [Config/](../src/Features/AdminTooling/Config) — root config schema (`PhotoTestingConfig`) and load/save helpers.
+- [Commands/](../src/Features/AdminTooling/Commands) — `/phototesting` command router.
 - [Startup/](../src/Features/AdminTooling/Startup) — client/server tooling startup used by `ModSystem.*.cs` lifecycle callbacks.
 
 ### `src/Features/CameraCapture/`
 
-- [Bridge/](../src/Features/CameraCapture/Bridge) — `CameraCaptureModSystemBridge.{Integration,Server,Client}.cs` plus client viewfinder partials (`Client.Viewfinder.{State,HoldStill,CaptureGate,EffectsResolver}.cs`). Holds ModSystem-facing wiring, server-side capture handling, and the client viewfinder runtime.
+- [Bridge/](../src/Features/CameraCapture/Bridge) — `CameraCaptureModSystemBridge.{Integration,Server,Client}.cs` (plus server partials `.Server.CameraAssets.cs`, `.Server.PlateIO.cs`) and client viewfinder partials (`Client.Viewfinder.{State,HoldStill,CaptureGate,EffectsResolver}.cs`). Holds ModSystem-facing wiring, server-side capture handling, and the client viewfinder runtime.
 - [Harmony/ViewfinderZoomHarmony.cs](../src/Features/CameraCapture/Harmony/ViewfinderZoomHarmony.cs) — standalone Harmony patch on `ClientMain.Set3DProjection` used as the preferred viewfinder zoom mechanism.
 - [Item/](../src/Features/CameraCapture/Item) — `ItemWetplateCamera.{cs,Client.cs,Client.Exposure.cs,Client.Render.cs}` for the held wetplate camera item.
 - [Contracts/PhotoNetworkPackets.cs](../src/Features/CameraCapture/Contracts/PhotoNetworkPackets.cs) — capture-side packet DTOs (`PhotoTakenPacket`, capture-config sync).
@@ -38,9 +38,11 @@ Each `src/Features/<Feature>/` folder groups related runtime code. Common subfol
 
 ### `src/Features/PhotoSync/` — see [FLOW_PHOTO_SYNC.md](FLOW_PHOTO_SYNC.md)
 
-- [Runtime/](../src/Features/PhotoSync/Runtime) — `PhotoAssetSync.{cs,Client.cs,Server.cs}` for chunk transport, assembly, and persistence; `PlayerNetworkThrottle` (token-bucket per player) and `ServerExpectedUploads` (upload authorization + open-upload cap) for multiplayer hardening.
+- [Runtime/](../src/Features/PhotoSync/Runtime) — `PhotoAssetSync.{cs,Client.cs,Server.cs}` for chunk transport, assembly, and persistence; `PlayerNetworkThrottle` (token-bucket per player), `ServerExpectedUploads` (upload authorization + open-upload cap), and `ServerPhotoSeenService` (seen-index persistence) for multiplayer hardening.
 - [Contracts/PhotoSyncNetworkPackets.cs](../src/Features/PhotoSync/Contracts/PhotoSyncNetworkPackets.cs) — sync transfer + caption + seen DTOs.
-- [Integration/](../src/Features/PhotoSync/Integration) — `PhotoSync.Startup.cs` (channel registration + handler wiring), `PhotoSync.SeenAndCaption.cs` (metadata-side handlers), `ClientPhotoSyncIntegration.cs` (client request/seen hooks).
+- [Integration/](../src/Features/PhotoSync/Integration) — `PhotoSync.Startup.cs` (channel registration + handler wiring), `PhotoSync.Seen.cs` (seen ping handlers), `ClientPhotoSyncIntegration.cs` (client request/seen hooks).
+- [Metadata/](../src/Features/PhotoSync/Metadata) — `PhotographAttrs` (block-entity attribute keys), `PhotoLastSeenIndex` (seen-timestamp index model).
+- [Config/](../src/Features/PhotoSync/Config) — `PhotographConfig` (photograph item config), `PhotoSyncConfig` (sync transfer config).
 - [Storage/PhotoAssetStoragePaths.cs](../src/Features/PhotoSync/Storage/PhotoAssetStoragePaths.cs) — canonical photoId normalization + on-disk path resolution.
 
 ### `src/Features/PhotoMetadata/`
@@ -62,20 +64,19 @@ Sole "mounted display" surface in the mod. Holds any photo-bearing item (any sta
 ### `src/Features/PlateLifecycle/`
 
 - [Chemistry/](../src/Features/PlateLifecycle/Chemistry) — process registry, sensitization/development steps, chemistry progression services, exposure parameters.
-- [State/](../src/Features/PlateLifecycle/State) — plate stage/process attributes and state coordination.
+- [State/](../src/Features/PlateLifecycle/State) — plate stage/process attributes, state coordination, and [`CameraPlateEligibility`](../src/Features/PlateLifecycle/State/CameraPlateEligibility.cs).
 - [GroundPlate/](../src/Features/PlateLifecycle/GroundPlate) — `BlockGlassPlate` partials and interaction helpers.
-- [CameraPlateEligibility.cs](../src/Features/PlateLifecycle/CameraPlateEligibility.cs) — shared camera eligibility rules.
 - [GroundPlate/GlassPlatePlacement.cs](../src/Features/PlateLifecycle/GroundPlate/GlassPlatePlacement.cs) — item-to-ground-plate placement bridge.
 - [BlockEntity/BlockEntityPlateProcessState.cs](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) — placed glass-plate process state.
+- [Config/](../src/Features/PlateLifecycle/Config) — `PlateProcessingConfig` (plate chemistry knobs), `TimedInteractionConfig` (timed interaction model).
 - [Item/](../src/Features/PlateLifecycle/Item) — `ItemPlateBase` + `ItemGlassPlate`/`ItemSensitizedPlate`/`ItemPhotoPlate` plus `PlateNameResolver`.
 - [Rendering/](../src/Features/PlateLifecycle/Rendering) — `PhotoPlateRenderUtil.{cs,Block.cs,Item.cs,Cache.cs}`, `PhotoMeshUtil`, `PhotoMeshRenderCache`, `PhotoImageProcessor`. Shared photo-on-plate rendering used by plate items, photo plates, and the Frame block entity.
 - [Tray/](../src/Features/PlateLifecycle/Tray) — development-tray code (block, blockentity, runtime spec/duration/timed-state, client latch, config).
 
 ### `src/Features/PlateBox/`
 
-- [Block/](../src/Features/PlateBox/Block) — placed plate-box block + interaction partials.
+- [Block/](../src/Features/PlateBox/Block) — placed plate-box block, interaction coordinator, and world-mutation helpers.
 - [BlockEntity/](../src/Features/PlateBox/BlockEntity) — plate-box BE state + client lifecycle.
-- [Integration/](../src/Features/PlateBox/Integration) — world-mutation helpers.
 - [Rendering/](../src/Features/PlateBox/Rendering) — slot renderer + render lifecycle coordinator.
 
 ### `src/Features/ImageEffects/`
@@ -94,7 +95,7 @@ Cross-system stateless helpers. Add here only when 2+ systems already use it and
 - [CameraItemHelper.cs](../src/Shared/CameraItemHelper.cs) — camera-slot resolution + loaded-plate stack rehydration shared client/server.
 - [Log.cs](../src/Shared/Log.cs) — prefixed logger entry points.
 - [ProcessRegistryLookup.cs](../src/Shared/ProcessRegistryLookup.cs) — process registry lookup helper.
-- [WetPlateAttrs.cs](../src/Shared/WetPlateAttrs.cs) — wet-plate attribute key constants.
+- [PlateAttrs.cs](../src/Shared/PlateAttrs.cs) — plate attribute key constants (`PhotoId`, `HoldStillSeconds`, `HoldStillMovement`).
 
 ## 4) Common task lookup
 
@@ -104,7 +105,7 @@ Cross-system stateless helpers. Add here only when 2+ systems already use it and
 | Viewfinder zoom mechanism | [Harmony/ViewfinderZoomHarmony.cs](../src/Features/CameraCapture/Harmony/ViewfinderZoomHarmony.cs), [Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.State.cs](../src/Features/CameraCapture/Bridge/CameraCaptureModSystemBridge.Client.Viewfinder.State.cs) |
 | Plate chemistry / tray progression | [src/Features/PlateLifecycle/](../src/Features/PlateLifecycle), [src/Features/PlateBox/](../src/Features/PlateBox) |
 | Photo display (placed) | [src/Features/Frame/](../src/Features/Frame), [src/Features/PlateLifecycle/Rendering/](../src/Features/PlateLifecycle/Rendering) |
-| Photograph caption / seen behavior | [src/Features/PhotoMetadata/](../src/Features/PhotoMetadata), [src/Features/PhotoSync/Integration/PhotoSync.SeenAndCaption.cs](../src/Features/PhotoSync/Integration/PhotoSync.SeenAndCaption.cs) |
+| Photograph caption / seen behavior | [src/Features/PhotoSync/Metadata/](../src/Features/PhotoSync/Metadata), [src/Features/PhotoSync/Integration/PhotoSync.Seen.cs](../src/Features/PhotoSync/Integration/PhotoSync.Seen.cs) |
 | Operator config / commands | [src/Features/AdminTooling/](../src/Features/AdminTooling), [src/ModSystem/ModSystem.Client.cs](../src/ModSystem/ModSystem.Client.cs), [src/ModSystem/ModSystem.Server.cs](../src/ModSystem/ModSystem.Server.cs) |
 | Photo upload / download issues | [src/Features/PhotoSync/](../src/Features/PhotoSync), see [FLOW_PHOTO_SYNC.md](FLOW_PHOTO_SYNC.md) |
 | Image effects / wet-plate look | [src/Features/ImageEffects/](../src/Features/ImageEffects) |

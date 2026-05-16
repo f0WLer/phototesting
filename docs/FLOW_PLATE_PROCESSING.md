@@ -11,7 +11,7 @@ Runtime map for ground plate sensitization and development tray progression. Upd
 ## First entry points
 
 - Ground plate interaction: [src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.Interaction.cs](../src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.Interaction.cs); chemistry-aware partial in [src/Features/PlateLifecycle/Chemistry/BlockGlassPlate.PlateLifecycleChemistry.cs](../src/Features/PlateLifecycle/Chemistry/BlockGlassPlate.PlateLifecycleChemistry.cs); shared plate-placement helper in [src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.PlateLifecycleIntegration.cs](../src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.PlateLifecycleIntegration.cs).
-- Development tray interaction: [src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.Interaction.cs](../src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.Interaction.cs) and [.Interaction.ClientServer.cs](../src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.Interaction.ClientServer.cs); plate-lifecycle partial in [.PlateLifecycle.cs](../src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.PlateLifecycle.cs).
+- Development tray interaction: [src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.Interaction.cs](../src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.Interaction.cs); main block class [BlockDevelopmentTray.cs](../src/Features/PlateLifecycle/Tray/Block/BlockDevelopmentTray.cs).
 
 ## Ground sensitization path
 
@@ -38,11 +38,11 @@ Runtime map for ground plate sensitization and development tray progression. Upd
 | Sensitization step model + service | [`SensitizationStep`](../src/Features/PlateLifecycle/Chemistry/SensitizationStep.cs), [`PlateSensitizationService`](../src/Features/PlateLifecycle/Chemistry/PlateSensitizationService.cs) |
 | Development step model + service | [`DevelopmentStep`](../src/Features/PlateLifecycle/Chemistry/DevelopmentStep.cs), [`PlateDevelopmentService`](../src/Features/PlateLifecycle/Chemistry/PlateDevelopmentService.cs) |
 | Plate stage / process / name attributes | [`PlateStage`](../src/Features/PlateLifecycle/State/PlateStage.cs), [`PlateStateAttributes`](../src/Features/PlateLifecycle/State/PlateStateAttributes.cs), [`PlateStateService`](../src/Features/PlateLifecycle/State/PlateStateService.cs), [`PlateStateTransitions`](../src/Features/PlateLifecycle/State/PlateStateTransitions.cs) |
-| Wet-plate drying (vanilla `EnumTransitionType.Dry` wrapper) | [`PlateDryingTransition`](../src/Shared/PlateDryingTransition.cs), back-compat surface in [`WetPlateAttrs`](../src/Shared/WetPlateAttrs.cs); plate JSON `transitionableProps` blocks; per-stack overrides via `ItemPlateBase`. |
+| Wet-plate drying (vanilla `EnumTransitionType.Dry` wrapper) | [`PlateDryingTransition`](../src/Shared/PlateDryingTransition.cs), [`PlateAttrs`](../src/Shared/PlateAttrs.cs); plate JSON `transitionableProps` blocks; per-stack overrides via `ItemPlateBase`. |
 | Placed ground-plate process progress + passive dry timer | [`BlockEntityPlateProcessState`](../src/Features/PlateLifecycle/BlockEntity/BlockEntityPlateProcessState.cs) |
 | Tray inserted plate runtime | [`BlockEntityDevelopmentTray`](../src/Features/PlateLifecycle/Tray/BlockEntity/BlockEntityDevelopmentTray.cs) |
-| Tray timing + spec config | [`DevelopmentTrayInteractionConfig`](../src/Features/PlateLifecycle/Tray/Config/DevelopmentTrayInteractionConfig.cs), [`TimedInteractionConfig`](../src/Features/AdminTooling/Config/TimedInteractionConfig.cs) |
-| Camera/exposure rules feeding plates | [`ExposureParameters`](../src/Features/PlateLifecycle/Chemistry/ExposureParameters.cs), [`CameraPlateEligibility`](../src/Features/PlateLifecycle/CameraPlateEligibility.cs) |
+| Tray timing + spec config | [`DevelopmentTrayInteractionConfig`](../src/Features/PlateLifecycle/Tray/Config/DevelopmentTrayInteractionConfig.cs), [`TimedInteractionConfig`](../src/Features/PlateLifecycle/Config/TimedInteractionConfig.cs) |
+| Camera/exposure rules feeding plates | [`ExposureParameters`](../src/Features/PlateLifecycle/Chemistry/ExposureParameters.cs), [`CameraPlateEligibility`](../src/Features/PlateLifecycle/State/CameraPlateEligibility.cs) |
 | Process registry resolution helper | [`ProcessRegistryLookup`](../src/Shared/ProcessRegistryLookup.cs) |
 
 ## Client / server boundary
@@ -60,7 +60,7 @@ Runtime map for ground plate sensitization and development tray progression. Upd
 | Add a plate stage | [`PlateStage`](../src/Features/PlateLifecycle/State/PlateStage.cs) and the coordinator/attributes pair. |
 | Change ground-plate interaction | [`BlockGlassPlate.Interaction.cs`](../src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.Interaction.cs); shared plate-placement semantics in [`BlockGlassPlate.PlateLifecycleIntegration.cs`](../src/Features/PlateLifecycle/GroundPlate/BlockGlassPlate.PlateLifecycleIntegration.cs); chemistry-aware decisions in [`Chemistry/BlockGlassPlate.PlateLifecycleChemistry.cs`](../src/Features/PlateLifecycle/Chemistry/BlockGlassPlate.PlateLifecycleChemistry.cs). |
 | Change tray gating / timing | [`DevelopmentTrayInteractionConfig`](../src/Features/PlateLifecycle/Tray/Config/DevelopmentTrayInteractionConfig.cs) (knobs), [`TrayDurationProvider`](../src/Features/PlateLifecycle/Tray/Runtime/TrayDurationProvider.cs) (logic). |
-| Tune plate-processing config | [`PlateProcessingConfig`](../src/Features/AdminTooling/Config/PlateProcessingConfig.cs). |
+| Tune plate-processing config | [`PlateProcessingConfig`](../src/Features/PlateLifecycle/Config/PlateProcessingConfig.cs). |
 
 ## Related docs
 

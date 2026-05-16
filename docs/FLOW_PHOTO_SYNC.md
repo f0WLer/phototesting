@@ -14,7 +14,7 @@ Runtime map for photo upload, download, chunk assembly, server-side authorizatio
 - Download request start: `PhotoAssetSync.ClientRequestPhotoIfMissing()` in [src/Features/PhotoSync/Runtime/PhotoAssetSync.Client.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.Client.cs)
 - Server request handling: `PhotoAssetSync.ServerHandleRequest()` in [src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs)
 - Server upload assembly: `PhotoAssetSync.ServerHandleChunk()` in [src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs)
-- Server caption/seen handlers: [src/Features/PhotoMetadata/Integration/PhotoMetadata.PacketHandlers.cs](../src/Features/PhotoMetadata/Integration/PhotoMetadata.PacketHandlers.cs)
+- Server seen handler: [src/Features/PhotoSync/Integration/PhotoSync.Seen.cs](../src/Features/PhotoSync/Integration/PhotoSync.Seen.cs)
 
 ## Upload path (client → server)
 
@@ -38,11 +38,8 @@ Runtime map for photo upload, download, chunk assembly, server-side authorizatio
 
 ## Caption + seen path
 
-- Caption set: client opens [`GuiDialogPhotographCaption`](../src/Features/PhotoMetadata/Caption/GuiDialogPhotographCaption.cs), sends `PhotoCaptionSetPacket`. Server enforces (see `HandlePhotoMetadataCaptionSetPacket`):
-  - Player must be within ~8 blocks of the photograph block position.
-  - `world.Claims.TestAccess(player, pos, EnumBlockAccessFlags.BuildOrBreak)` must allow the edit.
-  - Caption is byte-capped before persisting via the metadata setter.
-- Seen ping: client sends `PhotoSeenPacket` when a photograph mesh becomes visible. Handler validates the photoId via `PhotoMetadataPolicy.NormalizePhotoId` (junk ids cannot create index entries) and touches the seen index. The seen index is bounded by valid photoIds on the server, so no per-player rate limit is needed.
+- Caption set: `PhotoCaptionSetPacket` is registered but intentionally unowned; no server handler is currently wired.
+- Seen ping: client sends `PhotoSeenPacket` when a photograph mesh becomes visible. Handler validates the photoId via `PhotoAssetStoragePaths.NormalizePhotoId` (junk ids cannot create index entries) and touches the seen index. The seen index is bounded by valid photoIds on the server, so no per-player rate limit is needed.
 - Seen index persistence is owned by `ServerPhotoSeenService.TryFlush()`, which uses an `Interlocked` in-flight guard and dispatches the actual file write through `TyronThreadPool.QueueTask`.
 
 ## State owners
@@ -53,10 +50,10 @@ Runtime map for photo upload, download, chunk assembly, server-side authorizatio
 | Per-player request throttle | `PlayerNetworkThrottle` (token bucket, self-pruning) |
 | Upload authorization + concurrent-upload cap | `ServerExpectedUploads` |
 | Transport DTOs | [`PhotoSyncNetworkPackets`](../src/Features/PhotoSync/Contracts/PhotoSyncNetworkPackets.cs) |
-| photoId / file path normalization | [`PhotoAssetStoragePaths`](../src/Features/PhotoSync/Storage/PhotoAssetStoragePaths.cs), [`PhotoMetadataPolicy`](../src/Features/PhotoMetadata/Runtime/PhotoMetadataPolicy.cs) |
-| Seen-index persistence | [`ServerPhotoSeenService`](../src/Features/PhotoMetadata/Runtime/ServerPhotoSeenService.cs) |
+| photoId / file path normalization | [`PhotoAssetStoragePaths`](../src/Features/PhotoSync/Storage/PhotoAssetStoragePaths.cs) |
+| Seen-index persistence | [`ServerPhotoSeenService`](../src/Features/PhotoSync/Runtime/ServerPhotoSeenService.cs) |
 | Channel + handler wiring | [`PhotoSyncModSystemBridge`](../src/Features/PhotoSync/Integration/PhotoSync.Startup.cs) |
-| Server-side caption/seen packet semantics | [`PhotoMetadata.PacketHandlers`](../src/Features/PhotoMetadata/Integration/PhotoMetadata.PacketHandlers.cs) |
+| Server-side seen packet semantics | [`PhotoSync.Seen`](../src/Features/PhotoSync/Integration/PhotoSync.Seen.cs) |
 
 ## Client / server boundary
 
@@ -69,10 +66,9 @@ Runtime map for photo upload, download, chunk assembly, server-side authorizatio
 | Goal | File(s) to edit |
 | --- | --- |
 | Add a new sync packet type | Define DTO in [`PhotoSyncNetworkPackets.cs`](../src/Features/PhotoSync/Contracts/PhotoSyncNetworkPackets.cs); register in `RegisterPhotoSyncMessageTypes`; wire handler in [`PhotoSync.Startup.cs`](../src/Features/PhotoSync/Integration/PhotoSync.Startup.cs); implement on the runtime partial (Client/Server). |
-| Add a new metadata packet (caption/seen-shaped) | DTO in `PhotoSyncNetworkPackets.cs`; register in `RegisterPhotoSyncMessageTypes`; handler in [`PhotoMetadata.PacketHandlers.cs`](../src/Features/PhotoMetadata/Integration/PhotoMetadata.PacketHandlers.cs); wire in [`PhotoSync.SeenAndCaption.cs`](../src/Features/PhotoSync/Integration/PhotoSync.SeenAndCaption.cs). Apply `NormalizePhotoId` and any needed auth (range/claims) before mutating state. |
+| Add a new metadata packet (seen-shaped) | DTO in `PhotoSyncNetworkPackets.cs`; register in `RegisterPhotoSyncMessageTypes`; handler in [`PhotoSync.Seen.cs`](../src/Features/PhotoSync/Integration/PhotoSync.Seen.cs). Apply `PhotoAssetStoragePaths.NormalizePhotoId` and any needed auth before mutating state. |
 | Tune throttles or upload cap | Per-player upload cap is `PhotoSyncConfig.ServerMaxOpenUploadsPerPlayer` (admin config). Throttle constants live as private consts at the top of [PhotoAssetSync.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.cs) — `RequestPermitsPerMinute`, `RequestBurstCapacity`, `ExpectedUploadTtlMs`. |
-| Change photoId or path normalization | [`PhotoAssetStoragePaths`](../src/Features/PhotoSync/Storage/PhotoAssetStoragePaths.cs) for filesystem layout; [`PhotoMetadataPolicy`](../src/Features/PhotoMetadata/Runtime/PhotoMetadataPolicy.cs) for the validation rule reused by every packet handler. |
-| Change caption auth (distance, byte cap, claim flag) | `HandlePhotoMetadataCaptionSetPacket` in [`PhotoMetadata.PacketHandlers.cs`](../src/Features/PhotoMetadata/Integration/PhotoMetadata.PacketHandlers.cs). |
+| Change photoId or path normalization | [`PhotoAssetStoragePaths`](../src/Features/PhotoSync/Storage/PhotoAssetStoragePaths.cs) — all id normalization and filesystem layout in one place. |
 | Change persistence side effects on completed upload | `TryPersistUploadedPhoto` in [PhotoAssetSync.Server.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs). Keep file I/O off the main thread; main-thread hop is via `sapi.Event.EnqueueMainThreadTask`. |
 | Change stale-upload pruning | `ServerMaybePruneIncoming` in [PhotoAssetSync.Server.cs](../src/Features/PhotoSync/Runtime/PhotoAssetSync.Server.cs); knobs are `PhotoSyncConfig.ServerPruneIntervalMs` and `ServerUploadStaleMs`. |
 
