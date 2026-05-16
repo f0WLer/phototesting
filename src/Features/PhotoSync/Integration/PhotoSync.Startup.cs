@@ -1,6 +1,5 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Server;
-using Phototesting.PhotoMetadata.Runtime;
 using Phototesting.PhotoSync.Contracts;
 using Phototesting.PhotoSync.Runtime;
 

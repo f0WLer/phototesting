@@ -1,6 +1,6 @@
 using Phototesting.PhotoSync.Storage;
 
-namespace Phototesting.PhotoMetadata.Model
+namespace Phototesting.PhotoSync.Metadata
 {
     public sealed class PhotoLastSeenIndex
     {

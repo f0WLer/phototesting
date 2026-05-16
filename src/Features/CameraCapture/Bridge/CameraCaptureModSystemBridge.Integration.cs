@@ -1,5 +1,4 @@
 using Phototesting.AdminTooling;
-using Phototesting.PhotoMetadata.Integration;
 using Phototesting.PlateLifecycle;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -53,8 +52,8 @@ namespace Phototesting.CameraCapture
         private void ConfigureServerPhotoSyncTransferChannelHandlers()
             => _owner.PhotoSyncBridge.ConfigureServerPhotoSyncTransferChannelHandlers();
 
-        private void ConfigureServerPhotoMetadataChannelHandlers()
-            => PhotoMetadataModSystemBridge.ConfigureServerPhotoMetadataChannelHandlers(_owner);
+        private void ConfigureServerPhotoSeenChannelHandler()
+            => _owner.PhotoSyncBridge.ConfigureServerPhotoSeenChannelHandler();
 
         private void ServerTouchPhotoSeen(string photoId)
             => _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);

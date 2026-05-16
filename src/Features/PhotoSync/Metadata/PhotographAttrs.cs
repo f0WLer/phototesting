@@ -1,4 +1,4 @@
-namespace Phototesting.PhotoMetadata.Model
+namespace Phototesting.PhotoSync.Metadata
 {
     public static class PhotographAttrs
     {

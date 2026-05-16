@@ -34,7 +34,7 @@ namespace Phototesting.CameraCapture
             if (ServerChannel == null) return;
 
             ConfigureServerPhotoSyncTransferChannelHandlers();
-            ConfigureServerPhotoMetadataChannelHandlers();
+            ConfigureServerPhotoSeenChannelHandler();
             CameraCaptureChannelRegistration.ConfigureServerSyncHandlers(
                 ServerChannel,
                 (player, p) => OnPhotoCaptureConfigRequested(player));

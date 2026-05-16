@@ -1,11 +1,11 @@
-using Phototesting.PhotoMetadata.Integration;
-using Phototesting.PhotoMetadata.Runtime;
 using Phototesting.PhotoSync.Contracts;
+using Phototesting.PhotoSync.Runtime;
+using Phototesting.PhotoSync.Storage;
+using Vintagestory.API.Server;
 
 namespace Phototesting.PhotoSync.Integration
 {
-    // PhotoSync client seen-ping dedupe state and seen-touch helper.
-    // Server packet-handler semantics for caption/seen packets live under PhotoMetadata integration.
+    // PhotoSync client seen-ping dedupe state, server seen-touch helper, and seen packet handler.
     internal sealed partial class PhotoSyncModSystemBridge
     {
         private ServerPhotoSeenService? _serverPhotoSeenService;
@@ -15,9 +15,25 @@ namespace Phototesting.PhotoSync.Integration
         private long _clientPhotoSeenLastPruneMs;
         private readonly Dictionary<string, long> _clientLastPhotoSeenPingMs = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
+        internal void ConfigureServerPhotoSeenChannelHandler()
+        {
+            if (_owner.ServerChannel == null) return;
+            _owner.ServerChannel.SetMessageHandler<PhotoSeenPacket>(HandleServerPhotoSeenPacket);
+        }
+
+        private void HandleServerPhotoSeenPacket(IServerPlayer player, PhotoSeenPacket packet)
+        {
+            if (packet == null || player == null) return;
+            string photoId = PhotoAssetStoragePaths.NormalizePhotoId(packet.PhotoId ?? string.Empty);
+            if (string.IsNullOrEmpty(photoId)) return;
+            _serverPhotoSeenService?.Touch(photoId);
+        }
+
         internal void ServerTouchPhotoSeen(string photoId)
         {
-            PhotoMetadataSeenIntegration.TouchPhotoSeen(_serverPhotoSeenService, photoId);
+            string normalized = PhotoAssetStoragePaths.NormalizePhotoId(photoId ?? string.Empty);
+            if (string.IsNullOrEmpty(normalized)) return;
+            _serverPhotoSeenService?.Touch(normalized);
         }
 
         // Sends deduplicated photo-seen pings so the server can track when a synced image has actually been observed by this client.
@@ -28,7 +44,7 @@ namespace Phototesting.PhotoSync.Integration
             int intervalSeconds = _owner.ClientConfig?.PhotoSeenPingIntervalSeconds ?? 0;
             if (intervalSeconds <= 0) return;
 
-            photoId = PhotoMetadataPolicy.NormalizePhotoId(photoId);
+            photoId = PhotoAssetStoragePaths.NormalizePhotoId(photoId);
             if (string.IsNullOrEmpty(photoId)) return;
 
             if (_owner.ClientApi.World == null) return;

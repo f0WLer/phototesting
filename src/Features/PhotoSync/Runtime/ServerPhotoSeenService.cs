@@ -1,8 +1,8 @@
 using Vintagestory.API.Common;
 using Vintagestory.API.Server;
-using Phototesting.PhotoMetadata.Model;
+using Phototesting.PhotoSync.Metadata;
 
-namespace Phototesting.PhotoMetadata.Runtime
+namespace Phototesting.PhotoSync.Runtime
 {
     // Owns the server-side photo-seen index: in-memory state, dirty tracking, and persistence.
     // TryFlush is single-flight (Interlocked guard) and dispatches the actual file write through

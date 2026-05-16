@@ -1,7 +1,7 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
-using Phototesting.PhotoMetadata.Model;
+using Phototesting.PhotoSync.Metadata;
 using Phototesting.PlateLifecycle.Rendering;
 
 namespace Phototesting.Frame

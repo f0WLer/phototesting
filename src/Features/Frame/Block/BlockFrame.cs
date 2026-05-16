@@ -1,7 +1,7 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
-using Phototesting.PhotoMetadata.Model;
+using Phototesting.PhotoSync.Metadata;
 
 namespace Phototesting.Frame
 {
