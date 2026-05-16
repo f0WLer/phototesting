@@ -7,8 +7,8 @@ namespace Phototesting.AdminTooling
     internal sealed partial class AdminToolingModSystemBridge
     {
         private const string WetplatePreviewCommandArgs = "show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|effects [show|on|off|toggle]|quality <px>|virtualcamera [stop]";
-        private const string WetplateAvailableCommandsLine = "Phototesting: available commands: clearcache | preview (" + WetplatePreviewCommandArgs + ") | effects | effect <FieldName> <value> | effect save | effect load";
-        private const string WetplateUnknownCommandTryLine = "Try: .phototesting clearcache | .phototesting preview (" + WetplatePreviewCommandArgs + ") | .phototesting effects | .phototesting effect <FieldName> <value>";
+        private const string WetplateAvailableCommandsLine = "Phototesting: available commands: clearcache | exposure <start [frames]|stop|pause|resume|reset|export|status> | preview (" + WetplatePreviewCommandArgs + ") | effects | effect <FieldName> <value> | effect save | effect load";
+        private const string WetplateUnknownCommandTryLine = "Try: .phototesting clearcache | .phototesting exposure <start|stop|pause|resume|reset|export|status> | .phototesting preview (" + WetplatePreviewCommandArgs + ") | .phototesting effects | .phototesting effect <FieldName> <value>";
 
         // Routes .phototesting subcommands to their specialized handler partials.
         internal void OnWetplateClientCommand(int groupId, Vintagestory.API.Common.CmdArgs args)
@@ -31,6 +31,12 @@ namespace Phototesting.AdminTooling
             if (sub.Equals("clearcache", StringComparison.OrdinalIgnoreCase))
             {
                 HandleWetplateClearCacheCommand();
+                return;
+            }
+
+            if (sub.Equals("exposure", StringComparison.OrdinalIgnoreCase) || sub.Equals("exp", StringComparison.OrdinalIgnoreCase))
+            {
+                HandleWetplateExposureCommand(args);
                 return;
             }
 
