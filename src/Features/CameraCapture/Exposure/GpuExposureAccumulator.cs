@@ -58,9 +58,6 @@ namespace Phototesting.CameraCapture.Exposure
         private int _developProgram;
         private int _quadVao;
 
-        // Reused scratch storage to avoid per-call heap allocation.
-        private readonly int[] _savedViewport = new int[4];
-
         private bool _disposed;
 
         // ── GLSL source (shared vertex shader + two fragment shaders) ─────────────────────
