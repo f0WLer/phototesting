@@ -12,7 +12,7 @@ namespace Phototesting.CameraCapture.Exposure
     internal enum ExposureState { Idle, Capturing, Paused, Done }
 
     // Persistent renderer that drives a VirtualCamera across consecutive game frames,
-    // accumulating pixel data into an ExposureAccumulationBuffer.
+    // accumulating pixel data via an IExposureAccumulator (currently ExposureAccumulationBuffer).
     //
     // Lifecycle:
     //   Start() -> Capturing -> (Pause/Resume) -> Done (when stopped or cap reached)
@@ -20,6 +20,8 @@ namespace Phototesting.CameraCapture.Exposure
     //   Reset() clears the buffer and returns to Capturing from the same position.
     //   Stop() tears down the camera and preserves the accumulated buffer for export.
     //
+    // _buffer is typed as IExposureAccumulator so the GPU accumulator can be swapped in later.
+    // Sample ingestion branches on ICpuExposureAccumulator / IGpuExposureAccumulator at the call site.
     // Registered at EnumRenderStage.Before (RenderOrder 0.4) so VirtualCamera.RenderCamera
     // can call TriggerRenderStage(Opaque) safely. Controlled entirely via admin commands.
     internal sealed class VirtualExposureRenderer : IRenderer, IDisposable
@@ -30,7 +32,7 @@ namespace Phototesting.CameraCapture.Exposure
         private readonly WetplateEffectsConfig _baselineEffects;
 
         private VirtualCamera? _camera;
-        private ExposureAccumulationBuffer? _buffer;
+        private IExposureAccumulator? _buffer;
         private ExposureReadbackPipeline? _readback;
         private byte[]? _readbackScratch;
         private PlateProcessProfile _process = PlateProcessProfile.Iodide;
@@ -69,7 +71,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal bool PhysicsHDCurve         = true;
 
         // Copies the current physics settings onto a buffer.
-        private void ApplyPhysicsToBuffer(ExposureAccumulationBuffer buf)
+        private void ApplyPhysicsToBuffer(IExposureAccumulator buf)
         {
             buf.LinearizeInput      = PhysicsLinearize;
             buf.ApplySpectralWeights = PhysicsSpectralWeights;
@@ -318,7 +320,10 @@ namespace Phototesting.CameraCapture.Exposure
 
                 // Kick async blit+readback into PBO, collect from the PBO written two kicks ago.
                 if (_readback.KickAndCollect(_camera.fbo, _readbackScratch!))
-                    _buffer.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
+                {
+                    if (_buffer is ICpuExposureAccumulator cpu)
+                        cpu.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
+                }
             }
             catch (Exception ex)
             {
@@ -360,14 +365,16 @@ namespace Phototesting.CameraCapture.Exposure
 
         private void ReallocateAccumulationBuffer()
         {
-            _buffer = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
-            ApplyPhysicsToBuffer(_buffer);
-            _buffer.NormalizeByActualFrameCount = true;
-            _buffer.RedSensitivity      = _process.RedSensitivity;
-            _buffer.GreenSensitivity    = _process.GreenSensitivity;
-            _buffer.BlueSensitivity     = _process.BlueSensitivity;
-            _buffer.DevelopmentStrength = _process.DevelopmentStrength;
-            _buffer.HDGamma             = _process.HDGamma;
+            _buffer?.Dispose();
+            var buf = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
+            ApplyPhysicsToBuffer(buf);
+            buf.NormalizeByActualFrameCount = true;
+            buf.RedSensitivity      = _process.RedSensitivity;
+            buf.GreenSensitivity    = _process.GreenSensitivity;
+            buf.BlueSensitivity     = _process.BlueSensitivity;
+            buf.DevelopmentStrength = _process.DevelopmentStrength;
+            buf.HDGamma             = _process.HDGamma;
+            _buffer = buf;
         }
 
         private void EnsureScratch(int minBytes)
@@ -383,8 +390,11 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (_readback == null || _buffer == null) return;
             EnsureScratch(_readback.Width * _readback.Height * 4);
-            foreach (byte[] frame in _readback.DrainPending(_readbackScratch!))
-                _buffer.Accumulate(frame, _readback.Width, _readback.Height);
+            if (_buffer is ICpuExposureAccumulator cpuBuf)
+            {
+                foreach (byte[] frame in _readback.DrainPending(_readbackScratch!))
+                    cpuBuf.Accumulate(frame, _readback.Width, _readback.Height);
+            }
         }
 
         private void ReinitializeCameraAndBufferForResize()

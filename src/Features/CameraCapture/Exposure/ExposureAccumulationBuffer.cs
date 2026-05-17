@@ -17,7 +17,7 @@ namespace Phototesting.CameraCapture.Exposure
     //                          (shadows lift, highlights compress, strong photographic shoulder)
     //
     // All three default to true. Set any flag to false to isolate the effect of the others.
-    internal sealed class ExposureAccumulationBuffer
+    internal sealed class ExposureAccumulationBuffer : ICpuExposureAccumulator
     {
         private readonly int _width;
         private readonly int _height;
@@ -32,39 +32,39 @@ namespace Phototesting.CameraCapture.Exposure
 
         // Convert sRGB input pixels to linear light before accumulating.
         // Disabling accumulates in gamma space; faster but physically incorrect.
-        public bool LinearizeInput = true;
+        public bool LinearizeInput { get; set; } = true;
 
         // Collapse RGB to a single silver-density value using historical spectral weights.
         // Produces grayscale output matching orthochromatic emulsions (blue-sensitive, red-blind).
         // Disabling preserves full colour in the developed output.
-        public bool ApplySpectralWeights = true;
+        public bool ApplySpectralWeights { get; set; } = true;
 
         // Wet-plate collodion spectral sensitivity (used when ApplySpectralWeights = true).
         // Weights are normalized internally so a grey pixel always maps to the same energy.
-        public float RedSensitivity   = 0.12f;
-        public float GreenSensitivity = 0.45f;
-        public float BlueSensitivity  = 1.00f;
+        public float RedSensitivity   { get; set; } = 0.12f;
+        public float GreenSensitivity { get; set; } = 0.45f;
+        public float BlueSensitivity  { get; set; } = 1.00f;
 
         // Apply Hurter-Driffield nonlinear emulsion response in Develop().
         // Highlights compress into a natural shoulder instead of hard-clipping to white.
         // Disabling uses the original linear sum/reference mapping.
-        public bool ApplyHDCurve = true;
+        public bool ApplyHDCurve { get; set; } = true;
 
         // H&D curve parameters (used when ApplyHDCurve = true).
         //   DevelopmentStrength: controls how quickly the curve rises; higher = brighter overall
         //   HDGamma:             contrast of the developed image; higher = more contrasty
         // Tuned so the reference exposure lands closer to a usable mid-grey instead of the toe.
-        public float DevelopmentStrength = 8.0f;
-        public float HDGamma             = 1.1f;
+        public float DevelopmentStrength { get; set; } = 3.5f;
+        public float HDGamma             { get; set; } = 1.1f;
 
         // When true, Develop() normalises by the actual accumulated frame count rather than the
         // reference count. Use when wall-clock duration controls shutter close (not sample count),
         // so developed brightness is independent of how many samples actually arrived.
-        public bool NormalizeByActualFrameCount = false;
+        public bool NormalizeByActualFrameCount { get; set; } = false;
 
-        internal int FramesAccumulated => _frameCount;
-        internal int Width  => _width;
-        internal int Height => _height;
+        public int FramesAccumulated => _frameCount;
+        public int Width  => _width;
+        public int Height => _height;
 
         internal ExposureAccumulationBuffer(int width, int height, int referenceFrameCount)
         {
@@ -78,7 +78,7 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         // Resets the buffer to zero accumulated frames.
-        internal void Reset()
+        public void Reset()
         {
             Array.Clear(_sumB, 0, _sumB.Length);
             Array.Clear(_sumG, 0, _sumG.Length);
@@ -109,7 +109,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         // Accumulates a BGRA8888 byte array that is already top-left-origin (e.g. from the GPU
         // downsample blit path). Dimensions must match Width x Height or the call is ignored.
-        internal void Accumulate(byte[] bgra, int width, int height)
+        public void Accumulate(byte[] bgra, int width, int height)
         {
             if (width != _width || height != _height) return;
             AccumulateBytes(bgra, width * height);
@@ -152,7 +152,7 @@ namespace Phototesting.CameraCapture.Exposure
         // With ApplyHDCurve: output can exceed 1.0 for overexposed pixels; ToByte clamps to 255.
         // Returns a black image when no frames have been accumulated.
         // Caller owns and is responsible for disposing the returned bitmap.
-        internal SKBitmap Develop()
+        public SKBitmap Develop()
         {
             var info   = new SKImageInfo(_width, _height, SKColorType.Bgra8888, SKAlphaType.Opaque);
             var bitmap = new SKBitmap(info);
@@ -243,5 +243,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (v >= 1f) return 255;
             return (byte)(v * 255f + 0.5f);
         }
+
+        public void Dispose() { } // No unmanaged resources; satisfies IDisposable via IExposureAccumulator.
     }
 }
