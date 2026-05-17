@@ -28,9 +28,11 @@ namespace Phototesting.CameraCapture
             if (val.MountedOn != null)
                 return;
 
-            double dx = val.Pos.X        - val.CameraPos.X;
-            double dy = val.Pos.InternalY - val.CameraPos.Y;
-            double dz = val.Pos.Z        - val.CameraPos.Z;
+            EntityPos entityPos = val.SidedPos;
+
+            double dx = entityPos.X         - val.CameraPos.X;
+            double dy = entityPos.InternalY - val.CameraPos.Y;
+            double dz = entityPos.Z         - val.CameraPos.Z;
 
             if (Math.Abs(dx) < 1e-7 && Math.Abs(dy) < 1e-7 && Math.Abs(dz) < 1e-7)
                 return;

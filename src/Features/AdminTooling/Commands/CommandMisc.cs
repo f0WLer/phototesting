@@ -216,9 +216,10 @@ namespace Phototesting.AdminTooling
                         }
 
                         var player = _owner.ClientApi.World.Player;
-                        Vec3d eyePos = player.Entity.Pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
-                        float yaw = player.Entity.Pos.Yaw;
-                        float pitch = player.Entity.Pos.Pitch;
+                        var pos = player.Entity.SidedPos;
+                        Vec3d eyePos = pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
+                        float yaw = pos.Yaw;
+                        float pitch = pos.Pitch;
                         float fov = ((ClientMain)_owner.ClientApi.World).MainCamera.Fov;
 
                         // Enable self-portrait so the local player's body appears in the preview.

@@ -438,9 +438,10 @@ namespace Phototesting.CameraCapture
                     return false;
                 }
 
-                Vintagestory.API.MathTools.Vec3d eyePos = byEntity.Pos.XYZ.AddCopy(0, byEntity.LocalEyePos.Y, 0);
-                float yaw = byEntity.Pos.Yaw;
-                float pitch = byEntity.Pos.Pitch;
+                var pos = byEntity.SidedPos;
+                Vintagestory.API.MathTools.Vec3d eyePos = pos.XYZ.AddCopy(0, byEntity.LocalEyePos.Y, 0);
+                float yaw = pos.Yaw;
+                float pitch = pos.Pitch;
                 float fov = _owner._viewfinderTargetFov;
                 int maxDimension = _owner.Config?.Viewfinder?.PhotoCaptureMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 

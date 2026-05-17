@@ -152,15 +152,16 @@ namespace Phototesting.CameraCapture
 
         internal void RenderCameraInStoredDimension(float dt)
         {
-            int savedDimension = _capi.World.Player.Entity.Pos.Dimension;
+            var playerPos = _capi.World.Player.Entity.SidedPos;
+            int savedDimension = playerPos.Dimension;
             try
             {
-                _capi.World.Player.Entity.Pos.Dimension = Dimension;
+                playerPos.Dimension = Dimension;
                 RenderCamera(dt);
             }
             finally
             {
-                _capi.World.Player.Entity.Pos.Dimension = savedDimension;
+                playerPos.Dimension = savedDimension;
             }
         }
 
@@ -454,10 +455,11 @@ namespace Phototesting.CameraCapture
             {
                 Entity entity = pair.Value;
                 if (ReferenceEquals(entity, playerEntity)) continue; // handled by the caller
+                EntityPos pos = entity.SidedPos;
                 saved[pair.Key] = entity.IsRendered;
-                entity.IsRendered = entity.Pos.Dimension == dim
+                entity.IsRendered = pos.Dimension == dim
                     && _main.frustumCuller.SphereInFrustum(
-                        entity.Pos.X, entity.Pos.InternalY, entity.Pos.Z,
+                        pos.X, pos.InternalY, pos.Z,
                         entity.FrustumSphereRadius);
             }
             return saved;

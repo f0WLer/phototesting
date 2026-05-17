@@ -42,12 +42,13 @@ namespace Phototesting.AdminTooling
                     if (previewRenderer == null || !previewRenderer.TryGetActiveCameraState(out VirtualCameraState cameraState))
                     {
                         var player = _owner.ClientApi.World.Player;
+                        var pos = player.Entity.SidedPos;
                         cameraState = new VirtualCameraState(
-                            player.Entity.Pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
-                            player.Entity.Pos.Yaw,
-                            player.Entity.Pos.Pitch,
+                            pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
+                            pos.Yaw,
+                            pos.Pitch,
                             ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
-                            player.Entity.Pos.Dimension);
+                            pos.Dimension);
                     }
 
                     renderer.Start(cameraState, process);
