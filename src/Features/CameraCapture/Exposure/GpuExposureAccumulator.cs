@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using OpenTK.Graphics.OpenGL;
 using SkiaSharp;
 using Vintagestory.API.Client;
@@ -380,17 +379,7 @@ void main() {
 
         private SKBitmap ReadbackBitmap()
         {
-            var info   = new SKImageInfo(Width, Height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            var bitmap = new SKBitmap(info);
-
-            int byteCount = Width * Height * 4;
-            byte[] bytes  = new byte[byteCount];
-
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _developFbo.FboId);
-            GL.ReadPixels(0, 0, Width, Height, PixelFormat.Bgra, PixelType.UnsignedByte, bytes);
-
-            Marshal.Copy(bytes, 0, bitmap.GetPixels(), byteCount);
-            return bitmap;
+            return ClientFramebufferCapture.ReadToSkBitmap(_capi, _developFbo, flip: false);
         }
 
         private SKBitmap CreateBlackBitmap()

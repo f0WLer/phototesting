@@ -101,23 +101,10 @@ namespace Phototesting.CameraCapture
             _capi.Event.RegisterRenderer(renderer, EnumRenderStage.Before, "phototesting-virtualcapture");
         }
 
-        // Reads pixels from a virtual FBO into a SkiaSharp bitmap.
-        // Applies 180-degree rotation and horizontal mirror to correct for OpenGL's bottom-left origin.
+        // Reads pixels from a virtual FBO into a SkiaSharp bitmap through the engine screenshot path.
         internal static SKBitmap ReadFramebuffer(ICoreClientAPI capi, FrameBufferRef framebuffer)
         {
-            SKBitmap bmp = new SKBitmap(framebuffer.Width, framebuffer.Height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, framebuffer.FboId);
-            GL.ReadPixels(0, 0, framebuffer.Width, framebuffer.Height, PixelFormat.Bgra, PixelType.UnsignedByte, bmp.GetPixels());
-
-            SKBitmap corrected = new SKBitmap(bmp.Width, bmp.Height, bmp.ColorType, SKAlphaType.Opaque);
-            using SKCanvas canvas = new SKCanvas(corrected);
-            canvas.Translate(bmp.Width, bmp.Height);
-            canvas.RotateDegrees(180f);
-            canvas.Scale(-1f, 1f, (float)bmp.Width / 2f, 0f);
-            canvas.DrawBitmap(bmp, 0f, 0f);
-            bmp.Dispose();
-
-            return corrected;
+            return ClientFramebufferCapture.ReadToSkBitmap(capi, framebuffer);
         }
 
         public void Dispose()
