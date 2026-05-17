@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using Phototesting.CameraCapture;
 using Phototesting.PlateLifecycle.Rendering;
@@ -220,7 +221,10 @@ namespace Phototesting.AdminTooling
                         float pitch = player.Entity.Pos.Pitch;
                         float fov = ((ClientMain)_owner.ClientApi.World).MainCamera.Fov;
 
-                        vcamRenderer.Start(eyePos, yaw, pitch, fov, cfg.Viewfinder.DebugPreviewMaxDimension);
+                        // Enable self-portrait so the local player's body appears in the preview.
+                        // Pass "nobody" as the second arg to disable: .phototesting preview virtualcamera nobody
+                        bool selfPortrait = !string.Equals(vcamAction, "nobody", StringComparison.OrdinalIgnoreCase);
+                        vcamRenderer.Start(eyePos, yaw, pitch, fov, cfg.Viewfinder.DebugPreviewMaxDimension, selfPortrait: selfPortrait);
 
                         if (!cfg.Viewfinder.DebugPreviewEnabled)
                         {

@@ -54,11 +54,12 @@ namespace Phototesting.CameraCapture
             string fullPath = PhotoAssetStoragePaths.GetPhotoPath(fileName);
 
             VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
-            cam.CameraPos = eyePos.Clone();
-            cam.Yaw = yaw;
-            cam.Pitch = pitch;
-            cam.Fov = fov;
-            cam.Dimension = _capi.World.Player.Entity.Pos.Dimension;
+            cam.ApplyState(new VirtualCameraState(
+                eyePos,
+                yaw,
+                pitch,
+                fov,
+                _capi.World.Player.Entity.Pos.Dimension));
 
             cam.InitBuffer();
 
@@ -67,28 +68,11 @@ namespace Phototesting.CameraCapture
             {
                 try
                 {
-                    int dimension = _capi.World.Player.Entity.Pos.Dimension;
-                    _capi.World.Player.Entity.Pos.Dimension = cam.Dimension;
-                    cam.RenderCamera(dt);
-                    _capi.World.Player.Entity.Pos.Dimension = dimension;
+                    cam.RenderCameraInStoredDimension(dt);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
                     using SKBitmap raw = ReadFramebuffer(_capi, cam.fbo);
-
-                    float scale = Math.Min(1f, maxDimension / (float)Math.Max(raw.Width, raw.Height));
-                    int outW = Math.Max(1, (int)(raw.Width * scale));
-                    int outH = Math.Max(1, (int)(raw.Height * scale));
-
-                    var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-                    SKBitmap scaledBitmap = new SKBitmap(dstInfo);
-                    using (var canvas = new SKCanvas(scaledBitmap))
-                    {
-                        canvas.Clear(SKColors.Black);
-                        canvas.DrawBitmap(raw, new SKRect(0, 0, outW, outH));
-                    }
-
-                    SKBitmap croppedBitmap = PhotoCaptureRenderer.CenterCropToPlateAspect(scaledBitmap);
-                    if (!ReferenceEquals(croppedBitmap, scaledBitmap)) scaledBitmap.Dispose();
+                    using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
 
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, fileName, profile);
@@ -98,7 +82,6 @@ namespace Phototesting.CameraCapture
                     using var pngData = finalImage.Encode(SKEncodedImageFormat.Png, 90);
                     using var output = File.Open(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
                     pngData.SaveTo(output);
-                    croppedBitmap.Dispose();
 
                     _capi.Event.UnregisterRenderer(renderer, EnumRenderStage.Before);
                     cam.Destroy();
@@ -119,7 +102,7 @@ namespace Phototesting.CameraCapture
         }
 
         // Reads pixels from a virtual FBO into a SkiaSharp bitmap.
-        // Applies 180° rotation and horizontal mirror to correct for OpenGL's bottom-left origin.
+        // Applies 180-degree rotation and horizontal mirror to correct for OpenGL's bottom-left origin.
         internal static SKBitmap ReadFramebuffer(ICoreClientAPI capi, FrameBufferRef framebuffer)
         {
             SKBitmap bmp = new SKBitmap(framebuffer.Width, framebuffer.Height, SKColorType.Bgra8888, SKAlphaType.Opaque);

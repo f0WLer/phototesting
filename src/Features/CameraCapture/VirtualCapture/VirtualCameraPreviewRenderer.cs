@@ -31,10 +31,10 @@ namespace Phototesting.CameraCapture
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
-        // True when a virtual camera is currently active, or while the exposure renderer is feeding frames.
+        // True when this overlay has either its own virtual camera or exposure frames to display.
         internal bool IsActive => _camera != null || _exposurePassthrough;
 
-        // When true this renderer skips its own camera rendering and accepts frames pushed by VirtualExposureRenderer.
+        // Exposure mode reuses this overlay surface but supplies already-developed frames.
         private bool _exposurePassthrough;
 
         // Exposure preview takes ownership of this renderer's output surface and releases any live camera.
@@ -67,9 +67,7 @@ namespace Phototesting.CameraCapture
             _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
         }
 
-        // Starts the virtual camera preview at the given world position and heading.
-        // Destroys and replaces any previously active camera.
-        internal void Start(Vec3d eyePos, float yaw, float pitch, float fov, int maxDimension, WetplateEffectsConfig? effectsOverride = null)
+        internal void Start(Vec3d eyePos, float yaw, float pitch, float fov, int maxDimension, WetplateEffectsConfig? effectsOverride = null, bool selfPortrait = false)
         {
             EndExposurePassthrough();
             StopCamera();
@@ -77,11 +75,13 @@ namespace Phototesting.CameraCapture
             _effectsOverride = effectsOverride;
 
             VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
-            cam.CameraPos = eyePos.Clone();
-            cam.Yaw = yaw;
-            cam.Pitch = pitch;
-            cam.Fov = fov;
-            cam.Dimension = _capi.World.Player.Entity.Pos.Dimension;
+            cam.ApplyState(new VirtualCameraState(
+                eyePos,
+                yaw,
+                pitch,
+                fov,
+                _capi.World.Player.Entity.Pos.Dimension,
+                selfPortrait));
             cam.InitBuffer();
 
             _camera = cam;
@@ -106,10 +106,21 @@ namespace Phototesting.CameraCapture
         internal bool TryConsumeLatestFrame(out int[] bgraPixels, out int width, out int height)
             => _previewBuffer.TryConsumeLatestFrame(out bgraPixels, out width, out height);
 
+        internal bool TryGetActiveCameraState(out VirtualCameraState state)
+        {
+            if (_camera != null && !_exposurePassthrough)
+            {
+                state = _camera.GetState();
+                return true;
+            }
+            state = default;
+            return false;
+        }
+
         // Re-renders the virtual scene and stores the result when the refresh interval has elapsed.
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
-            // Exposure renderer is the frame source — nothing for us to render.
+            // Exposure renderer is the frame source; nothing for us to render.
             if (_exposurePassthrough) return;
             if (_camera == null) return;
 
@@ -128,30 +139,13 @@ namespace Phototesting.CameraCapture
 
             try
             {
-                int savedDimension = _capi.World.Player.Entity.Pos.Dimension;
-                _capi.World.Player.Entity.Pos.Dimension = _camera.Dimension;
-                _camera.RenderCamera(deltaTime);
-                _capi.World.Player.Entity.Pos.Dimension = savedDimension;
+                _camera.RenderCameraInStoredDimension(deltaTime);
 
                 // Clear the primary FBO that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
                 using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
-
-                float scale = Math.Min(1f, _maxDimension / (float)Math.Max(raw.Width, raw.Height));
-                int outW = Math.Max(1, (int)(raw.Width * scale));
-                int outH = Math.Max(1, (int)(raw.Height * scale));
-
-                var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-                SKBitmap scaledBitmap = new SKBitmap(dstInfo);
-                using (var canvas = new SKCanvas(scaledBitmap))
-                {
-                    canvas.Clear(SKColors.Black);
-                    canvas.DrawBitmap(raw, new SKRect(0, 0, outW, outH));
-                }
-
-                SKBitmap croppedBitmap = PhotoCaptureRenderer.CenterCropToPlateAspect(scaledBitmap);
-                if (!ReferenceEquals(croppedBitmap, scaledBitmap)) scaledBitmap.Dispose();
+                using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, _maxDimension);
 
                 if (cfg?.DebugPreviewApplyEffects ?? true)
                 {
@@ -160,7 +154,6 @@ namespace Phototesting.CameraCapture
                 }
 
                 _previewBuffer.StoreFrame(croppedBitmap);
-                croppedBitmap.Dispose();
             }
             catch (Exception ex)
             {

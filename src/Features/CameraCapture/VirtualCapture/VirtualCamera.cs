@@ -66,6 +66,33 @@ namespace Phototesting.CameraCapture
             }
         }
 
+        // Snapshot of every camera/renderer field flipped to render the local player in
+        // third-person for a self-portrait pass. Captured up-front so Restore() can put
+        // the player-facing camera back exactly as it was.
+        private readonly struct SelfPortraitSnapshot
+        {
+            internal readonly int TppMin;
+            internal readonly int TppMax;
+            internal readonly float TppDist;
+            internal readonly EnumCameraMode CameraMode;
+            internal readonly ClientPlayer? LocalPlayer;
+            internal readonly EnumCameraMode? OverrideCameraMode;
+            internal readonly Traverse? RenderModeTraverse;
+            internal readonly object? RenderMode;
+
+            internal SelfPortraitSnapshot(PlayerCamera camera, ClientPlayer? localPlayer, Traverse? renderModeTraverse)
+            {
+                TppMin = camera.TppCameraDistanceMin;
+                TppMax = camera.TppCameraDistanceMax;
+                TppDist = camera.Tppcameradistance;
+                CameraMode = GetCameraMode(camera);
+                LocalPlayer = localPlayer;
+                OverrideCameraMode = localPlayer?.OverrideCameraMode;
+                RenderModeTraverse = renderModeTraverse;
+                RenderMode = renderModeTraverse?.GetValue();
+            }
+        }
+
         private readonly ICoreClientAPI _capi;
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
@@ -272,26 +299,8 @@ namespace Phototesting.CameraCapture
             camera.Update(float.Epsilon, _main.interesectionTester);
 
             DefaultShaderUniforms shUniforms = _capi.Render.ShaderUniforms;
-
-            if (shUniforms.playerReferencePos == null)
-            {
-                shUniforms.playerReferencePos = new Vec3d(_main.BlockAccessor.MapSizeX / 2, 0.0, _main.BlockAccessor.MapSizeZ / 2);
-            }
-
-            if ((double)shUniforms.playerReferencePos.HorizontalSquareDistanceTo(CameraPos.X, CameraPos.Z) > 400000000.0)
-            {
-                shUniforms.playerReferencePos.Set((float)CameraPos.X, 0.0, (float)CameraPos.Z);
-            }
-
-            if (shUniforms.playerReferencePosForFoam == null)
-            {
-                shUniforms.playerReferencePosForFoam = new Vec3d(_main.BlockAccessor.MapSizeX / 2, 0.0, _main.BlockAccessor.MapSizeZ / 2);
-            }
-
-            if ((double)shUniforms.playerReferencePosForFoam.HorizontalSquareDistanceTo(CameraPos.X, CameraPos.Z) > 40000.0)
-            {
-                shUniforms.playerReferencePosForFoam.Set((float)CameraPos.X, 0.0, (float)CameraPos.Z);
-            }
+            shUniforms.playerReferencePos        = EnsureReferenceAnchor(shUniforms.playerReferencePos, 400_000_000.0);
+            shUniforms.playerReferencePosForFoam = EnsureReferenceAnchor(shUniforms.playerReferencePosForFoam, 40_000.0);
 
             shUniforms.PlayerPos.Set(
                 (float)(CameraPos.X - shUniforms.playerReferencePos.X),
@@ -308,80 +317,68 @@ namespace Phototesting.CameraCapture
             camera.Fov = oldFov;
         }
 
+        // Returns an anchor sitting near CameraPos: allocates one centered on the map if missing,
+        // and re-anchors to CameraPos when CameraPos has drifted further than maxDistSq.
+        // Mirrors the rebase logic in PlayerCamera so single-precision uniforms stay usable.
+        private Vec3d EnsureReferenceAnchor(Vec3d? anchor, double maxDistSq)
+        {
+            anchor ??= new Vec3d(_main.BlockAccessor.MapSizeX / 2, 0.0, _main.BlockAccessor.MapSizeZ / 2);
+            if (anchor.HorizontalSquareDistanceTo(CameraPos.X, CameraPos.Z) > maxDistSq)
+            {
+                anchor.Set((float)CameraPos.X, 0.0, (float)CameraPos.Z);
+            }
+            return anchor;
+        }
+
         internal void RenderCamera(float dt)
         {
             FrameBufferRef currentFbo = _platform.CurrentFrameBuffer;
             FrameBufferRef primaryFbo = _platform.FrameBuffers[0];
             FrameBufferRef transparentFbo = _platform.FrameBuffers[(int)EnumFrameBuffer.Transparent];
 
-            // Save the main camera state that UpdateCamera() overwrites.
+            // Snapshot every piece of player-facing state we are about to mutate, so the main
+            // render loop and remaining Before-stage renderers (e.g. SystemRenderTerrain at
+            // RenderOrder 0.995) resume with the player's camera, not ours.
             PlayerCamera camera = _main.MainCamera;
             DefaultShaderUniforms shUniforms = _capi.Render.ShaderUniforms;
             SavedMainCameraState saved = new SavedMainCameraState(camera, _capi.World.Player.Entity, shUniforms);
 
-            bool transparentDepthAttachedToVirtual = false;
             bool selfPortrait = SelfPortrait;
-
-            // Self-portrait renders borrow the main camera object for one off-screen pass.
-            int savedTppMin = camera.TppCameraDistanceMin;
-            int savedTppMax = camera.TppCameraDistanceMax;
-            float savedTppDist = camera.Tppcameradistance;
-            EnumCameraMode savedCameraMode = GetCameraMode(camera);
-            ClientPlayer? localPlayer = _capi.World.Player as ClientPlayer;
-            EnumCameraMode? savedOverrideCameraMode = localPlayer?.OverrideCameraMode;
-            Traverse? renderModeTraverse = selfPortrait ? TryGetRendererRenderModeField() : null;
-            object? savedRenderMode = renderModeTraverse?.GetValue();
+            SelfPortraitSnapshot selfPortraitSnap = new SelfPortraitSnapshot(
+                camera,
+                _capi.World.Player as ClientPlayer,
+                selfPortrait ? TryGetRendererRenderModeField() : null);
+            bool transparentDepthAttachedToVirtual = false;
 
             _main.PerspectiveMode();
 
             try
             {
-                if (selfPortrait)
-                {
-                    // ThirdPerson camera mode keeps animations on the body skeleton.
-                    SetCameraMode(camera, EnumCameraMode.ThirdPerson);
-                    if (localPlayer != null) localPlayer.OverrideCameraMode = null;
-                    camera.TppCameraDistanceMin = 0;
-                    camera.TppCameraDistanceMax = 0;
-                    camera.Tppcameradistance = 0f;
-
-                    if (renderModeTraverse != null)
-                    {
-                        object? tp = GetRenderModeThirdPerson(savedRenderMode);
-                        if (tp != null) renderModeTraverse.SetValue(tp);
-                    }
-                }
+                if (selfPortrait) ApplySelfPortraitMode(camera, in selfPortraitSnap);
 
                 UpdateCamera();
 
-                // Apply player visibility and self-portrait matrix correction before any render
-                // stages run so shadow maps and the main opaque pass both see the same setup.
+                // Apply visibility and self-portrait matrix-correction context BEFORE shadow stages,
+                // so shadow maps and the opaque pass agree on what the local player looks like.
                 _capi.World.Player.Entity.IsRendered = selfPortrait;
                 VirtualCameraSelfPortraitContext.Active = selfPortrait;
 
                 _main.Reset3DProjection();
                 GL.Enable(EnableCap.DepthTest);
 
-                // Rebuild shadow maps for the virtual camera's view frustum.
-                if (_main.AmbientManager.ShadowQuality > 0)
-                {
-                    _main.TriggerRenderStage(EnumRenderStage.ShadowFar, dt);
-                    _main.TriggerRenderStage(EnumRenderStage.ShadowFarDone, dt);
-                    if (_main.AmbientManager.ShadowQuality > 1)
-                    {
-                        _main.TriggerRenderStage(EnumRenderStage.ShadowNear, dt);
-                        _main.TriggerRenderStage(EnumRenderStage.ShadowNearDone, dt);
-                    }
-                }
+                RenderShadowStages(dt);
 
-                // Shadow stages overwrite the GL modelview matrix; re-establish the virtual camera matrices.
+                // Shadow stages overwrite the GL modelview matrix; re-establish the virtual camera
+                // matrices before the opaque pass, mirroring the main render loop.
                 SyncPerspectiveState(CameraPos.AsBlockPos);
 
                 // ShadowDone restores GL to the screen FBO; redirect back to our virtual FBO.
                 _platform.CurrentFrameBuffer = fbo;
                 _platform.FrameBuffers[0] = fbo;
 
-                // Rebuild the water-depth buffer for the virtual view.
+                // Rebuild the water-depth buffer for the virtual view. The main path does this in
+                // the Before stage via ChunkRenderer.OnRenderBefore(); we cannot re-run the whole
+                // Before stage here because that would recurse back into this renderer.
                 InvokeChunkRendererBefore(dt);
 
                 GL.ClipPlane(ClipPlaneName.ClipDistance0, new double[] { 0d, 1d, 0d, 5d });
@@ -392,20 +389,8 @@ namespace Phototesting.CameraCapture
 
                 if (_main.doTransparentRenderPass)
                 {
-                    // OIT/water depth attachment is hardwired to the main primary depth at startup;
-                    // rebind it to our virtual depth so transparents sort against the virtual scene.
-                    ScreenManager.FrameProfiler.Mark("rendTransp-begin");
-                    ReattachTransparentDepth(transparentFbo, fbo.DepthTextureId);
                     transparentDepthAttachedToVirtual = true;
-                    _platform.LoadFrameBuffer(EnumFrameBuffer.Transparent);
-                    ScreenManager.FrameProfiler.Mark("rendTransp-fbloaded");
-                    _platform.ClearFrameBuffer(EnumFrameBuffer.Transparent);
-                    ScreenManager.FrameProfiler.Mark("rendTransp-bufscleared");
-                    _main.TriggerRenderStage(EnumRenderStage.OIT, dt);
-                    _platform.UnloadFrameBuffer(EnumFrameBuffer.Transparent);
-                    ScreenManager.FrameProfiler.Mark("rendTranspDone");
-                    _platform.MergeTransparentRenderPass();
-                    ScreenManager.FrameProfiler.Mark("mergeTranspPassDone");
+                    RenderTransparentPass(dt, transparentFbo, fbo.DepthTextureId);
                 }
 
                 GL.Disable(EnableCap.ClipPlane0);
@@ -431,20 +416,9 @@ namespace Phototesting.CameraCapture
                 VirtualCameraSelfPortraitContext.Active = false;
                 _capi.World.Player.Entity.IsRendered = saved.PlayerWasRendered;
 
-                if (selfPortrait)
-                {
-                    SetCameraMode(camera, savedCameraMode);
-                    if (localPlayer != null) localPlayer.OverrideCameraMode = savedOverrideCameraMode;
-                    camera.TppCameraDistanceMin = savedTppMin;
-                    camera.TppCameraDistanceMax = savedTppMax;
-                    camera.Tppcameradistance = savedTppDist;
-
-                    if (renderModeTraverse != null && savedRenderMode != null)
-                    {
-                        renderModeTraverse.SetValue(savedRenderMode);
-                    }
-                }
-
+                // Restore camera mode and TPP distances BEFORE RestoreMainCamera, so the
+                // camera.Update inside it sees the original camera mode.
+                if (selfPortrait) RestoreSelfPortraitMode(camera, in selfPortraitSnap);
                 RestoreMainCamera(camera, shUniforms, saved);
 
                 GL.Disable(EnableCap.ClipDistance0);
@@ -452,6 +426,73 @@ namespace Phototesting.CameraCapture
                 _platform.FrameBuffers[0] = primaryFbo;
                 _platform.CurrentFrameBuffer = currentFbo;
             }
+        }
+
+        // ThirdPerson camera mode keeps animations on the body skeleton. The renderer's private
+        // renderMode is also forced because it is cached during BeforeRender and would otherwise
+        // stay in first-person arms mode for this mid-frame virtual pass.
+        private static void ApplySelfPortraitMode(PlayerCamera camera, in SelfPortraitSnapshot snap)
+        {
+            SetCameraMode(camera, EnumCameraMode.ThirdPerson);
+            if (snap.LocalPlayer != null) snap.LocalPlayer.OverrideCameraMode = null;
+            camera.TppCameraDistanceMin = 0;
+            camera.TppCameraDistanceMax = 0;
+            camera.Tppcameradistance = 0f;
+
+            if (snap.RenderModeTraverse != null)
+            {
+                object? tp = GetRenderModeThirdPerson(snap.RenderMode);
+                if (tp != null) snap.RenderModeTraverse.SetValue(tp);
+            }
+        }
+
+        private static void RestoreSelfPortraitMode(PlayerCamera camera, in SelfPortraitSnapshot snap)
+        {
+            SetCameraMode(camera, snap.CameraMode);
+            if (snap.LocalPlayer != null) snap.LocalPlayer.OverrideCameraMode = snap.OverrideCameraMode;
+            camera.TppCameraDistanceMin = snap.TppMin;
+            camera.TppCameraDistanceMax = snap.TppMax;
+            camera.Tppcameradistance = snap.TppDist;
+
+            if (snap.RenderModeTraverse != null && snap.RenderMode != null)
+            {
+                snap.RenderModeTraverse.SetValue(snap.RenderMode);
+            }
+        }
+
+        // Rebuild shadow cascades from the virtual camera's view. Otherwise coverage is computed
+        // from the player's heading and the virtual view shows hard-edged dark regions when the
+        // player faces a different direction.
+        private void RenderShadowStages(float dt)
+        {
+            int quality = _main.AmbientManager.ShadowQuality;
+            if (quality <= 0) return;
+
+            _main.TriggerRenderStage(EnumRenderStage.ShadowFar, dt);
+            _main.TriggerRenderStage(EnumRenderStage.ShadowFarDone, dt);
+            if (quality > 1)
+            {
+                _main.TriggerRenderStage(EnumRenderStage.ShadowNear, dt);
+                _main.TriggerRenderStage(EnumRenderStage.ShadowNearDone, dt);
+            }
+        }
+
+        // OIT/water uses a depth attachment that was hardwired to the main primary depth at
+        // startup; rebind it to our virtual depth here so transparents sort against the virtual
+        // scene. Caller restores the original attachment in finally.
+        private void RenderTransparentPass(float dt, FrameBufferRef transparentFbo, int virtualDepthTexId)
+        {
+            ScreenManager.FrameProfiler.Mark("rendTransp-begin");
+            ReattachTransparentDepth(transparentFbo, virtualDepthTexId);
+            _platform.LoadFrameBuffer(EnumFrameBuffer.Transparent);
+            ScreenManager.FrameProfiler.Mark("rendTransp-fbloaded");
+            _platform.ClearFrameBuffer(EnumFrameBuffer.Transparent);
+            ScreenManager.FrameProfiler.Mark("rendTransp-bufscleared");
+            _main.TriggerRenderStage(EnumRenderStage.OIT, dt);
+            _platform.UnloadFrameBuffer(EnumFrameBuffer.Transparent);
+            ScreenManager.FrameProfiler.Mark("rendTranspDone");
+            _platform.MergeTransparentRenderPass();
+            ScreenManager.FrameProfiler.Mark("mergeTranspPassDone");
         }
 
         private static EnumCameraMode GetCameraMode(PlayerCamera camera)

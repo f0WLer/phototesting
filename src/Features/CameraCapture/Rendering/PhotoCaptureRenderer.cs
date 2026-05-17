@@ -212,6 +212,29 @@ namespace Phototesting.CameraCapture.Rendering
             return cropped;
         }
 
+        internal static SKBitmap ScaleDownAndCenterCropToPlateAspect(SKBitmap source, int maxDimension)
+        {
+            float scale = Math.Min(1f, maxDimension / (float)Math.Max(source.Width, source.Height));
+            int outW = Math.Max(1, (int)(source.Width * scale));
+            int outH = Math.Max(1, (int)(source.Height * scale));
+
+            var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
+            SKBitmap scaled = new SKBitmap(dstInfo);
+            using (var canvas = new SKCanvas(scaled))
+            {
+                canvas.Clear(SKColors.Black);
+                canvas.DrawBitmap(source, new SKRect(0, 0, outW, outH));
+            }
+
+            SKBitmap cropped = CenterCropToPlateAspect(scaled);
+            if (!ReferenceEquals(cropped, scaled))
+            {
+                scaled.Dispose();
+            }
+
+            return cropped;
+        }
+
         // Captures, flips, crops, and effects the framebuffer.
         private SKBitmap BuildProcessedCaptureBitmap(int maxDimension, string seedKey, WetplateEffectsConfig? effectsOverride = null)
         {
