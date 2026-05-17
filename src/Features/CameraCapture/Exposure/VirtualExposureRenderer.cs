@@ -43,6 +43,7 @@ namespace Phototesting.CameraCapture.Exposure
         private long _shutterStartMs;
         private long _shutterEndMs;
         private long _pauseStartedMs;
+        private long _shutterFrozenMs;
 
         private bool _disposed;
 
@@ -58,12 +59,15 @@ namespace Phototesting.CameraCapture.Exposure
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
         internal int CapFrameCount => _process.SampleCount;
 
+        private long GetEffectiveShutterNowMs()
+            => _shutterFrozenMs != 0 ? _shutterFrozenMs : _capi.ElapsedMilliseconds;
+
         // Wall-clock time elapsed since shutter open / remaining until close.
         // Returns 0 when no exposure is active.
         internal float ElapsedSeconds
-            => _shutterStartMs == 0 ? 0f : Math.Max(0f, (_capi.ElapsedMilliseconds - _shutterStartMs) / 1000f);
+            => _shutterStartMs == 0 ? 0f : Math.Max(0f, (GetEffectiveShutterNowMs() - _shutterStartMs) / 1000f);
         internal float RemainingSeconds
-            => _shutterEndMs == 0 ? 0f : Math.Max(0f, (_shutterEndMs - _capi.ElapsedMilliseconds) / 1000f);
+            => _shutterEndMs == 0 ? 0f : Math.Max(0f, (_shutterEndMs - GetEffectiveShutterNowMs()) / 1000f);
 
         // Physics layer toggles; persisted across Start()/Reset() and applied to each new buffer.
         internal bool PhysicsLinearize      = true;
@@ -115,6 +119,7 @@ namespace Phototesting.CameraCapture.Exposure
             _shutterStartMs = now;
             _shutterEndMs   = now + (long)(process.DurationSeconds * 1000f);
             _pauseStartedMs = 0;
+            _shutterFrozenMs = 0;
 
             VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
             cam.ApplyState(cameraState);
@@ -132,6 +137,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (State == ExposureState.Capturing)
             {
                 _pauseStartedMs = _capi.ElapsedMilliseconds;
+                _shutterFrozenMs = _pauseStartedMs;
                 State = ExposureState.Paused;
             }
         }
@@ -145,6 +151,8 @@ namespace Phototesting.CameraCapture.Exposure
                 long pausedFor = _capi.ElapsedMilliseconds - _pauseStartedMs;
                 _shutterStartMs += pausedFor;
                 _shutterEndMs   += pausedFor;
+                _pauseStartedMs = 0;
+                _shutterFrozenMs = 0;
                 State = ExposureState.Capturing;
             }
         }
@@ -155,6 +163,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Stop()
         {
             DrainReadbackPipeline();
+            _shutterFrozenMs = _capi.ElapsedMilliseconds;
             StopCamera();
             State = ExposureState.Done;
         }
@@ -170,6 +179,8 @@ namespace Phototesting.CameraCapture.Exposure
             _buffer = null;
             _shutterStartMs = 0;
             _shutterEndMs   = 0;
+            _pauseStartedMs = 0;
+            _shutterFrozenMs = 0;
             PreviewSink?.EndExposurePassthrough();
             State = ExposureState.Idle;
         }
@@ -186,6 +197,8 @@ namespace Phototesting.CameraCapture.Exposure
             long now = _capi.ElapsedMilliseconds;
             _shutterStartMs = now;
             _shutterEndMs   = now + (long)(_process.DurationSeconds * 1000f);
+            _pauseStartedMs = 0;
+            _shutterFrozenMs = 0;
             State = ExposureState.Capturing;
         }
 
@@ -286,6 +299,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (nowMs >= _shutterEndMs)
             {
                 DrainReadbackPipeline();
+                _shutterFrozenMs = nowMs;
                 State = ExposureState.Done;
                 PushPreviewFrame();
                 _capi.Logger.Notification(
@@ -338,6 +352,8 @@ namespace Phototesting.CameraCapture.Exposure
             catch (Exception ex)
             {
                 _capi.Logger.Warning($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex.Message}");
+                _pauseStartedMs = _capi.ElapsedMilliseconds;
+                _shutterFrozenMs = _pauseStartedMs;
                 State = ExposureState.Paused;
                 return;
             }
