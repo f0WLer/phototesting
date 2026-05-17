@@ -34,6 +34,12 @@ namespace Phototesting.CameraCapture.Exposure
         private PlateProcessProfile _process = PlateProcessProfile.Iodide;
         private float _elapsedSinceLastSample;
         private float _elapsedSinceLastPreview;
+
+        // Wall-clock shutter timing (milliseconds from _capi.ElapsedMilliseconds).
+        private long _shutterStartMs;
+        private long _shutterEndMs;
+        private long _pauseStartedMs;
+
         private bool _disposed;
 
         // When set, the exposure renderer pushes developed preview frames here while capturing,
@@ -47,6 +53,13 @@ namespace Phototesting.CameraCapture.Exposure
         internal ExposureState State { get; private set; } = ExposureState.Idle;
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
         internal int CapFrameCount => _process.SampleCount;
+
+        // Wall-clock time elapsed since shutter open / remaining until close.
+        // Returns 0 when no exposure is active.
+        internal float ElapsedSeconds
+            => _shutterStartMs == 0 ? 0f : Math.Max(0f, (_capi.ElapsedMilliseconds - _shutterStartMs) / 1000f);
+        internal float RemainingSeconds
+            => _shutterEndMs == 0 ? 0f : Math.Max(0f, (_shutterEndMs - _capi.ElapsedMilliseconds) / 1000f);
 
         // Physics layer toggles; persisted across Start()/Reset() and applied to each new buffer.
         internal bool PhysicsLinearize      = true;
@@ -91,8 +104,13 @@ namespace Phototesting.CameraCapture.Exposure
         {
             Discard();
             _process = process;
-            _elapsedSinceLastSample = 0f;
+            _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
+
+            long now = _capi.ElapsedMilliseconds;
+            _shutterStartMs = now;
+            _shutterEndMs   = now + (long)(process.DurationSeconds * 1000f);
+            _pauseStartedMs = 0;
 
             VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
             cam.ApplyState(cameraState);
@@ -108,14 +126,23 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Pause()
         {
             if (State == ExposureState.Capturing)
+            {
+                _pauseStartedMs = _capi.ElapsedMilliseconds;
                 State = ExposureState.Paused;
+            }
         }
 
         // Resumes frame accumulation. Only valid in Paused state.
         internal void Resume()
         {
             if (State == ExposureState.Paused)
+            {
+                // Extend the shutter window by however long we were paused.
+                long pausedFor = _capi.ElapsedMilliseconds - _pauseStartedMs;
+                _shutterStartMs += pausedFor;
+                _shutterEndMs   += pausedFor;
                 State = ExposureState.Capturing;
+            }
         }
 
         // Closes the shutter, stops the camera, and leaves the buffer ready for export.
@@ -131,6 +158,8 @@ namespace Phototesting.CameraCapture.Exposure
         {
             StopCamera();
             _buffer = null;
+            _shutterStartMs = 0;
+            _shutterEndMs   = 0;
             PreviewSink?.EndExposurePassthrough();
             State = ExposureState.Idle;
         }
@@ -141,8 +170,11 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (_buffer == null || _camera == null) return;
             _buffer.Reset();
-            _elapsedSinceLastSample = 0f;
+            _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
+            long now = _capi.ElapsedMilliseconds;
+            _shutterStartMs = now;
+            _shutterEndMs   = now + (long)(_process.DurationSeconds * 1000f);
             State = ExposureState.Capturing;
         }
 
@@ -236,8 +268,20 @@ namespace Phototesting.CameraCapture.Exposure
                 _capi.Logger.Warning("Phototesting: window resized during exposure — accumulated frames discarded.");
             }
 
-            // Time-based gating: only render and accumulate when the sample interval has elapsed.
-            // Decouples exposure duration from frame rate and bounds render cost per process.
+            // Wall-clock shutter close: shutter has been open long enough.
+            long nowMs = _capi.ElapsedMilliseconds;
+            if (nowMs >= _shutterEndMs)
+            {
+                State = ExposureState.Done;
+                PushPreviewFrame();
+                _capi.Logger.Notification(
+                    $"Phototesting: {_process.Name} exposure complete — " +
+                    $"{_buffer.FramesAccumulated} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
+                    $"Use '.phototesting exposure export' to save.");
+                return;
+            }
+
+            // Rate limiter: never sample faster than the process cadence.
             if (_elapsedSinceLastSample < _process.SampleInterval) return;
             _elapsedSinceLastSample -= _process.SampleInterval;
 
@@ -265,16 +309,6 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 _elapsedSinceLastPreview = 0f;
                 PushPreviewFrame();
-            }
-
-            if (_buffer.FramesAccumulated >= _process.SampleCount)
-            {
-                State = ExposureState.Done;
-                // Push the final fully-developed frame so the preview shows the complete exposure.
-                PushPreviewFrame();
-                _capi.Logger.Notification(
-                    $"Phototesting: {_process.Name} exposure complete — {_buffer.FramesAccumulated} samples " +
-                    $"over {_process.DurationSeconds}s. Use '.phototesting exposure export' to save.");
             }
         }
 

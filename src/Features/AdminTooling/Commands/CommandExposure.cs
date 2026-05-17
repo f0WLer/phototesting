@@ -138,8 +138,9 @@ namespace Phototesting.AdminTooling
                     PlateProcessProfile ap = renderer.ActiveProcess;
                     _owner.ClientApi.ShowChatMessage(
                         $"Wetplate: {ap.Name} — state={renderer.State}, " +
-                        $"samples={renderer.FramesAccumulated}/{ap.SampleCount}, " +
-                        $"duration={ap.DurationSeconds}s (interval={ap.SampleInterval:F3}s)");
+                        $"samples={renderer.FramesAccumulated} (target {ap.SampleCount}), " +
+                        $"elapsed={renderer.ElapsedSeconds:F1}s / {ap.DurationSeconds}s, " +
+                        $"interval={ap.SampleInterval:F3}s");
                     return;
                 }
 
