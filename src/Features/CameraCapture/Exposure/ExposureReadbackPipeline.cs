@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using OpenTK.Graphics.OpenGL;
 using Vintagestory.API.Client;
-using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture.Exposure
 {
@@ -45,7 +44,10 @@ namespace Phototesting.CameraCapture.Exposure
         internal int Width  { get; private set; }
         internal int Height { get; private set; }
 
-        internal ExposureReadbackPipeline(ICoreClientAPI capi) { _capi = capi; }
+        internal ExposureReadbackPipeline(ICoreClientAPI capi)
+        {
+            _capi = capi;
+        }
 
         internal static void ComputeTargetDimensions(int sourceW, int sourceH, int maxDim, out int width, out int height)
         {
@@ -80,7 +82,7 @@ namespace Phototesting.CameraCapture.Exposure
             Height = height;
 
             // Single colour attachment (RGBA8, linear filter for the bilinear downsample).
-            _downsampleFbo = _capi.Render.CreateFrameBuffer(
+            _downsampleFbo = ClientFramebufferCompat.Create(_capi,
                 new FramebufferAttrs("phototesting-exposure-downsample", Width, Height)
                 {
                     Attachments = new[]

@@ -84,8 +84,8 @@ void main() {
 in  vec2 v_uv;
 out vec4 out_sum;
 
-uniform sampler2D u_sample;   // RGBA8 — new frame blit from virtual camera
-uniform sampler2D u_accum;    // RGBA32F — running channel sums
+uniform sampler2D u_sample;
+uniform sampler2D u_accum;
 uniform bool      u_linearize;
 
 float srgbToLinear(float c) {
@@ -108,14 +108,14 @@ in  vec2 v_uv;
 out vec4 out_color;
 
 uniform sampler2D u_accum;
-uniform float u_inv_ref;        // 1.0 / referenceFrameCount  (or 1.0 / frameCount if normalise)
-uniform bool  u_spectral;       // collapse to silver-density using spectral weights
-uniform bool  u_hd_curve;       // apply Hurter-Driffield emulsion response
-uniform float u_red_sens;       // normalised red sensitivity
+uniform float u_inv_ref;
+uniform bool  u_spectral;
+uniform bool  u_hd_curve;
+uniform float u_red_sens;
 uniform float u_green_sens;
 uniform float u_blue_sens;
-uniform float u_dev_strength;   // H&D k  parameter
-uniform float u_gamma;          // H&D gamma parameter
+uniform float u_dev_strength;
+uniform float u_gamma;
 
 float hdCurve(float E, float k, float g) {
     float d = log(1.0 + E * k) / log(10.0);

@@ -185,7 +185,7 @@ namespace Phototesting.CameraCapture
 
             }
 
-            fbo = _capi.Render.CreateFrameBuffer(new FramebufferAttrs("phototesting-virtual-camera", width, height)
+            fbo = _platform.CreateFramebuffer(new FramebufferAttrs("phototesting-virtual-camera", width, height)
             {
                 Attachments = attachments.ToArray()
             });
