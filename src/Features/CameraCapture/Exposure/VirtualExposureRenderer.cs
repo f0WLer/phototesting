@@ -1,7 +1,6 @@
 using OpenTK.Graphics.OpenGL;
 using SkiaSharp;
 using Vintagestory.API.Client;
-using Vintagestory.API.MathTools;
 using Vintagestory.Client.NoObf;
 using Phototesting.AdminTooling;
 using Phototesting.CameraCapture.Rendering;
@@ -12,14 +11,14 @@ namespace Phototesting.CameraCapture.Exposure
 {
     internal enum ExposureState { Idle, Capturing, Paused, Done }
 
-    // Persistent renderer that drives a VirtualCamera across N consecutive game frames,
-    // accumulating pixel data into an ExposureAccumulationBuffer via naive averaging.
+    // Persistent renderer that drives a VirtualCamera across consecutive game frames,
+    // accumulating pixel data into an ExposureAccumulationBuffer.
     //
     // Lifecycle:
-    //   Start() → Capturing → (Pause/Resume) → Done (when target frames reached)
+    //   Start() -> Capturing -> (Pause/Resume) -> Done (when stopped or cap reached)
     //   Export() produces a PNG at any point once frames have been accumulated.
     //   Reset() clears the buffer and returns to Capturing from the same position.
-    //   Stop() tears down the camera and returns to Idle.
+    //   Stop() tears down the camera and preserves the accumulated buffer for export.
     //
     // Registered at EnumRenderStage.Before (RenderOrder 0.4) so VirtualCamera.RenderCamera
     // can call TriggerRenderStage(Opaque) safely. Controlled entirely via admin commands.
@@ -32,19 +31,24 @@ namespace Phototesting.CameraCapture.Exposure
 
         private VirtualCamera? _camera;
         private ExposureAccumulationBuffer? _buffer;
-        private int _targetFrameCount;
-        private int _previewFrameInterval;
+        private PlateProcessProfile _process = PlateProcessProfile.Iodide;
+        private float _elapsedSinceLastSample;
+        private float _elapsedSinceLastPreview;
         private bool _disposed;
 
         // When set, the exposure renderer pushes developed preview frames here while capturing,
         // keeping the debug preview window live during long exposures.
         internal IExposurePreviewSink? PreviewSink { get; set; }
 
+        // Process profile applied to the current or next exposure session.
+        // Controls timing (duration, sample count) and emulsion response (spectral weights, H&D curve).
+        internal PlateProcessProfile ActiveProcess => _process;
+
         internal ExposureState State { get; private set; } = ExposureState.Idle;
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
-        internal int TargetFrameCount => _targetFrameCount;
+        internal int CapFrameCount => _process.SampleCount;
 
-        // Physics layer toggles — persisted across Start()/Reset() and applied to each new buffer.
+        // Physics layer toggles; persisted across Start()/Reset() and applied to each new buffer.
         internal bool PhysicsLinearize      = true;
         internal bool PhysicsSpectralWeights = true;
         internal bool PhysicsHDCurve         = true;
@@ -83,26 +87,19 @@ namespace Phototesting.CameraCapture.Exposure
             _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
         }
 
-        // Starts a new exposure from the given world position and heading.
-        // Replaces any currently in-progress exposure and resets accumulated data.
-        internal void Start(Vec3d eyePos, float yaw, float pitch, float fov, int frameCount)
+        internal void Start(VirtualCameraState cameraState, PlateProcessProfile process)
         {
-            StopCamera();
-            _targetFrameCount = Math.Max(1, frameCount);
+            Discard();
+            _process = process;
+            _elapsedSinceLastSample = 0f;
+            _elapsedSinceLastPreview = 0f;
 
             VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
-            cam.CameraPos = eyePos.Clone();
-            cam.Yaw = yaw;
-            cam.Pitch = pitch;
-            cam.Fov = fov;
-            cam.Dimension = _capi.World.Player.Entity.Pos.Dimension;
+            cam.ApplyState(cameraState);
             cam.InitBuffer();
             _camera = cam;
 
-            _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _targetFrameCount);
-            ApplyPhysicsToBuffer(_buffer);
-            // Update preview roughly 8 times across the exposure regardless of frame count.
-            _previewFrameInterval = Math.Max(1, _targetFrameCount / 8);
+            AllocateBufferForCurrentFrameSize();
             PreviewSink?.BeginExposurePassthrough();
             State = ExposureState.Capturing;
         }
@@ -121,8 +118,16 @@ namespace Phototesting.CameraCapture.Exposure
                 State = ExposureState.Capturing;
         }
 
-        // Stops the exposure session, destroys the camera, and returns to Idle.
+        // Closes the shutter, stops the camera, and leaves the buffer ready for export.
+        // The accumulated image is preserved. Call Discard() to also clear the buffer.
         internal void Stop()
+        {
+            StopCamera();
+            State = ExposureState.Done;
+        }
+
+        // Destroys the accumulated buffer and returns to Idle. Use after export or to abandon a session.
+        internal void Discard()
         {
             StopCamera();
             _buffer = null;
@@ -136,6 +141,8 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (_buffer == null || _camera == null) return;
             _buffer.Reset();
+            _elapsedSinceLastSample = 0f;
+            _elapsedSinceLastPreview = 0f;
             State = ExposureState.Capturing;
         }
 
@@ -154,28 +161,7 @@ namespace Phototesting.CameraCapture.Exposure
             int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.PhotoCaptureMaxDimension
                 ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 
-            float scale = Math.Min(1f, maxDimension / (float)Math.Max(averaged.Width, averaged.Height));
-            int outW = Math.Max(1, (int)(averaged.Width * scale));
-            int outH = Math.Max(1, (int)(averaged.Height * scale));
-
-            SKBitmap working;
-            if (scale < 0.9999f)
-            {
-                var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-                working = new SKBitmap(dstInfo);
-                using (var canvas = new SKCanvas(working))
-                {
-                    canvas.Clear(SKColors.Black);
-                    canvas.DrawBitmap(averaged, new SKRect(0, 0, outW, outH));
-                }
-            }
-            else
-            {
-                working = averaged.Copy();
-            }
-
-            SKBitmap cropped = PhotoCaptureRenderer.CenterCropToPlateAspect(working);
-            if (!ReferenceEquals(cropped, working)) working.Dispose();
+            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(averaged, maxDimension);
 
             try
             {
@@ -212,19 +198,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             using SKBitmap developed = _buffer.Develop();
 
-            float scale = Math.Min(1f, maxDimension / (float)Math.Max(developed.Width, developed.Height));
-            int outW = Math.Max(1, (int)(developed.Width * scale));
-            int outH = Math.Max(1, (int)(developed.Height * scale));
-
-            var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            using SKBitmap scaled = new SKBitmap(dstInfo);
-            using (var canvas = new SKCanvas(scaled))
-            {
-                canvas.Clear(SKColors.Black);
-                canvas.DrawBitmap(developed, new SKRect(0, 0, outW, outH));
-            }
-
-            SKBitmap cropped = PhotoCaptureRenderer.CenterCropToPlateAspect(scaled);
+            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
             try
             {
                 if (cfg?.DebugPreviewApplyEffects ?? true)
@@ -237,49 +211,45 @@ namespace Phototesting.CameraCapture.Exposure
             }
             finally
             {
-                if (!ReferenceEquals(cropped, scaled)) cropped.Dispose();
+                cropped.Dispose();
             }
         }
+
+        // Minimum wall-clock seconds between consecutive preview pushes.
+        private const float PreviewCadenceSeconds = 0.25f;
 
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing) return;
             if (_camera == null || _buffer == null) return;
 
+            // Always advance both timers so preview cadence and sample interval track real time
+            // independently of each other and of the game's frame rate.
+            _elapsedSinceLastSample  += deltaTime;
+            _elapsedSinceLastPreview += deltaTime;
+
             // Reinitialize FBO and reset the buffer if the window was resized between frames.
             // Mixed-dimension frames cannot be averaged so accumulated data must be discarded.
             if (_capi.Render.FrameWidth != _camera.fbo.Width || _capi.Render.FrameHeight != _camera.fbo.Height)
             {
-                _camera.Destroy();
-                _camera.InitBuffer();
-                _buffer.Reset();
-                _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _targetFrameCount);
-                ApplyPhysicsToBuffer(_buffer);
+                ReinitializeCameraAndBufferForResize();
                 _capi.Logger.Warning("Phototesting: window resized during exposure — accumulated frames discarded.");
             }
 
+            // Time-based gating: only render and accumulate when the sample interval has elapsed.
+            // Decouples exposure duration from frame rate and bounds render cost per process.
+            if (_elapsedSinceLastSample < _process.SampleInterval) return;
+            _elapsedSinceLastSample -= _process.SampleInterval;
+
             try
             {
-                int savedDimension = _capi.World.Player.Entity.Pos.Dimension;
-                _capi.World.Player.Entity.Pos.Dimension = _camera.Dimension;
-                _camera.RenderCamera(deltaTime);
-                _capi.World.Player.Entity.Pos.Dimension = savedDimension;
+                _camera.RenderCameraInStoredDimension(deltaTime);
 
                 // Clear the primary framebuffer that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
                 using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
                 _buffer.Accumulate(raw);
-
-                // Push a preview update on the first frame and then every _previewFrameInterval frames.
-                if (PreviewSink != null)
-                {
-                    int n = _buffer.FramesAccumulated;
-                    if (n == 1 || n % _previewFrameInterval == 0)
-                    {
-                        PushPreviewFrame();
-                    }
-                }
             }
             catch (Exception ex)
             {
@@ -288,14 +258,23 @@ namespace Phototesting.CameraCapture.Exposure
                 return;
             }
 
-            if (_buffer.FramesAccumulated >= _targetFrameCount)
+            // Push preview on wall-clock cadence; only after new data has been accumulated
+            // so the preview reflects the latest exposure state without redundant develop calls.
+            if (PreviewSink != null && _buffer.FramesAccumulated > 0 &&
+                (_buffer.FramesAccumulated == 1 || _elapsedSinceLastPreview >= PreviewCadenceSeconds))
+            {
+                _elapsedSinceLastPreview = 0f;
+                PushPreviewFrame();
+            }
+
+            if (_buffer.FramesAccumulated >= _process.SampleCount)
             {
                 State = ExposureState.Done;
                 // Push the final fully-developed frame so the preview shows the complete exposure.
                 PushPreviewFrame();
                 _capi.Logger.Notification(
-                    $"Phototesting: exposure complete — {_buffer.FramesAccumulated}/{_targetFrameCount} frames accumulated. " +
-                    "Use '.phototesting exposure export' to save.");
+                    $"Phototesting: {_process.Name} exposure complete — {_buffer.FramesAccumulated} samples " +
+                    $"over {_process.DurationSeconds}s. Use '.phototesting exposure export' to save.");
             }
         }
 
@@ -306,13 +285,31 @@ namespace Phototesting.CameraCapture.Exposure
             _camera = null;
         }
 
+        private void AllocateBufferForCurrentFrameSize()
+        {
+            _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _process.SampleCount);
+            ApplyPhysicsToBuffer(_buffer);
+            _buffer.RedSensitivity      = _process.RedSensitivity;
+            _buffer.GreenSensitivity    = _process.GreenSensitivity;
+            _buffer.BlueSensitivity     = _process.BlueSensitivity;
+            _buffer.DevelopmentStrength = _process.DevelopmentStrength;
+            _buffer.HDGamma             = _process.HDGamma;
+        }
+
+        private void ReinitializeCameraAndBufferForResize()
+        {
+            if (_camera == null) return;
+
+            _camera.Destroy();
+            _camera.InitBuffer();
+            AllocateBufferForCurrentFrameSize();
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-            StopCamera();
-            _buffer = null;
-            PreviewSink?.EndExposurePassthrough();
+            Discard();
         }
     }
 }

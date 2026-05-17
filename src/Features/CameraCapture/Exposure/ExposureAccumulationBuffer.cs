@@ -10,10 +10,10 @@ namespace Phototesting.CameraCapture.Exposure
     // Develop() maps those sums to a BGRA8888 bitmap through up to three physics stages,
     // each independently togglable:
     //
-    //   LinearizeInput      — sRGB→linear conversion before accumulating
-    //   ApplySpectralWeights — collapse RGB to a single silver-density value using
+    //   LinearizeInput       - sRGB-to-linear conversion before accumulating
+    //   ApplySpectralWeights - collapse RGB to a single silver-density value using
     //                          historical emulsion sensitivity (produces grayscale)
-    //   ApplyHDCurve         — Hurter–Driffield response curve instead of linear mapping
+    //   ApplyHDCurve         - Hurter-Driffield response curve instead of linear mapping
     //                          (shadows lift, highlights compress, strong photographic shoulder)
     //
     // All three default to true. Set any flag to false to isolate the effect of the others.
@@ -27,13 +27,11 @@ namespace Phototesting.CameraCapture.Exposure
         private int _frameCount;
         private readonly int _referenceFrameCount;
 
-        // Precomputed sRGB→linear LUT (index = 0-255 sRGB byte value).
+        // Precomputed sRGB-to-linear LUT (index = 0-255 sRGB byte value).
         private static readonly float[] SRgbToLinear = BuildLinearTable();
 
-        // ── Feature toggles ──────────────────────────────────────────────────────
-
         // Convert sRGB input pixels to linear light before accumulating.
-        // Disabling accumulates in gamma space — faster but physically incorrect.
+        // Disabling accumulates in gamma space; faster but physically incorrect.
         public bool LinearizeInput = true;
 
         // Collapse RGB to a single silver-density value using historical spectral weights.
@@ -47,18 +45,17 @@ namespace Phototesting.CameraCapture.Exposure
         public float GreenSensitivity = 0.45f;
         public float BlueSensitivity  = 1.00f;
 
-        // Apply Hurter–Driffield nonlinear emulsion response in Develop().
+        // Apply Hurter-Driffield nonlinear emulsion response in Develop().
         // Highlights compress into a natural shoulder instead of hard-clipping to white.
         // Disabling uses the original linear sum/reference mapping.
         public bool ApplyHDCurve = true;
 
         // H&D curve parameters (used when ApplyHDCurve = true).
-        //   DevelopmentStrength: controls how quickly the curve rises — higher = brighter overall
-        //   HDGamma:             contrast of the developed image — higher = more contrasty
+        //   DevelopmentStrength: controls how quickly the curve rises; higher = brighter overall
+        //   HDGamma:             contrast of the developed image; higher = more contrasty
+        // Tuned so the reference exposure lands closer to a usable mid-grey instead of the toe.
         public float DevelopmentStrength = 8.0f;
-        public float HDGamma             = 1.6f;
-
-        // ────────────────────────────────────────────────────────────────────────
+        public float HDGamma             = 1.1f;
 
         internal int FramesAccumulated => _frameCount;
         internal int Width  => _width;
@@ -85,8 +82,8 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         // Accumulates one BGRA8888 frame into the running channel sums.
-        // Applies sRGB→linear conversion when LinearizeInput is true.
-        // Frames with dimensions other than Width × Height are ignored.
+        // Applies sRGB-to-linear conversion when LinearizeInput is true.
+        // Frames with dimensions other than Width x Height are ignored.
         internal void Accumulate(SKBitmap frame)
         {
             if (frame.Width != _width || frame.Height != _height) return;
@@ -130,9 +127,9 @@ namespace Phototesting.CameraCapture.Exposure
         // Develops accumulated frames into a new BGRA8888 SKBitmap.
         //
         // Exposure level is always relative to referenceFrameCount:
-        //   frames < reference  → underexposed (dark)
-        //   frames = reference  → normally exposed
-        //   frames > reference  → overexposed (bright, highlights roll off via H&D or hard-clip)
+        //   frames < reference: underexposed (dark)
+        //   frames = reference: normally exposed
+        //   frames > reference: overexposed (bright, highlights roll off via H&D or hard-clip)
         //
         // With ApplySpectralWeights: output is grayscale (silver density image).
         // With ApplyHDCurve: output can exceed 1.0 for overexposed pixels; ToByte clamps to 255.
@@ -150,7 +147,7 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 float invRef = 1f / _referenceFrameCount;
 
-                // Capture flags as locals — avoids repeated field reads in the hot loop.
+                // Capture flags as locals to avoid repeated field reads in the hot loop.
                 bool spectral = ApplySpectralWeights;
                 bool hd       = ApplyHDCurve;
                 float devStr  = DevelopmentStrength;
@@ -199,8 +196,8 @@ namespace Phototesting.CameraCapture.Exposure
             return bitmap;
         }
 
-        // Hurter–Driffield emulsion response: log10(1 + E×k)^γ
-        // Output naturally exceeds 1.0 for overexposed pixels — caller clamps via ToByte.
+        // Hurter-Driffield emulsion response: log10(1 + E*k)^gamma.
+        // Output naturally exceeds 1.0 for overexposed pixels; caller clamps via ToByte.
         private static float HDCurve(float E, float k, float gamma)
         {
             float density = MathF.Log10(1f + E * k);

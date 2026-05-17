@@ -1,16 +1,14 @@
-using System.Globalization;
+using Phototesting.CameraCapture;
 using Phototesting.CameraCapture.Exposure;
-using Vintagestory.API.MathTools;
 using Vintagestory.Client.NoObf;
 
 namespace Phototesting.AdminTooling
 {
     // .phototesting exposure command handler.
     // Controls the multi-frame virtual camera exposure session.
-    // Commands: start [frames] | stop | pause | resume | reset | export | status
+    // Commands: start [cap] | stop | discard | pause | resume | reset | export | ref [n] | status | physics
     internal sealed partial class AdminToolingModSystemBridge
     {
-        private const int ExposureDefaultFrameCount = 8;
 
         internal void HandleWetplateExposureCommand(Vintagestory.API.Common.CmdArgs args)
         {
@@ -29,30 +27,55 @@ namespace Phototesting.AdminTooling
             {
                 case "start":
                 {
-                    int frameCount = ExposureDefaultFrameCount;
-                    string? framesStr = args.PopWord();
-                    if (!string.IsNullOrEmpty(framesStr)
-                        && int.TryParse(framesStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
-                        && parsed > 0)
+                    // Optional process name — defaults to Iodide if omitted.
+                    string? processArg = args.PopWord();
+                    PlateProcessProfile process = PlateProcessProfile.Iodide;
+                    if (!string.IsNullOrEmpty(processArg) && !PlateProcessProfile.TryParse(processArg, out process))
                     {
-                        frameCount = parsed;
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: unknown process '{processArg}'. Use: chloride, iodide, bromide.");
+                        return;
                     }
 
-                    var player = _owner.ClientApi.World.Player;
-                    Vec3d eyePos = player.Entity.Pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
-                    float yaw = player.Entity.Pos.Yaw;
-                    float pitch = player.Entity.Pos.Pitch;
-                    float fov = ((ClientMain)_owner.ClientApi.World).MainCamera.Fov;
+                    // Prefer the active virtual-camera preview so test exposures capture that exact view.
+                    VirtualCameraPreviewRenderer? previewRenderer = _owner.CameraCaptureBridge._virtualCameraPreviewRenderer;
+                    if (previewRenderer == null || !previewRenderer.TryGetActiveCameraState(out VirtualCameraState cameraState))
+                    {
+                        var player = _owner.ClientApi.World.Player;
+                        cameraState = new VirtualCameraState(
+                            player.Entity.Pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
+                            player.Entity.Pos.Yaw,
+                            player.Entity.Pos.Pitch,
+                            ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
+                            player.Entity.Pos.Dimension);
+                    }
 
-                    renderer.Start(eyePos, yaw, pitch, fov, frameCount);
+                    renderer.Start(cameraState, process);
+                    string portraitMsg = cameraState.SelfPortrait ? ", self-portrait" : "";
                     _owner.ClientApi.ShowChatMessage(
-                        $"Wetplate: exposure started — {frameCount} frames at fov={fov:F2} rad.");
+                        $"Wetplate: {process.Name} exposure started — {process.SampleCount} samples over {process.DurationSeconds}s{portraitMsg}. Use 'stop' to close shutter.");
                     return;
                 }
 
                 case "stop":
+                    if (renderer.State != ExposureState.Capturing && renderer.State != ExposureState.Paused)
+                    {
+                        _owner.ClientApi.ShowChatMessage($"Wetplate: cannot stop — state is {renderer.State}.");
+                        return;
+                    }
                     renderer.Stop();
-                    _owner.ClientApi.ShowChatMessage("Wetplate: exposure stopped and cleared.");
+                    _owner.ClientApi.ShowChatMessage(
+                        $"Wetplate: shutter closed — {renderer.FramesAccumulated} frames accumulated. Use 'export' to save or 'discard' to clear.");
+                    return;
+
+                case "discard":
+                    if (renderer.State == ExposureState.Idle)
+                    {
+                        _owner.ClientApi.ShowChatMessage("Wetplate: nothing to discard — already idle.");
+                        return;
+                    }
+                    renderer.Discard();
+                    _owner.ClientApi.ShowChatMessage("Wetplate: exposure discarded.");
                     return;
 
                 case "pause":
@@ -60,7 +83,7 @@ namespace Phototesting.AdminTooling
                     {
                         renderer.Pause();
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: exposure paused at {renderer.FramesAccumulated}/{renderer.TargetFrameCount} frames.");
+                            $"Wetplate: {renderer.ActiveProcess.Name} exposure paused at {renderer.FramesAccumulated}/{renderer.ActiveProcess.SampleCount} samples.");
                     }
                     else
                     {
@@ -73,7 +96,7 @@ namespace Phototesting.AdminTooling
                     {
                         renderer.Resume();
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: exposure resumed ({renderer.FramesAccumulated}/{renderer.TargetFrameCount} frames so far).");
+                            $"Wetplate: {renderer.ActiveProcess.Name} exposure resumed — {renderer.FramesAccumulated}/{renderer.ActiveProcess.SampleCount} samples so far.");
                     }
                     else
                     {
@@ -111,9 +134,38 @@ namespace Phototesting.AdminTooling
                     return;
 
                 case "status":
+                {
+                    PlateProcessProfile ap = renderer.ActiveProcess;
                     _owner.ClientApi.ShowChatMessage(
-                        $"Wetplate: exposure — state={renderer.State}, frames={renderer.FramesAccumulated}/{renderer.TargetFrameCount}");
+                        $"Wetplate: {ap.Name} — state={renderer.State}, " +
+                        $"samples={renderer.FramesAccumulated}/{ap.SampleCount}, " +
+                        $"duration={ap.DurationSeconds}s (interval={ap.SampleInterval:F3}s)");
                     return;
+                }
+
+                case "process":
+                {
+                    string? nameArg = args.PopWord();
+                    if (!string.IsNullOrEmpty(nameArg))
+                    {
+                        if (!PlateProcessProfile.TryParse(nameArg, out PlateProcessProfile queried))
+                        {
+                            _owner.ClientApi.ShowChatMessage($"Wetplate: unknown process '{nameArg}'. Use: chloride, iodide, bromide.");
+                            return;
+                        }
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: {queried.Name} — {queried.SampleCount} samples over {queried.DurationSeconds}s, " +
+                            $"interval={queried.SampleInterval:F3}s, " +
+                            $"R/G/B sensitivity={queried.RedSensitivity:F2}/{queried.GreenSensitivity:F2}/{queried.BlueSensitivity:F2}");
+                    }
+                    else
+                    {
+                        PlateProcessProfile ap = renderer.ActiveProcess;
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: active process is {ap.Name} — use 'start <process>' to change (chloride / iodide / bromide).");
+                    }
+                    return;
+                }
 
                 case "physics":
                 case "phys":
@@ -160,7 +212,7 @@ namespace Phototesting.AdminTooling
 
                 default:
                     _owner.ClientApi.ShowChatMessage(
-                        "Wetplate: usage: .phototesting exposure <start [frames]|stop|pause|resume|reset|export|status|physics>");
+                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics>");
                     return;
             }
         }
