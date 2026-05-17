@@ -3,6 +3,7 @@ using HarmonyLib;
 using OpenTK.Graphics.OpenGL;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Util;
 using Vintagestory.Client;
@@ -349,6 +350,7 @@ namespace Phototesting.CameraCapture
                 _capi.World.Player as ClientPlayer,
                 selfPortrait ? TryGetRendererRenderModeField() : null);
             bool transparentDepthAttachedToVirtual = false;
+            Dictionary<long, bool>? savedEntityIsRendered = null;
 
             _main.PerspectiveMode();
 
@@ -380,6 +382,13 @@ namespace Phototesting.CameraCapture
                 // the Before stage via ChunkRenderer.OnRenderBefore(); we cannot re-run the whole
                 // Before stage here because that would recurse back into this renderer.
                 InvokeChunkRendererBefore(dt);
+
+                // SystemRenderEntities.OnBeforeRender (Before stage, RenderOrder 0.4) already ran
+                // before this renderer and stamped entity.IsRendered based on the player's frustum.
+                // Override those flags with the virtual camera's frustum (already set by the
+                // SyncPerspectiveState call above) so that entities visible from the virtual
+                // viewpoint are drawn even when they are behind or beside the player.
+                savedEntityIsRendered = OverrideEntityVisibilityForVirtualCamera();
 
                 GL.ClipPlane(ClipPlaneName.ClipDistance0, new double[] { 0d, 1d, 0d, 5d });
                 GL.Enable(EnableCap.ClipDistance0);
@@ -413,6 +422,11 @@ namespace Phototesting.CameraCapture
                     ReattachTransparentDepth(transparentFbo, primaryFbo.DepthTextureId);
                 }
 
+                // Restore entity IsRendered flags so the main render loop's Opaque pass
+                // sees the original player-frustum visibility that was set during BeforeRender.
+                if (savedEntityIsRendered != null)
+                    RestoreEntityVisibility(savedEntityIsRendered);
+
                 VirtualCameraSelfPortraitContext.Active = false;
                 _capi.World.Player.Entity.IsRendered = saved.PlayerWasRendered;
 
@@ -425,6 +439,36 @@ namespace Phototesting.CameraCapture
                 GL.Disable(EnableCap.DepthTest);
                 _platform.FrameBuffers[0] = primaryFbo;
                 _platform.CurrentFrameBuffer = currentFbo;
+            }
+        }
+
+        // Re-evaluate entity.IsRendered for all non-player entities using the virtual camera's
+        // frustum (which is already active via SyncPerspectiveState).  Returns a snapshot of the
+        // original flags so they can be restored after the virtual passes complete.
+        private Dictionary<long, bool> OverrideEntityVisibilityForVirtualCamera()
+        {
+            Entity playerEntity = _capi.World.Player.Entity;
+            int dim = Dimension;
+            var saved = new Dictionary<long, bool>(_main.LoadedEntities.Count);
+            foreach (var pair in _main.LoadedEntities)
+            {
+                Entity entity = pair.Value;
+                if (ReferenceEquals(entity, playerEntity)) continue; // handled by the caller
+                saved[pair.Key] = entity.IsRendered;
+                entity.IsRendered = entity.Pos.Dimension == dim
+                    && _main.frustumCuller.SphereInFrustum(
+                        entity.Pos.X, entity.Pos.InternalY, entity.Pos.Z,
+                        entity.FrustumSphereRadius);
+            }
+            return saved;
+        }
+
+        private void RestoreEntityVisibility(Dictionary<long, bool> saved)
+        {
+            foreach (var pair in saved)
+            {
+                if (_main.LoadedEntities.TryGetValue(pair.Key, out Entity? entity))
+                    entity.IsRendered = pair.Value;
             }
         }
 
