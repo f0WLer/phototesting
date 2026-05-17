@@ -70,10 +70,10 @@ namespace Phototesting.Frame
             // Take out: any right-click while frame holds an item retrieves it to the player.
             if (!_inventory[0].Empty)
             {
-                ItemStack stored = _inventory[0].Itemstack;
+                ItemStack stored = _inventory[0].Itemstack!;
                 if (!byPlayer.InventoryManager.TryGiveItemstack(stored))
                 {
-                    world.SpawnItemEntity(stored, byPlayer.Entity.SidedPos.XYZ);
+                    world.SpawnItemEntity(stored, byPlayer.Entity.Pos.XYZ);
                 }
                 _inventory[0].TakeOutWhole();
                 MarkDirty(true);
@@ -148,17 +148,17 @@ namespace Phototesting.Frame
         {
             if (_inventory[0].Empty) return null;
 
-            ItemStack stack = _inventory[0].Itemstack;
+            ItemStack stack = _inventory[0].Itemstack!;
 
             if (!PhotoPlateRenderUtil.TryGetPhotoBlockTexture(capi, stack, out TextureAtlasPosition photoTex, out float photoAspect, Pos))
             {
                 return null;
             }
 
-            Block planeBlock = Api.World.GetBlock(_photoPlaneCode);
+            Block? planeBlock = Api.World.GetBlock(_photoPlaneCode);
             if (planeBlock == null) return null;
 
-            MeshData baseMesh = capi.TesselatorManager.GetDefaultBlockMesh(planeBlock);
+            MeshData? baseMesh = capi.TesselatorManager.GetDefaultBlockMesh(planeBlock);
             if (baseMesh == null) return null;
 
             // Clone before stamping UVs so the cached default mesh stays untouched.

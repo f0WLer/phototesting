@@ -108,7 +108,7 @@ namespace Phototesting.CameraCapture
             // Samples player position and look direction, optionally adding their deltas into the movement score.
             private void RecordPositionSample(EntityAgent player, bool accumulate)
             {
-                var pos = player.SidedPos;
+                var pos = player.Pos;
                 if (pos == null) return;
 
                 double x = pos.X;

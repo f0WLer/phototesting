@@ -131,7 +131,7 @@ namespace Phototesting.PlateBox
             try
             {
                 ITexPositionSource source = _capi.Tesselator.GetTextureSource(_owner.Block);
-                TextureAtlasPosition texPos = source["plate"];
+                TextureAtlasPosition? texPos = source["plate"];
                 if (texPos == null || texPos == _capi.BlockTextureAtlas.UnknownTexturePosition) return false;
 
                 MeshData mesh = CubeMeshUtil.GetCube();
@@ -162,7 +162,7 @@ namespace Phototesting.PlateBox
             try
             {
                 ITexPositionSource source = _capi.Tesselator.GetTextureSource(_owner.Block);
-                TextureAtlasPosition texPos = source["plate"];
+                TextureAtlasPosition? texPos = source["plate"];
                 if (texPos == null || texPos == _capi.BlockTextureAtlas.UnknownTexturePosition) return false;
 
                 MeshData mesh = CubeMeshUtil.GetCube();

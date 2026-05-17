@@ -38,11 +38,11 @@ namespace Phototesting.PlateLifecycle.Tray
                         return _photoTex;
                     }
 
-                    return _baseSource[textureCode];
+                    return _baseSource[textureCode]!;
                 }
             }
 
-            public Size2i AtlasSize => _baseSource.AtlasSize;
+            public Size2i AtlasSize => _baseSource.AtlasSize!;
         }
 
         private readonly object _clientMeshLock = new();

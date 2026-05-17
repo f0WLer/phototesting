@@ -28,7 +28,7 @@ namespace Phototesting.Frame
             BlockEntityFrame? be = world.BlockAccessor.GetBlockEntity(pos) as BlockEntityFrame;
             if (be != null && be.Inventory != null && !be.Inventory[0].Empty)
             {
-                ItemStack stored = be.Inventory[0].Itemstack.Clone();
+                ItemStack stored = be.Inventory[0].Itemstack!.Clone();
                 world.SpawnItemEntity(stored, pos.ToVec3d().Add(0.5, 0.5, 0.5));
                 be.Inventory[0].TakeOutWhole();
             }
@@ -42,7 +42,7 @@ namespace Phototesting.Frame
             BlockEntityFrame? be = world.BlockAccessor.GetBlockEntity(pos) as BlockEntityFrame;
             if (be == null || be.Inventory == null || be.Inventory[0].Empty) return baseInfo;
 
-            ItemStack stack = be.Inventory[0].Itemstack;
+            ItemStack stack = be.Inventory[0].Itemstack!;
             string caption = stack.Attributes?.GetString(PhotographAttrs.Caption) ?? string.Empty;
             string label = string.IsNullOrEmpty(caption) ? "Photograph" : caption;
             string line = $"Displaying: {label}";

@@ -23,7 +23,7 @@ namespace Phototesting.PlateLifecycle.GroundPlate
             BlockPos placePos = blockSel.Position.UpCopy();
             IWorldAccessor world = api.World;
 
-            Block plateBlock = world.GetBlock(new AssetLocation("phototesting", $"plate-{plateBlockState}"));
+            Block? plateBlock = world.GetBlock(new AssetLocation("phototesting", $"plate-{plateBlockState}"));
             if (plateBlock == null) return;
 
             Block existing = world.BlockAccessor.GetBlock(placePos);

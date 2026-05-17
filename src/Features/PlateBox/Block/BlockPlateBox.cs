@@ -131,7 +131,7 @@ namespace Phototesting.PlateBox
         {
             // Choose a facing so the box's open side faces toward the player.
             string? currentFacing = Variant?["facing"];
-            BlockFacing playerFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.SidedPos?.Yaw ?? 0f);
+            BlockFacing playerFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.Pos?.Yaw ?? 0f);
             string desiredFacing = playerFacing.Opposite.Code;
 
             // If already the right variant (or no facing variant), place directly.
