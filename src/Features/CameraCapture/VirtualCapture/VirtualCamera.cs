@@ -1,5 +1,8 @@
+using System;
+using HarmonyLib;
 using OpenTK.Graphics.OpenGL;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Util;
 using Vintagestory.Client;
@@ -7,10 +10,62 @@ using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture
 {
+    // Complete pose/config snapshot for handing a virtual camera between preview,
+    // exposure, and one-shot capture code without losing dimension or self-portrait state.
+    internal readonly struct VirtualCameraState
+    {
+        internal readonly Vec3d Position;
+        internal readonly float Yaw;
+        internal readonly float Pitch;
+        internal readonly float Fov;
+        internal readonly int Dimension;
+        internal readonly bool SelfPortrait;
+
+        internal VirtualCameraState(Vec3d position, float yaw, float pitch, float fov, int dimension, bool selfPortrait = false)
+        {
+            Position = position.Clone();
+            Yaw = yaw;
+            Pitch = pitch;
+            Fov = fov;
+            Dimension = dimension;
+            SelfPortrait = selfPortrait;
+        }
+    }
+
     // Off-screen virtual camera backed by a dedicated OpenGL FBO.
-    // Adapted from CamerasLib (Moby_). Oblique projection removed; FBO setup and render pipeline unchanged.
+    // Adapted from CamerasLib (Moby_) - Oblique projection removed, FBO setup and render pipeline unchanged.
     internal sealed class VirtualCamera
     {
+        private readonly struct SavedMainCameraState
+        {
+            internal readonly double Yaw;
+            internal readonly double Pitch;
+            internal readonly double Roll;
+            internal readonly Vec3d CamSourcePos;
+            internal readonly Vec3d OriginPos;
+            internal readonly Vec3d EntityCameraPos;
+            internal readonly Vec3f PlayerPos;
+            internal readonly Vec3f PlayerPosForFoam;
+            internal readonly Vec3d? PlayerReferencePos;
+            internal readonly Vec3d? PlayerReferencePosForFoam;
+            internal readonly bool PlayerWasRendered;
+
+            internal SavedMainCameraState(PlayerCamera camera, EntityPlayer player, DefaultShaderUniforms shUniforms)
+            {
+                Yaw = camera.Yaw;
+                Pitch = camera.Pitch;
+                Roll = camera.Roll;
+                CamSourcePos = camera.CamSourcePosition.Clone();
+                OriginPos = camera.OriginPosition.Clone();
+                EntityCameraPos = player.CameraPos.Clone();
+                PlayerPos = shUniforms.PlayerPos.Clone();
+                PlayerPosForFoam = shUniforms.PlayerPosForFoam.Clone();
+                PlayerReferencePos = shUniforms.playerReferencePos?.Clone();
+                PlayerReferencePosForFoam = shUniforms.playerReferencePosForFoam?.Clone();
+                PlayerWasRendered = player.IsRendered;
+            }
+        }
+
         private readonly ICoreClientAPI _capi;
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
@@ -20,13 +75,24 @@ namespace Phototesting.CameraCapture
         public float Yaw = 0f;
         public float Roll = 0f;
 
-        public float ZNear = 0f;
-        public float ZFar = 0f;
         public float Fov = 0f;
+
+        // Render the local player's full third-person model from this virtual viewpoint.
+        public bool SelfPortrait = false;
 
         public int Dimension = 0;
 
         public FrameBufferRef fbo = null!; // Assigned by InitBuffer() before first use
+
+        private const string CameraModeFieldName = "CameraMode";
+        private const string RendererRenderModeFieldName = "renderMode";
+        private const string ChunkRendererFieldName = "chunkRenderer";
+        private const string ChunkRendererBeforeMethodName = "OnRenderBefore";
+        private const int GlClampToBorder = 33069;
+
+        // Cached GameContent enum value used to force the local player renderer out of first-person arms mode.
+        private static Type? _renderModeType;
+        private static object? _renderModeThirdPerson;
 
         internal VirtualCamera(ICoreClientAPI api, ClientPlatformWindows platform, ClientMain main)
         {
@@ -37,86 +103,103 @@ namespace Phototesting.CameraCapture
 
         internal void Destroy()
         {
-            _platform.DisposeFrameBuffer(fbo);
+            if (fbo != null)
+            {
+                _capi.Render.DestroyFrameBuffer(fbo);
+            }
+        }
+
+        internal void ApplyState(VirtualCameraState state)
+        {
+            CameraPos = state.Position.Clone();
+            Yaw = state.Yaw;
+            Pitch = state.Pitch;
+            Fov = state.Fov;
+            Dimension = state.Dimension;
+            SelfPortrait = state.SelfPortrait;
+        }
+
+        internal VirtualCameraState GetState()
+            => new VirtualCameraState(CameraPos, Yaw, Pitch, Fov, Dimension, SelfPortrait);
+
+        internal void RenderCameraInStoredDimension(float dt)
+        {
+            int savedDimension = _capi.World.Player.Entity.Pos.Dimension;
+            try
+            {
+                _capi.World.Player.Entity.Pos.Dimension = Dimension;
+                RenderCamera(dt);
+            }
+            finally
+            {
+                _capi.World.Player.Entity.Pos.Dimension = savedDimension;
+            }
         }
 
         internal void InitBuffer()
         {
-            fbo = new FrameBufferRef
-            {
-                FboId = GL.GenFramebuffer(),
-                Width = _capi.Render.FrameWidth,
-                Height = _capi.Render.FrameHeight,
-                DepthTextureId = GL.GenTexture()
-            };
-
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.FboId);
-
-            // Depth.
-            GL.BindTexture(TextureTarget.Texture2D, fbo.DepthTextureId);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.DepthComponent32, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.DepthComponent, PixelType.Float, IntPtr.Zero);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9728);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9728);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, 33071);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, 33071);
-            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment, TextureTarget.Texture2D, fbo.DepthTextureId, 0);
-            GL.DepthFunc(DepthFunction.Less);
-
+            int width = _capi.Render.FrameWidth;
+            int height = _capi.Render.FrameHeight;
             bool setupSsao = ClientSettings.SSAOQuality > 0;
 
-            // Color 1.
-            fbo.ColorTextureIds = ArrayUtil.CreateFilled(setupSsao ? 4 : 2, (int n) => GL.GenTexture());
-            GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[0]);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.UnsignedShort, IntPtr.Zero);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9728);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9728);
-            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, fbo.ColorTextureIds[0], 0);
-
-            // Color 2.
-            GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[1]);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.UnsignedByte, IntPtr.Zero);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9728);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9728);
-            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment1, TextureTarget.Texture2D, fbo.ColorTextureIds[1], 0);
+            var attachments = new List<FramebufferAttrsAttachment>
+            {
+                Attachment(EnumFramebufferAttachment.DepthAttachment, width, height, EnumTextureInternalFormat.DepthComponent32, EnumTexturePixelFormat.DepthComponent, EnumTextureFilter.Nearest),
+                Attachment(EnumFramebufferAttachment.ColorAttachment0, width, height, EnumTextureInternalFormat.Rgba8, EnumTexturePixelFormat.Rgba, EnumTextureFilter.Nearest),
+                Attachment(EnumFramebufferAttachment.ColorAttachment1, width, height, EnumTextureInternalFormat.Rgba8, EnumTexturePixelFormat.Rgba, EnumTextureFilter.Nearest)
+            };
 
             if (setupSsao)
             {
-                // Color 3 (normals): Rgba16f, matches primary FBO layout for SSAO.
-                GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[2]);
-                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba16f, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.Float, IntPtr.Zero);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9729);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9729);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, 33069);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, 33069);
-                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment2, TextureTarget.Texture2D, fbo.ColorTextureIds[2], 0);
+                attachments.Add(Attachment(EnumFramebufferAttachment.ColorAttachment2, width, height, EnumTextureInternalFormat.Rgba16f, EnumTexturePixelFormat.Rgba, EnumTextureFilter.Linear));
+                attachments.Add(Attachment(EnumFramebufferAttachment.ColorAttachment3, width, height, EnumTextureInternalFormat.Rgba16f, EnumTexturePixelFormat.Rgba, EnumTextureFilter.Linear));
 
-                // Color 4 (position): Rgba16f.
-                GL.BindTexture(TextureTarget.Texture2D, fbo.ColorTextureIds[3]);
-                GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba16f, _capi.Render.FrameWidth, _capi.Render.FrameHeight, 0, PixelFormat.Rgba, PixelType.Float, IntPtr.Zero);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, 9729);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, 9729);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, 33069);
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, 33069);
-                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment3, TextureTarget.Texture2D, fbo.ColorTextureIds[3], 0);
-
-                GL.DrawBuffers(4, new DrawBuffersEnum[] {
-                    DrawBuffersEnum.ColorAttachment0,
-                    DrawBuffersEnum.ColorAttachment1,
-                    DrawBuffersEnum.ColorAttachment2,
-                    DrawBuffersEnum.ColorAttachment3
-                });
             }
-            else
+
+            fbo = _capi.Render.CreateFrameBuffer(new FramebufferAttrs("phototesting-virtual-camera", width, height)
             {
-                GL.DrawBuffers(2, new DrawBuffersEnum[] {
-                    DrawBuffersEnum.ColorAttachment0,
-                    DrawBuffersEnum.ColorAttachment1
-                });
+                Attachments = attachments.ToArray()
+            });
+
+            if (setupSsao)
+            {
+                ApplySsaoAttachmentParameters(fbo.ColorTextureIds[2]);
+                ApplySsaoAttachmentParameters(fbo.ColorTextureIds[3]);
             }
 
             _platform.LoadFrameBuffer((ShaderProgramBase.CurrentShaderProgram?.PassName == "gui") ? EnumFrameBuffer.Default : EnumFrameBuffer.Primary);
+        }
+
+        private static FramebufferAttrsAttachment Attachment(
+            EnumFramebufferAttachment attachmentType,
+            int width,
+            int height,
+            EnumTextureInternalFormat internalFormat,
+            EnumTexturePixelFormat pixelFormat,
+            EnumTextureFilter filter)
+        {
+            return new FramebufferAttrsAttachment
+            {
+                AttachmentType = attachmentType,
+                Texture = new RawTexture
+                {
+                    Width = width,
+                    Height = height,
+                    PixelInternalFormat = internalFormat,
+                    PixelFormat = pixelFormat,
+                    MinFilter = filter,
+                    MagFilter = filter
+                }
+            };
+        }
+
+        private static void ApplySsaoAttachmentParameters(int textureId)
+        {
+            GL.BindTexture(TextureTarget.Texture2D, textureId);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, GlClampToBorder);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, GlClampToBorder);
+            GL.BindTexture(TextureTarget.Texture2D, 0);
         }
 
         private void SyncPerspectiveState(BlockPos frustumPos)
@@ -136,49 +219,54 @@ namespace Phototesting.CameraCapture
             _main.frustumCuller.CalcFrustumEquations(frustumPos, projectionMatrix, modelViewMatrix);
         }
 
-        private void RestoreMainCamera(
-            PlayerCamera camera,
-            double savedYaw,
-            double savedPitch,
-            double savedRoll,
-            Vec3d savedCamSourcePos,
-            Vec3d savedOriginPos,
-            Vec3d savedEntityCameraPos,
-            DefaultShaderUniforms shUniforms,
-            float savedPlayerPosX,
-            float savedPlayerPosY,
-            float savedPlayerPosZ)
+        private void RestoreMainCamera(PlayerCamera camera, DefaultShaderUniforms shUniforms, SavedMainCameraState savedState)
         {
-            _capi.World.Player.Entity.CameraPos.Set(savedEntityCameraPos);
-            camera.CamSourcePosition.Set(savedCamSourcePos);
-            camera.OriginPosition.Set(savedOriginPos);
-            camera.Yaw = savedYaw;
-            camera.Pitch = savedPitch;
-            camera.Roll = savedRoll;
+            _capi.World.Player.Entity.CameraPos.Set(savedState.EntityCameraPos);
+            camera.CamSourcePosition.Set(savedState.CamSourcePos);
+            camera.OriginPosition.Set(savedState.OriginPos);
+            camera.Yaw = savedState.Yaw;
+            camera.Pitch = savedState.Pitch;
+            camera.Roll = savedState.Roll;
             camera.Update(float.Epsilon, _main.interesectionTester);
 
             _main.Reset3DProjection();
-            SyncPerspectiveState(savedEntityCameraPos.AsBlockPos);
-            shUniforms.PlayerPos.Set(savedPlayerPosX, savedPlayerPosY, savedPlayerPosZ);
+            SyncPerspectiveState(savedState.EntityCameraPos.AsBlockPos);
+            shUniforms.PlayerPos.Set(savedState.PlayerPos);
+            shUniforms.PlayerPosForFoam.Set(savedState.PlayerPosForFoam);
+            shUniforms.playerReferencePos = savedState.PlayerReferencePos?.Clone();
+            shUniforms.playerReferencePosForFoam = savedState.PlayerReferencePosForFoam?.Clone();
         }
 
         internal void UpdateCamera()
         {
-            _capi.World.Player.Entity.CameraPos.Set(CameraPos);
             PlayerCamera camera = _main.MainCamera;
-            camera.CamSourcePosition.Set(CameraPos);
+
+            if (SelfPortrait)
+            {
+                // ThirdPerson GetCameraMatrix computes: camTarget = CamSourcePos + LocalEyePos.
+                // Subtract LocalEyePos so camTarget lands exactly at our virtual eye position.
+                Vec3d localEye = _capi.World.Player.Entity.LocalEyePos;
+                Vec3d camSource = new Vec3d(
+                    CameraPos.X - localEye.X,
+                    CameraPos.Y - localEye.Y,
+                    CameraPos.Z - localEye.Z);
+                _capi.World.Player.Entity.CameraPos.Set(camSource);
+                camera.CamSourcePosition.Set(camSource);
+            }
+            else
+            {
+                _capi.World.Player.Entity.CameraPos.Set(CameraPos);
+                camera.CamSourcePosition.Set(CameraPos);
+            }
+
             camera.OriginPosition.Set(0, 0, 0);
 
             camera.Yaw = this.Yaw;
             camera.Pitch = this.Pitch;
             camera.Roll = this.Roll;
 
-            float oldZNear = camera.ZNear;
-            float oldZFar = camera.ZFar;
             float oldFov = camera.Fov;
 
-            if (ZNear != 0) camera.ZNear = ZNear;
-            if (ZFar != 0) camera.ZFar = ZFar;
             if (Fov != 0) camera.Fov = Fov;
 
             camera.Update(float.Epsilon, _main.interesectionTester);
@@ -195,15 +283,28 @@ namespace Phototesting.CameraCapture
                 shUniforms.playerReferencePos.Set((float)CameraPos.X, 0.0, (float)CameraPos.Z);
             }
 
+            if (shUniforms.playerReferencePosForFoam == null)
+            {
+                shUniforms.playerReferencePosForFoam = new Vec3d(_main.BlockAccessor.MapSizeX / 2, 0.0, _main.BlockAccessor.MapSizeZ / 2);
+            }
+
+            if ((double)shUniforms.playerReferencePosForFoam.HorizontalSquareDistanceTo(CameraPos.X, CameraPos.Z) > 40000.0)
+            {
+                shUniforms.playerReferencePosForFoam.Set((float)CameraPos.X, 0.0, (float)CameraPos.Z);
+            }
+
             shUniforms.PlayerPos.Set(
                 (float)(CameraPos.X - shUniforms.playerReferencePos.X),
                 (float)(CameraPos.Y - shUniforms.playerReferencePos.Y),
                 (float)(CameraPos.Z - shUniforms.playerReferencePos.Z));
 
+            shUniforms.PlayerPosForFoam.Set(
+                (float)(CameraPos.X - shUniforms.playerReferencePosForFoam.X),
+                (float)(CameraPos.Y - shUniforms.playerReferencePosForFoam.Y),
+                (float)(CameraPos.Z - shUniforms.playerReferencePosForFoam.Z));
+
             SyncPerspectiveState(CameraPos.AsBlockPos);
 
-            camera.ZNear = oldZNear;
-            camera.ZFar = oldZFar;
             camera.Fov = oldFov;
         }
 
@@ -211,36 +312,57 @@ namespace Phototesting.CameraCapture
         {
             FrameBufferRef currentFbo = _platform.CurrentFrameBuffer;
             FrameBufferRef primaryFbo = _platform.FrameBuffers[0];
+            FrameBufferRef transparentFbo = _platform.FrameBuffers[(int)EnumFrameBuffer.Transparent];
 
             // Save the main camera state that UpdateCamera() overwrites.
-            // Restored at the end so all remaining Before-stage renderers (e.g. SystemRenderTerrain
-            // at RenderOrder 0.995) and the main render loop see the player's camera matrices.
             PlayerCamera camera = _main.MainCamera;
-            double savedYaw = camera.Yaw;
-            double savedPitch = camera.Pitch;
-            double savedRoll = camera.Roll;
-            Vec3d savedCamSourcePos = camera.CamSourcePosition.Clone();
-            Vec3d savedOriginPos = camera.OriginPosition.Clone();
-            Vec3d savedEntityCameraPos = _capi.World.Player.Entity.CameraPos.Clone();
             DefaultShaderUniforms shUniforms = _capi.Render.ShaderUniforms;
-            float savedPlayerPosX = shUniforms.PlayerPos.X;
-            float savedPlayerPosY = shUniforms.PlayerPos.Y;
-            float savedPlayerPosZ = shUniforms.PlayerPos.Z;
-            bool playerWasRendered = _capi.World.Player.Entity.IsRendered;
+            SavedMainCameraState saved = new SavedMainCameraState(camera, _capi.World.Player.Entity, shUniforms);
+
+            bool transparentDepthAttachedToVirtual = false;
+            bool selfPortrait = SelfPortrait;
+
+            // Self-portrait renders borrow the main camera object for one off-screen pass.
+            int savedTppMin = camera.TppCameraDistanceMin;
+            int savedTppMax = camera.TppCameraDistanceMax;
+            float savedTppDist = camera.Tppcameradistance;
+            EnumCameraMode savedCameraMode = GetCameraMode(camera);
+            ClientPlayer? localPlayer = _capi.World.Player as ClientPlayer;
+            EnumCameraMode? savedOverrideCameraMode = localPlayer?.OverrideCameraMode;
+            Traverse? renderModeTraverse = selfPortrait ? TryGetRendererRenderModeField() : null;
+            object? savedRenderMode = renderModeTraverse?.GetValue();
 
             _main.PerspectiveMode();
 
             try
             {
-                UpdateCamera();
-                _main.Reset3DProjection();
+                if (selfPortrait)
+                {
+                    // ThirdPerson camera mode keeps animations on the body skeleton.
+                    SetCameraMode(camera, EnumCameraMode.ThirdPerson);
+                    if (localPlayer != null) localPlayer.OverrideCameraMode = null;
+                    camera.TppCameraDistanceMin = 0;
+                    camera.TppCameraDistanceMax = 0;
+                    camera.Tppcameradistance = 0f;
 
+                    if (renderModeTraverse != null)
+                    {
+                        object? tp = GetRenderModeThirdPerson(savedRenderMode);
+                        if (tp != null) renderModeTraverse.SetValue(tp);
+                    }
+                }
+
+                UpdateCamera();
+
+                // Apply player visibility and self-portrait matrix correction before any render
+                // stages run so shadow maps and the main opaque pass both see the same setup.
+                _capi.World.Player.Entity.IsRendered = selfPortrait;
+                VirtualCameraSelfPortraitContext.Active = selfPortrait;
+
+                _main.Reset3DProjection();
                 GL.Enable(EnableCap.DepthTest);
 
                 // Rebuild shadow maps for the virtual camera's view frustum.
-                // Without this, the cascade coverage is computed from the player's current heading
-                // each frame, producing hard-edged dark regions in the virtual camera view when
-                // the player is looking a different direction.
                 if (_main.AmbientManager.ShadowQuality > 0)
                 {
                     _main.TriggerRenderStage(EnumRenderStage.ShadowFar, dt);
@@ -252,39 +374,29 @@ namespace Phototesting.CameraCapture
                     }
                 }
 
-                // Shadow stages use their own MVP and can modify the GL modelview matrix.
-                // Re-establish the virtual camera matrices before the opaque pass, mirroring
-                // what the main render loop does after its shadow stages.
+                // Shadow stages overwrite the GL modelview matrix; re-establish the virtual camera matrices.
                 SyncPerspectiveState(CameraPos.AsBlockPos);
 
                 // ShadowDone restores GL to the screen FBO; redirect back to our virtual FBO.
                 _platform.CurrentFrameBuffer = fbo;
                 _platform.FrameBuffers[0] = fbo;
 
+                // Rebuild the water-depth buffer for the virtual view.
+                InvokeChunkRendererBefore(dt);
+
                 GL.ClipPlane(ClipPlaneName.ClipDistance0, new double[] { 0d, 1d, 0d, 5d });
                 GL.Enable(EnableCap.ClipDistance0);
-
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-                // Clear stale screen-space water data left by the previous frame's main camera.
-                // Without this, the opaque shader reads player-view liquid depth positions that
-                // don't correspond to the virtual camera's frustum, producing a dark mask artifact
-                // wherever the main view has water surface. SystemRenderTerrain.OnRenderBefore
-                // (RenderOrder 0.995) will repopulate this FBO for the main camera after we return.
-                _platform.LoadFrameBuffer(EnumFrameBuffer.LiquidDepth);
-                _platform.ClearFrameBuffer(EnumFrameBuffer.LiquidDepth);
-                _platform.UnloadFrameBuffer(EnumFrameBuffer.LiquidDepth);
-
-                // Disable player rendering so the virtual camera doesn't capture the player's model in its view.
-                _capi.World.Player.Entity.IsRendered = false;
-
-                // Ensure depth writes are enabled for the opaque pass.
                 _platform.GlDepthMask(true);
                 _main.TriggerRenderStage(EnumRenderStage.Opaque, dt);
 
                 if (_main.doTransparentRenderPass)
                 {
+                    // OIT/water depth attachment is hardwired to the main primary depth at startup;
+                    // rebind it to our virtual depth so transparents sort against the virtual scene.
                     ScreenManager.FrameProfiler.Mark("rendTransp-begin");
+                    ReattachTransparentDepth(transparentFbo, fbo.DepthTextureId);
+                    transparentDepthAttachedToVirtual = true;
                     _platform.LoadFrameBuffer(EnumFrameBuffer.Transparent);
                     ScreenManager.FrameProfiler.Mark("rendTransp-fbloaded");
                     _platform.ClearFrameBuffer(EnumFrameBuffer.Transparent);
@@ -311,28 +423,88 @@ namespace Phototesting.CameraCapture
             }
             finally
             {
-                _capi.World.Player.Entity.IsRendered = playerWasRendered;
+                if (transparentDepthAttachedToVirtual)
+                {
+                    ReattachTransparentDepth(transparentFbo, primaryFbo.DepthTextureId);
+                }
 
-                // Restore the main camera so all remaining Before-stage renderers and the main
-                // render loop see the player's camera matrices, not the virtual camera's.
-                RestoreMainCamera(
-                    camera,
-                    savedYaw,
-                    savedPitch,
-                    savedRoll,
-                    savedCamSourcePos,
-                    savedOriginPos,
-                    savedEntityCameraPos,
-                    shUniforms,
-                    savedPlayerPosX,
-                    savedPlayerPosY,
-                    savedPlayerPosZ);
+                VirtualCameraSelfPortraitContext.Active = false;
+                _capi.World.Player.Entity.IsRendered = saved.PlayerWasRendered;
+
+                if (selfPortrait)
+                {
+                    SetCameraMode(camera, savedCameraMode);
+                    if (localPlayer != null) localPlayer.OverrideCameraMode = savedOverrideCameraMode;
+                    camera.TppCameraDistanceMin = savedTppMin;
+                    camera.TppCameraDistanceMax = savedTppMax;
+                    camera.Tppcameradistance = savedTppDist;
+
+                    if (renderModeTraverse != null && savedRenderMode != null)
+                    {
+                        renderModeTraverse.SetValue(savedRenderMode);
+                    }
+                }
+
+                RestoreMainCamera(camera, shUniforms, saved);
 
                 GL.Disable(EnableCap.ClipDistance0);
                 GL.Disable(EnableCap.DepthTest);
                 _platform.FrameBuffers[0] = primaryFbo;
                 _platform.CurrentFrameBuffer = currentFbo;
             }
+        }
+
+        private static EnumCameraMode GetCameraMode(PlayerCamera camera)
+            => Traverse.Create(camera).Field<EnumCameraMode>(CameraModeFieldName).Value;
+
+        private static void SetCameraMode(PlayerCamera camera, EnumCameraMode mode)
+            => Traverse.Create(camera).Field(CameraModeFieldName).SetValue(mode);
+
+        private Traverse? TryGetRendererRenderModeField()
+        {
+            object? renderer = _capi.World.Player.Entity.Properties.Client?.Renderer;
+            if (renderer == null) return null;
+
+            Traverse field = Traverse.Create(renderer).Field(RendererRenderModeFieldName);
+            return field.FieldExists() ? field : null;
+        }
+
+        private void InvokeChunkRendererBefore(float dt)
+        {
+            Traverse chunkRenderer = Traverse.Create(_main).Field(ChunkRendererFieldName);
+            if (!chunkRenderer.FieldExists()) return;
+
+            chunkRenderer.Method(ChunkRendererBeforeMethodName, dt).GetValue();
+        }
+
+        private static void ReattachTransparentDepth(FrameBufferRef transparentFbo, int depthTextureId)
+        {
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, transparentFbo.FboId);
+            GL.FramebufferTexture2D(
+                FramebufferTarget.Framebuffer,
+                FramebufferAttachment.DepthAttachment,
+                TextureTarget.Texture2D,
+                depthTextureId,
+                0);
+        }
+
+        private static object? GetRenderModeThirdPerson(object? currentValue)
+        {
+            if (_renderModeThirdPerson != null) return _renderModeThirdPerson;
+
+            Type? t = _renderModeType ?? currentValue?.GetType() ?? AccessTools.TypeByName("Vintagestory.GameContent.RenderMode");
+            if (t == null || !t.IsEnum) return null;
+            _renderModeType = t;
+
+            try
+            {
+                _renderModeThirdPerson = Enum.Parse(t, "ThirdPerson");
+            }
+            catch
+            {
+                return null;
+            }
+            return _renderModeThirdPerson;
         }
     }
 }

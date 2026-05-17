@@ -1,3 +1,4 @@
+using HarmonyLib;
 using Phototesting.AdminTooling;
 using Phototesting.CameraCapture.Contracts;
 using Phototesting.CameraCapture.Exposure;
@@ -20,12 +21,30 @@ namespace Phototesting.CameraCapture
         internal VirtualCameraPreviewRenderer? _virtualCameraPreviewRenderer;
         internal VirtualExposureRenderer? _virtualExposureRenderer;
 
+        // Harmony instance that owns the self-portrait model-matrix postfix.
+        // Applied once during client startup, removed on disposal.
+        private Harmony? _selfPortraitHarmony;
+
         // Composes full client-side camera-capture startup behind one feature bootstrap entrypoint.
         internal void ConfigureClientCameraCaptureStartup(ICoreClientAPI api)
         {
             ConfigureClientCameraCaptureChannelHandlers();
             ConfigureClientCameraCaptureRenderers(api);
             ConfigureClientCameraCaptureInputAndProjection(api);
+
+            // Patch EntityPlayerShapeRenderer to fix the self-portrait model-matrix offset.
+            // EntityPlayerShapeRenderer lives in VSEssentials.dll which is a game content mod,
+            // not directly referenceable at compile time — use AccessTools.TypeByName.
+            // If the type is unavailable (extreme edge case), self-portrait silently degrades.
+            _selfPortraitHarmony = new Harmony("phototesting.selfportrait");
+            System.Type? playerShapeRendererType =
+                AccessTools.TypeByName("Vintagestory.GameContent.EntityPlayerShapeRenderer");
+            if (playerShapeRendererType != null)
+            {
+                _selfPortraitHarmony.Patch(
+                    AccessTools.Method(playerShapeRendererType, "loadModelMatrixForPlayer"),
+                    postfix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "Postfix"));
+            }
         }
 
         // Registers client camera-capture packet handlers on the existing phototesting channel.
@@ -170,6 +189,13 @@ namespace Phototesting.CameraCapture
             }
 
             BestEffort.Try(BestEffortLogger, "dispose virtual capture service", () => _virtualCaptureService?.Dispose());
+
+            // Remove the self-portrait Harmony patch so it doesn't linger across hot-reloads or mod unloads.
+            BestEffort.Try(BestEffortLogger, "unpatch self-portrait harmony", () =>
+            {
+                _selfPortraitHarmony?.UnpatchAll("phototesting.selfportrait");
+                _selfPortraitHarmony = null;
+            });
         }
 
         // Unregisters camera-capture client tick listeners created during startup.
