@@ -31,6 +31,8 @@ namespace Phototesting.CameraCapture.Exposure
 
         private VirtualCamera? _camera;
         private ExposureAccumulationBuffer? _buffer;
+        private ExposureReadbackPipeline? _readback;
+        private byte[]? _readbackScratch;
         private PlateProcessProfile _process = PlateProcessProfile.Iodide;
         private float _elapsedSinceLastSample;
         private float _elapsedSinceLastPreview;
@@ -117,7 +119,8 @@ namespace Phototesting.CameraCapture.Exposure
             cam.InitBuffer();
             _camera = cam;
 
-            AllocateBufferForCurrentFrameSize();
+            _readback = new ExposureReadbackPipeline(_capi);
+            AllocateBufferAndReadback();
             PreviewSink?.BeginExposurePassthrough();
             State = ExposureState.Capturing;
         }
@@ -146,9 +149,11 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         // Closes the shutter, stops the camera, and leaves the buffer ready for export.
+        // Drains any in-flight PBOs first so no accumulated samples are lost.
         // The accumulated image is preserved. Call Discard() to also clear the buffer.
         internal void Stop()
         {
+            DrainReadbackPipeline();
             StopCamera();
             State = ExposureState.Done;
         }
@@ -157,6 +162,9 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Discard()
         {
             StopCamera();
+            _readback?.Dispose();
+            _readback = null;
+            _readbackScratch = null;
             _buffer = null;
             _shutterStartMs = 0;
             _shutterEndMs   = 0;
@@ -169,6 +177,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Reset()
         {
             if (_buffer == null || _camera == null) return;
+            _readback?.ResetRing();
             _buffer.Reset();
             _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
@@ -253,14 +262,14 @@ namespace Phototesting.CameraCapture.Exposure
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing) return;
-            if (_camera == null || _buffer == null) return;
+            if (_camera == null || _buffer == null || _readback == null) return;
 
             // Always advance both timers so preview cadence and sample interval track real time
             // independently of each other and of the game's frame rate.
             _elapsedSinceLastSample  += deltaTime;
             _elapsedSinceLastPreview += deltaTime;
 
-            // Reinitialize FBO and reset the buffer if the window was resized between frames.
+            // Reinitialize FBO and reset the readback pipeline if the window was resized.
             // Mixed-dimension frames cannot be averaged so accumulated data must be discarded.
             if (_capi.Render.FrameWidth != _camera.fbo.Width || _capi.Render.FrameHeight != _camera.fbo.Height)
             {
@@ -269,9 +278,11 @@ namespace Phototesting.CameraCapture.Exposure
             }
 
             // Wall-clock shutter close: shutter has been open long enough.
+            // Drain in-flight PBOs first so no samples from the last two kicks are lost.
             long nowMs = _capi.ElapsedMilliseconds;
             if (nowMs >= _shutterEndMs)
             {
+                DrainReadbackPipeline();
                 State = ExposureState.Done;
                 PushPreviewFrame();
                 _capi.Logger.Notification(
@@ -292,8 +303,22 @@ namespace Phototesting.CameraCapture.Exposure
                 // Clear the primary framebuffer that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-                using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
-                _buffer.Accumulate(raw);
+                // Resolve the max readback dimension from config (hot-reload safe).
+                int maxDim = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
+                             ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+
+                // Resize the readback pipeline if config or source changed; reallocate the buffer.
+                if (_readback.EnsureAllocated(_camera.fbo.Width, _camera.fbo.Height, maxDim))
+                {
+                    ReallocateAccumulationBuffer();
+                    _capi.Logger.Warning("Phototesting: readback dimensions changed during exposure — accumulated frames discarded.");
+                }
+
+                EnsureScratch(_readback.Width * _readback.Height * 4);
+
+                // Kick async blit+readback into PBO, collect from the PBO written two kicks ago.
+                if (_readback.KickAndCollect(_camera.fbo, _readbackScratch!))
+                    _buffer.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
             }
             catch (Exception ex)
             {
@@ -319,10 +344,25 @@ namespace Phototesting.CameraCapture.Exposure
             _camera = null;
         }
 
-        private void AllocateBufferForCurrentFrameSize()
+        // Ensures the readback pipeline is allocated at the current frame size, then allocates
+        // the accumulation buffer to match the (possibly downsampled) readback dimensions.
+        private void AllocateBufferAndReadback()
         {
-            _buffer = new ExposureAccumulationBuffer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, _process.SampleCount);
+            int sourceW = _capi.Render.FrameWidth;
+            int sourceH = _capi.Render.FrameHeight;
+            int maxDim  = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
+                          ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+
+            _readback!.EnsureAllocated(sourceW, sourceH, maxDim);
+            ReallocateAccumulationBuffer();
+            EnsureScratch(_readback.Width * _readback.Height * 4);
+        }
+
+        private void ReallocateAccumulationBuffer()
+        {
+            _buffer = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
             ApplyPhysicsToBuffer(_buffer);
+            _buffer.NormalizeByActualFrameCount = true;
             _buffer.RedSensitivity      = _process.RedSensitivity;
             _buffer.GreenSensitivity    = _process.GreenSensitivity;
             _buffer.BlueSensitivity     = _process.BlueSensitivity;
@@ -330,13 +370,34 @@ namespace Phototesting.CameraCapture.Exposure
             _buffer.HDGamma             = _process.HDGamma;
         }
 
+        private void EnsureScratch(int minBytes)
+        {
+            if (_readbackScratch == null || _readbackScratch.Length < minBytes)
+                _readbackScratch = new byte[minBytes];
+        }
+
+        // Drains any still-pending PBOs from the readback ring and accumulates them.
+        // Called before closing the shutter (wall-clock expiry or Stop()) to avoid losing
+        // the last 1–2 samples that are in-flight in the GPU.
+        private void DrainReadbackPipeline()
+        {
+            if (_readback == null || _buffer == null) return;
+            EnsureScratch(_readback.Width * _readback.Height * 4);
+            foreach (byte[] frame in _readback.DrainPending(_readbackScratch!))
+                _buffer.Accumulate(frame, _readback.Width, _readback.Height);
+        }
+
         private void ReinitializeCameraAndBufferForResize()
         {
             if (_camera == null) return;
 
+            // Drain in-flight PBOs before discarding the accumulation data.
+            DrainReadbackPipeline();
+            _readback?.ResetRing();
+
             _camera.Destroy();
             _camera.InitBuffer();
-            AllocateBufferForCurrentFrameSize();
+            AllocateBufferAndReadback();
         }
 
         public void Dispose()

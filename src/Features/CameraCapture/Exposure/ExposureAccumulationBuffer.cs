@@ -57,6 +57,11 @@ namespace Phototesting.CameraCapture.Exposure
         public float DevelopmentStrength = 8.0f;
         public float HDGamma             = 1.1f;
 
+        // When true, Develop() normalises by the actual accumulated frame count rather than the
+        // reference count. Use when wall-clock duration controls shutter close (not sample count),
+        // so developed brightness is independent of how many samples actually arrived.
+        public bool NormalizeByActualFrameCount = false;
+
         internal int FramesAccumulated => _frameCount;
         internal int Width  => _width;
         internal int Height => _height;
@@ -94,31 +99,43 @@ namespace Phototesting.CameraCapture.Exposure
             try
             {
                 Marshal.Copy(frame.GetPixels(), bytes, 0, byteCount);
-
-                if (LinearizeInput)
-                {
-                    for (int i = 0; i < pixelCount; i++)
-                    {
-                        int b = i * 4;
-                        _sumB[i] += SRgbToLinear[bytes[b + 0]];
-                        _sumG[i] += SRgbToLinear[bytes[b + 1]];
-                        _sumR[i] += SRgbToLinear[bytes[b + 2]];
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < pixelCount; i++)
-                    {
-                        int b = i * 4;
-                        _sumB[i] += bytes[b + 0] / 255f;
-                        _sumG[i] += bytes[b + 1] / 255f;
-                        _sumR[i] += bytes[b + 2] / 255f;
-                    }
-                }
+                AccumulateBytes(bytes, pixelCount);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(bytes);
+            }
+        }
+
+        // Accumulates a BGRA8888 byte array that is already top-left-origin (e.g. from the GPU
+        // downsample blit path). Dimensions must match Width x Height or the call is ignored.
+        internal void Accumulate(byte[] bgra, int width, int height)
+        {
+            if (width != _width || height != _height) return;
+            AccumulateBytes(bgra, width * height);
+        }
+
+        private void AccumulateBytes(byte[] bytes, int pixelCount)
+        {
+            if (LinearizeInput)
+            {
+                for (int i = 0; i < pixelCount; i++)
+                {
+                    int b = i * 4;
+                    _sumB[i] += SRgbToLinear[bytes[b + 0]];
+                    _sumG[i] += SRgbToLinear[bytes[b + 1]];
+                    _sumR[i] += SRgbToLinear[bytes[b + 2]];
+                }
+            }
+            else
+            {
+                for (int i = 0; i < pixelCount; i++)
+                {
+                    int b = i * 4;
+                    _sumB[i] += bytes[b + 0] / 255f;
+                    _sumG[i] += bytes[b + 1] / 255f;
+                    _sumR[i] += bytes[b + 2] / 255f;
+                }
             }
 
             _frameCount++;
@@ -145,7 +162,9 @@ namespace Phototesting.CameraCapture.Exposure
             byte[] bytes   = ArrayPool<byte>.Shared.Rent(byteCount);
             try
             {
-                float invRef = 1f / _referenceFrameCount;
+                float invRef = NormalizeByActualFrameCount
+                    ? 1f / Math.Max(_frameCount, 1)
+                    : 1f / _referenceFrameCount;
 
                 // Capture flags as locals to avoid repeated field reads in the hot loop.
                 bool spectral = ApplySpectralWeights;

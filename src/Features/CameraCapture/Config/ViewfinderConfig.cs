@@ -8,6 +8,10 @@ namespace Phototesting.CameraCapture
         public const int MaxPhotoCaptureMaxDimension = 2048;
         public const int DefaultPhotoCaptureMaxDimension = 640;
 
+        public const int MinExposureReadbackMaxDimension     = 128;
+        public const int MaxExposureReadbackMaxDimension     = 2048;
+        public const int DefaultExposureReadbackMaxDimension = 640;
+
         public float ZoomMultiplier = 0.65f;
         public float HoldStillDurationSeconds = 4f;
         public float HoldStillLookWeight = 0.35f;
@@ -17,6 +21,10 @@ namespace Phototesting.CameraCapture
         /// <summary>Timed exposure duration in seconds. 0 = instant exposure completion.</summary>
         public float ExposureDurationSeconds = 4f;
         public int PhotoCaptureMaxDimension = DefaultPhotoCaptureMaxDimension;
+
+        /// <summary>Max pixel size (longest side) of the downsampled readback buffer used during virtual exposure accumulation.
+        /// Lower values reduce per-sample readback cost at the expense of slight softness in exported plates.</summary>
+        public int ExposureReadbackMaxDimension = DefaultExposureReadbackMaxDimension;
 
         /// <summary>If true, shows a live viewfinder debug preview window with final wetplate effects applied (client-only).</summary>
         public bool DebugPreviewEnabled = false;
@@ -57,6 +65,9 @@ namespace Phototesting.CameraCapture
 
             if (PhotoCaptureMaxDimension < MinPhotoCaptureMaxDimension) PhotoCaptureMaxDimension = MinPhotoCaptureMaxDimension;
             if (PhotoCaptureMaxDimension > MaxPhotoCaptureMaxDimension) PhotoCaptureMaxDimension = MaxPhotoCaptureMaxDimension;
+
+            if (ExposureReadbackMaxDimension < MinExposureReadbackMaxDimension) ExposureReadbackMaxDimension = MinExposureReadbackMaxDimension;
+            if (ExposureReadbackMaxDimension > MaxExposureReadbackMaxDimension) ExposureReadbackMaxDimension = MaxExposureReadbackMaxDimension;
 
             if (DebugPreviewRefreshMs < 50) DebugPreviewRefreshMs = 50;
             if (DebugPreviewRefreshMs > 5000) DebugPreviewRefreshMs = 5000;
