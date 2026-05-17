@@ -283,7 +283,7 @@ void main() {
         private void AllocateGpuResources()
         {
             // Sample FBO: RGBA8, used as a staging area for each blit.
-            _sampleFbo = _capi.Render.CreateFrameBuffer(
+            _sampleFbo = ClientFramebufferCompat.Create(_capi,
                 new FramebufferAttrs("phototesting-gpu-accu-sample", Width, Height)
                 {
                     Attachments = new[]
@@ -305,7 +305,7 @@ void main() {
                 });
 
             // Develop FBO: RGBA8, receives the tone-mapped output for CPU readback.
-            _developFbo = _capi.Render.CreateFrameBuffer(
+            _developFbo = ClientFramebufferCompat.Create(_capi,
                 new FramebufferAttrs("phototesting-gpu-accu-develop", Width, Height)
                 {
                     Attachments = new[]
