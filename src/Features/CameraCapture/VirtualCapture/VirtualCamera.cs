@@ -403,7 +403,7 @@ namespace Phototesting.CameraCapture
                     RenderTransparentPass(dt, transparentFbo, fbo.DepthTextureId);
                 }
 
-                GL.Disable(EnableCap.ClipPlane0);
+                GL.Disable(EnableCap.ClipDistance0);
                 _platform.GlDepthMask(true);
                 _platform.GlEnableDepthTest();
                 _platform.GlCullFaceBack();
