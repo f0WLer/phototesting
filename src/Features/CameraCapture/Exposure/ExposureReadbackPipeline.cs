@@ -47,6 +47,14 @@ namespace Phototesting.CameraCapture.Exposure
 
         internal ExposureReadbackPipeline(ICoreClientAPI capi) { _capi = capi; }
 
+        internal static void ComputeTargetDimensions(int sourceW, int sourceH, int maxDim, out int width, out int height)
+        {
+            float scale = (float)maxDim / Math.Max(sourceW, sourceH);
+            scale = Math.Min(1f, scale);
+            width = Math.Max(1, (int)(sourceW * scale));
+            height = Math.Max(1, (int)(sourceH * scale));
+        }
+
         // Ensures the downsample FBO and PBO ring are sized for the given source and max-dim.
         // Returns true when the target dimensions changed (caller should reset the accumulation buffer).
         // Safe to call every sample — is a no-op when all three inputs are unchanged.
@@ -67,10 +75,9 @@ namespace Phototesting.CameraCapture.Exposure
             }
 
             // Compute target dimensions preserving aspect ratio, clamped to source size.
-            float scale = (float)maxDim / Math.Max(sourceW, sourceH);
-            scale  = Math.Min(1f, scale);
-            Width  = Math.Max(1, (int)(sourceW * scale));
-            Height = Math.Max(1, (int)(sourceH * scale));
+            ComputeTargetDimensions(sourceW, sourceH, maxDim, out int width, out int height);
+            Width = width;
+            Height = height;
 
             // Single colour attachment (RGBA8, linear filter for the bilinear downsample).
             _downsampleFbo = _capi.Render.CreateFrameBuffer(
