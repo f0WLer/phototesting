@@ -122,6 +122,7 @@ namespace Phototesting.CameraCapture.Exposure
             // Save current GL framebuffer bindings so we can restore them after.
             GL.GetInteger(GetPName.ReadFramebufferBinding, out int prevRead);
             GL.GetInteger(GetPName.DrawFramebufferBinding, out int prevDraw);
+            GL.GetInteger(GetPName.PixelPackBufferBinding, out int prevPbo);
 
             try
             {
@@ -168,7 +169,7 @@ namespace Phototesting.CameraCapture.Exposure
             }
             finally
             {
-                GL.BindBuffer(BufferTarget.PixelPackBuffer, 0);
+                GL.BindBuffer(BufferTarget.PixelPackBuffer, prevPbo);
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, prevRead);
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, prevDraw);
             }
