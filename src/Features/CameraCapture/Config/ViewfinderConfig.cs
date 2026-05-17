@@ -45,6 +45,13 @@ namespace Phototesting.CameraCapture
         /// <summary>Margin in pixels from the selected anchor edge.</summary>
         public int DebugPreviewMargin = 16;
 
+        /// <summary>
+        /// When true, exposure accumulation runs entirely on the GPU via ping-pong RGBA32F
+        /// framebuffers and custom GLSL shaders, eliminating the per-sample PBO readback stall.
+        /// Defaults to false (CPU float-array path) for compatibility.
+        /// </summary>
+        public bool UseGpuExposureAccumulator = false;
+
         // Clamps all viewfinder and preview tuning values to safe runtime ranges.
         internal void ClampInPlace()
         {

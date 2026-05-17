@@ -121,7 +121,6 @@ namespace Phototesting.CameraCapture.Exposure
             cam.InitBuffer();
             _camera = cam;
 
-            _readback = new ExposureReadbackPipeline(_capi);
             AllocateBufferAndReadback();
             PreviewSink?.BeginExposurePassthrough();
             State = ExposureState.Capturing;
@@ -167,6 +166,7 @@ namespace Phototesting.CameraCapture.Exposure
             _readback?.Dispose();
             _readback = null;
             _readbackScratch = null;
+            _buffer?.Dispose();
             _buffer = null;
             _shutterStartMs = 0;
             _shutterEndMs   = 0;
@@ -264,7 +264,8 @@ namespace Phototesting.CameraCapture.Exposure
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing) return;
-            if (_camera == null || _buffer == null || _readback == null) return;
+            if (_camera == null || _buffer == null) return;
+            if (_buffer is not IGpuExposureAccumulator && _readback == null) return;
 
             // Always advance both timers so preview cadence and sample interval track real time
             // independently of each other and of the game's frame rate.
@@ -305,24 +306,33 @@ namespace Phototesting.CameraCapture.Exposure
                 // Clear the primary framebuffer that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-                // Resolve the max readback dimension from config (hot-reload safe).
-                int maxDim = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
-                             ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
-
-                // Resize the readback pipeline if config or source changed; reallocate the buffer.
-                if (_readback.EnsureAllocated(_camera.fbo.Width, _camera.fbo.Height, maxDim))
+                if (_buffer is IGpuExposureAccumulator gpu)
                 {
-                    ReallocateAccumulationBuffer();
-                    _capi.Logger.Warning("Phototesting: readback dimensions changed during exposure — accumulated frames discarded.");
+                    // GPU path: accumulate directly from the camera FBO — no PBO readback needed.
+                    gpu.Accumulate(_camera.fbo);
                 }
-
-                EnsureScratch(_readback.Width * _readback.Height * 4);
-
-                // Kick async blit+readback into PBO, collect from the PBO written two kicks ago.
-                if (_readback.KickAndCollect(_camera.fbo, _readbackScratch!))
+                else
                 {
-                    if (_buffer is ICpuExposureAccumulator cpu)
-                        cpu.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
+                    // CPU path: maintain readback pipeline and accumulate from PBO.
+                    // Resolve the max readback dimension from config (hot-reload safe).
+                    int maxDim = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
+                                 ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+
+                    // Resize the readback pipeline if config or source changed; reallocate the buffer.
+                    if (_readback!.EnsureAllocated(_camera.fbo.Width, _camera.fbo.Height, maxDim))
+                    {
+                        ReallocateAccumulationBuffer();
+                        _capi.Logger.Warning("Phototesting: readback dimensions changed during exposure — accumulated frames discarded.");
+                    }
+
+                    EnsureScratch(_readback.Width * _readback.Height * 4);
+
+                    // Kick async blit+readback into PBO, collect from the PBO written two kicks ago.
+                    if (_readback.KickAndCollect(_camera.fbo, _readbackScratch!))
+                    {
+                        if (_buffer is ICpuExposureAccumulator cpu)
+                            cpu.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
+                    }
                 }
             }
             catch (Exception ex)
@@ -351,16 +361,44 @@ namespace Phototesting.CameraCapture.Exposure
 
         // Ensures the readback pipeline is allocated at the current frame size, then allocates
         // the accumulation buffer to match the (possibly downsampled) readback dimensions.
+        // When UseGpuExposureAccumulator is true, skips the readback pipeline entirely and
+        // allocates a GpuExposureAccumulator with the same target dimensions.
         private void AllocateBufferAndReadback()
         {
             int sourceW = _capi.Render.FrameWidth;
             int sourceH = _capi.Render.FrameHeight;
             int maxDim  = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
                           ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+            bool useGpu = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.UseGpuExposureAccumulator
+                          ?? false;
 
-            _readback!.EnsureAllocated(sourceW, sourceH, maxDim);
-            ReallocateAccumulationBuffer();
-            EnsureScratch(_readback.Width * _readback.Height * 4);
+            if (useGpu)
+            {
+                // GPU path: dispose any CPU readback pipeline and create a GPU accumulator.
+                _readback?.Dispose();
+                _readback = null;
+                _readbackScratch = null;
+
+                ExposureReadbackPipeline.ComputeTargetDimensions(sourceW, sourceH, maxDim, out int w, out int h);
+                _buffer?.Dispose();
+                var gpu = new GpuExposureAccumulator(_capi, w, h, _process.SampleCount);
+                ApplyPhysicsToBuffer(gpu);
+                gpu.NormalizeByActualFrameCount = true;
+                gpu.RedSensitivity      = _process.RedSensitivity;
+                gpu.GreenSensitivity    = _process.GreenSensitivity;
+                gpu.BlueSensitivity     = _process.BlueSensitivity;
+                gpu.DevelopmentStrength = _process.DevelopmentStrength;
+                gpu.HDGamma             = _process.HDGamma;
+                _buffer = gpu;
+            }
+            else
+            {
+                // CPU path: lazily create the readback pipeline and allocate CPU buffer.
+                _readback ??= new ExposureReadbackPipeline(_capi);
+                _readback.EnsureAllocated(sourceW, sourceH, maxDim);
+                ReallocateAccumulationBuffer();
+                EnsureScratch(_readback.Width * _readback.Height * 4);
+            }
         }
 
         private void ReallocateAccumulationBuffer()
