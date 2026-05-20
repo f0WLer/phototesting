@@ -98,7 +98,10 @@ namespace Phototesting.PlateBox
                     world.SpawnItemEntity(stack, pos.ToVec3d().Add(0.5, 0.5, 0.5));
                 }
 
-                world.PlaySoundAt(Sounds?.GetBreakSound(byPlayer).Location, pos, 0.0, byPlayer);
+                if (Sounds != null)
+                {
+                    world.PlaySoundAt(Sounds.GetBreakSound(byPlayer), pos, 0.0, byPlayer);
+                }
             }
 
             SpawnBlockBrokenParticles(pos, byPlayer);
