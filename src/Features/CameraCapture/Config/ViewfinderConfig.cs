@@ -48,9 +48,9 @@ namespace Phototesting.CameraCapture
         /// <summary>
         /// When true, exposure accumulation runs entirely on the GPU via ping-pong RGBA32F
         /// framebuffers and custom GLSL shaders, eliminating the per-sample PBO readback stall.
-        /// Defaults to false (CPU float-array path) for compatibility.
+        /// Defaults to true so new configs use the faster GPU path automatically.
         /// </summary>
-        public bool UseGpuExposureAccumulator = false;
+        public bool UseGpuExposureAccumulator = true;
 
         // Clamps all viewfinder and preview tuning values to safe runtime ranges.
         internal void ClampInPlace()
