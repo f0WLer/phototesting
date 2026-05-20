@@ -5,6 +5,7 @@ using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Phototesting.AdminTooling;
+using Phototesting.CameraCapture.Exposure;
 using Phototesting.ImageEffects;
 
 namespace Phototesting.CameraCapture.Rendering
@@ -283,6 +284,8 @@ namespace Phototesting.CameraCapture.Rendering
 
                 try
                 {
+                    EmulsionDevelop.ApplyInPlace(dstBitmap, PlateProcessProfile.Iodide);
+
                     WetplateEffectsConfig activeCfg = ImageEffectsPipelineBridge.ResolveCaptureProfile(_effectsConfig, effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(dstBitmap, seedKey, activeCfg);
                 }

@@ -149,6 +149,8 @@ namespace Phototesting.CameraCapture
 
                 if (cfg?.DebugPreviewApplyEffects ?? true)
                 {
+                    EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
+
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
                 }
