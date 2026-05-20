@@ -56,14 +56,14 @@ namespace Phototesting.CameraCapture.Exposure
         // Mid-tier: expanded spectral response, moderate speed. ~20 s for normal exposure.
         // Tripod recommended for moving subjects.
         internal static readonly PlateProcessProfile Iodide = new PlateProcessProfile(
-            "Iodide", durationSeconds: 20f, sampleCount: 128,
+            "Iodide", durationSeconds: 20f, sampleCount: 64,
             redSensitivity: 0.12f, greenSensitivity: 0.45f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.10f);
 
         // Advanced silver-bromide gelatin: panchromatic, fast. ~3 s for normal exposure.
         // Handheld shots viable; tripod for best results but not required.
         internal static readonly PlateProcessProfile Bromide = new PlateProcessProfile(
-            "Bromide", durationSeconds: 3f, sampleCount: 128,
+            "Bromide", durationSeconds: 3f, sampleCount: 32,
             redSensitivity: 0.30f, greenSensitivity: 0.59f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.05f);
 
