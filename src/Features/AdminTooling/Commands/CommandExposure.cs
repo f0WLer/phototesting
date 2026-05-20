@@ -155,7 +155,7 @@ namespace Phototesting.AdminTooling
                             return;
                         }
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: {queried.Name} — {queried.SampleCount} samples over {queried.DurationSeconds}s, " +
+                            $"Wetplate: {queried.Name} — ISO {queried.IsoEquivalent:0.###}, {queried.SampleCount} samples over {queried.DurationSeconds}s, " +
                             $"interval={queried.SampleInterval:F3}s, " +
                             $"R/G/B sensitivity={queried.RedSensitivity:F2}/{queried.GreenSensitivity:F2}/{queried.BlueSensitivity:F2}");
                     }

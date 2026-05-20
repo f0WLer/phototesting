@@ -25,6 +25,12 @@ namespace Phototesting.CameraCapture.Exposure
         // Wall-clock seconds between consecutive virtual renders.
         internal float SampleInterval => DurationSeconds / SampleCount;
 
+        // Reciprocal of DurationSeconds — a process that needs X seconds for a correct exposure
+        // in standard noon daylight has ISO = 1/X.  Faster (higher ISO) processes have shorter
+        // DurationSeconds; all processes produce the same output density at full exposure because
+        // DevelopmentStrength is kept consistent across presets.
+        internal float IsoEquivalent => 1f / DurationSeconds;
+
         internal PlateProcessProfile(
             string name, float durationSeconds, int sampleCount,
             float redSensitivity, float greenSensitivity, float blueSensitivity,
@@ -45,7 +51,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal static readonly PlateProcessProfile Chloride = new PlateProcessProfile(
             "Chloride", durationSeconds: 90f, sampleCount: 128,
             redSensitivity: 0.04f, greenSensitivity: 0.35f, blueSensitivity: 1.00f,
-            developmentStrength: 7.0f, hdGamma: 1.15f);
+            developmentStrength: 8.0f, hdGamma: 1.15f);
 
         // Mid-tier: expanded spectral response, moderate speed. ~20 s for normal exposure.
         // Tripod recommended for moving subjects.
@@ -59,7 +65,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal static readonly PlateProcessProfile Bromide = new PlateProcessProfile(
             "Bromide", durationSeconds: 3f, sampleCount: 128,
             redSensitivity: 0.30f, greenSensitivity: 0.59f, blueSensitivity: 1.00f,
-            developmentStrength: 9.0f, hdGamma: 1.05f);
+            developmentStrength: 8.0f, hdGamma: 1.05f);
 
         internal static PlateProcessProfile ForProcess(PlateProcess process) => process switch
         {
