@@ -11,6 +11,29 @@ namespace Phototesting.CameraCapture
     // virtual eye anchor, so this postfix shifts the self model back to the player's body.
     internal static class EntityPlayerSelfPortraitPatch
     {
+        [HarmonyPrefix]
+        internal static void Prefix(
+            object __instance,
+            Entity entity,
+            bool isSelf,
+            float dt,
+            bool isShadowPass)
+        {
+            if (!isSelf || !VirtualCameraSelfPortraitContext.Active)
+                return;
+
+            if (entity is not EntityPlayer val)
+                return;
+
+            if (val.MountedOn != null)
+                return;
+
+            float targetYaw = val.Pos.Yaw;
+            Traverse traverse = Traverse.Create(__instance);
+            traverse.Field<float>("smoothedBodyYaw").Value = targetYaw;
+            traverse.Field<float>("bodyYawLerped").Value = targetYaw;
+        }
+
         [HarmonyPostfix]
         internal static void Postfix(
             object __instance,
@@ -28,9 +51,11 @@ namespace Phototesting.CameraCapture
             if (val.MountedOn != null)
                 return;
 
-            double dx = val.Pos.X        - val.CameraPos.X;
-            double dy = val.Pos.InternalY - val.CameraPos.Y;
-            double dz = val.Pos.Z        - val.CameraPos.Z;
+            EntityPos entityPos = val.Pos;
+
+            double dx = entityPos.X         - val.CameraPos.X;
+            double dy = entityPos.InternalY - val.CameraPos.Y;
+            double dz = entityPos.Z         - val.CameraPos.Z;
 
             if (Math.Abs(dx) < 1e-7 && Math.Abs(dy) < 1e-7 && Math.Abs(dz) < 1e-7)
                 return;
