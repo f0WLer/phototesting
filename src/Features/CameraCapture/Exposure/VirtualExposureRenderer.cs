@@ -66,16 +66,18 @@ namespace Phototesting.CameraCapture.Exposure
             => _shutterEndMs == 0 ? 0f : Math.Max(0f, (_shutterEndMs - _capi.ElapsedMilliseconds) / 1000f);
 
         // Physics layer toggles; persisted across Start()/Reset() and applied to each new buffer.
-        internal bool PhysicsLinearize      = true;
+        internal bool PhysicsLinearize       = true;
         internal bool PhysicsSpectralWeights = true;
         internal bool PhysicsHDCurve         = true;
+        internal bool PhysicsNormalize        = false;
 
         // Copies the current physics settings onto a buffer.
         private void ApplyPhysicsToBuffer(IExposureAccumulator buf)
         {
-            buf.LinearizeInput      = PhysicsLinearize;
-            buf.ApplySpectralWeights = PhysicsSpectralWeights;
-            buf.ApplyHDCurve         = PhysicsHDCurve;
+            buf.LinearizeInput           = PhysicsLinearize;
+            buf.ApplySpectralWeights     = PhysicsSpectralWeights;
+            buf.ApplyHDCurve             = PhysicsHDCurve;
+            buf.NormalizeByActualFrameCount = PhysicsNormalize;
         }
 
         // Updates a named physics flag on both the renderer and the live buffer (if any).
@@ -84,9 +86,10 @@ namespace Phototesting.CameraCapture.Exposure
         {
             switch (flag)
             {
-                case "linearize":   PhysicsLinearize      = value; break;
+                case "linearize":   PhysicsLinearize       = value; break;
                 case "spectral":    PhysicsSpectralWeights = value; break;
                 case "hdcurve":     PhysicsHDCurve         = value; break;
+                case "normalize":   PhysicsNormalize       = value; break;
                 default: return false;
             }
             if (_buffer != null) ApplyPhysicsToBuffer(_buffer);
@@ -383,7 +386,6 @@ namespace Phototesting.CameraCapture.Exposure
                 _buffer?.Dispose();
                 var gpu = new GpuExposureAccumulator(_capi, w, h, _process.SampleCount);
                 ApplyPhysicsToBuffer(gpu);
-                gpu.NormalizeByActualFrameCount = true;
                 gpu.RedSensitivity      = _process.RedSensitivity;
                 gpu.GreenSensitivity    = _process.GreenSensitivity;
                 gpu.BlueSensitivity     = _process.BlueSensitivity;
@@ -406,7 +408,6 @@ namespace Phototesting.CameraCapture.Exposure
             _buffer?.Dispose();
             var buf = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
             ApplyPhysicsToBuffer(buf);
-            buf.NormalizeByActualFrameCount = true;
             buf.RedSensitivity      = _process.RedSensitivity;
             buf.GreenSensitivity    = _process.GreenSensitivity;
             buf.BlueSensitivity     = _process.BlueSensitivity;

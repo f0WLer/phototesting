@@ -180,7 +180,8 @@ namespace Phototesting.AdminTooling
                             $"Wetplate: physics — " +
                             $"linearize={(renderer.PhysicsLinearize ? "on" : "off")}, " +
                             $"spectral={(renderer.PhysicsSpectralWeights ? "on" : "off")}, " +
-                            $"hdcurve={(renderer.PhysicsHDCurve ? "on" : "off")}");
+                            $"hdcurve={(renderer.PhysicsHDCurve ? "on" : "off")}, " +
+                            $"normalize={(renderer.PhysicsNormalize ? "on" : "off")}");
                         return;
                     }
 
@@ -202,7 +203,7 @@ namespace Phototesting.AdminTooling
                     if (!renderer.SetPhysics(physFlag, onOff.Value))
                     {
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: unknown physics flag '{physFlag}'. Valid: linearize, spectral, hdcurve");
+                            $"Wetplate: unknown physics flag '{physFlag}'. Valid: linearize, spectral, hdcurve, normalize");
                         return;
                     }
 
