@@ -141,6 +141,7 @@ namespace Phototesting.AdminTooling
                         $"Wetplate: {ap.Name} — state={renderer.State}, " +
                         $"samples={renderer.FramesAccumulated} (target {ap.SampleCount}), " +
                         $"elapsed={renderer.ElapsedSeconds:F1}s / {ap.DurationSeconds}s, " +
+                        $"finishing={(renderer.ApplyFinishing ? "on" : "off")}, " +
                         $"interval={ap.SampleInterval:F3}s");
                     return;
                 }
@@ -213,9 +214,40 @@ namespace Phototesting.AdminTooling
                     return;
                 }
 
+                case "finishing":
+                case "finish":
+                {
+                    string? onOffStr = args.PopWord()?.ToLowerInvariant();
+                    if (string.IsNullOrEmpty(onOffStr) || onOffStr == "status")
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: exposure finishing = {(renderer.ApplyFinishing ? "on" : "off")}");
+                        return;
+                    }
+
+                    bool? onOff = onOffStr switch
+                    {
+                        "on"  or "true"  or "1" or "yes" or "enable"  => true,
+                        "off" or "false" or "0" or "no"  or "disable" => false,
+                        _ => null
+                    };
+
+                    if (onOff == null)
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            "Wetplate: usage: .phototesting exposure finishing <on|off>");
+                        return;
+                    }
+
+                    renderer.ApplyFinishing = onOff.Value;
+                    _owner.ClientApi.ShowChatMessage(
+                        $"Wetplate: exposure finishing = {(onOff.Value ? "on" : "off")}");
+                    return;
+                }
+
                 default:
                     _owner.ClientApi.ShowChatMessage(
-                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics>");
+                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics|finishing>");
                     return;
             }
         }
