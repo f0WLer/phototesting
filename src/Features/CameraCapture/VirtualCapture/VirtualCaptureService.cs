@@ -65,7 +65,7 @@ namespace Phototesting.CameraCapture
             cam.InitBuffer();
 
             OneShotRenderer renderer = null!;
-            renderer = new OneShotRenderer(_capi.Render.FrameWidth, _capi.Render.FrameHeight, dt =>
+            renderer = new OneShotRenderer(dt =>
             {
                 try
                 {
@@ -125,7 +125,7 @@ namespace Phototesting.CameraCapture
             public double RenderOrder => 0.5;
             public int RenderRange => 0;
 
-            internal OneShotRenderer(int width, int height, Action<float> onRender)
+            internal OneShotRenderer(Action<float> onRender)
             {
                 _onRender = onRender;
             }

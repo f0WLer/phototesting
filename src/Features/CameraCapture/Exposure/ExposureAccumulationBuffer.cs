@@ -86,27 +86,6 @@ namespace Phototesting.CameraCapture.Exposure
             _frameCount = 0;
         }
 
-        // Accumulates one BGRA8888 frame into the running channel sums.
-        // Applies sRGB-to-linear conversion when LinearizeInput is true.
-        // Frames with dimensions other than Width x Height are ignored.
-        internal void Accumulate(SKBitmap frame)
-        {
-            if (frame.Width != _width || frame.Height != _height) return;
-
-            int pixelCount = _width * _height;
-            int byteCount  = pixelCount * 4;
-            byte[] bytes   = ArrayPool<byte>.Shared.Rent(byteCount);
-            try
-            {
-                Marshal.Copy(frame.GetPixels(), bytes, 0, byteCount);
-                AccumulateBytes(bytes, pixelCount);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(bytes);
-            }
-        }
-
         // Accumulates a BGRA8888 byte array that is already top-left-origin (e.g. from the GPU
         // downsample blit path). Dimensions must match Width x Height or the call is ignored.
         public void Accumulate(byte[] bgra, int width, int height)

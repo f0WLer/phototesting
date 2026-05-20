@@ -384,10 +384,9 @@ namespace Phototesting.CameraCapture.Exposure
         {
             int sourceW = _capi.Render.FrameWidth;
             int sourceH = _capi.Render.FrameHeight;
-            int maxDim  = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
-                          ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
-            bool useGpu = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.UseGpuExposureAccumulator
-                          ?? false;
+            ViewfinderConfig? vfCfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            int maxDim  = vfCfg?.ExposureReadbackMaxDimension ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+            bool useGpu = vfCfg?.UseGpuExposureAccumulator    ?? false;
 
             if (useGpu)
             {
