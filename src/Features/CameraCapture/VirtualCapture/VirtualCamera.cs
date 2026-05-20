@@ -152,15 +152,16 @@ namespace Phototesting.CameraCapture
 
         internal void RenderCameraInStoredDimension(float dt)
         {
-            int savedDimension = _capi.World.Player.Entity.Pos.Dimension;
+            var playerPos = _capi.World.Player.Entity.Pos;
+            int savedDimension = playerPos.Dimension;
             try
             {
-                _capi.World.Player.Entity.Pos.Dimension = Dimension;
+                playerPos.Dimension = Dimension;
                 RenderCamera(dt);
             }
             finally
             {
-                _capi.World.Player.Entity.Pos.Dimension = savedDimension;
+                playerPos.Dimension = savedDimension;
             }
         }
 
@@ -184,7 +185,7 @@ namespace Phototesting.CameraCapture
 
             }
 
-            fbo = _capi.Render.CreateFrameBuffer(new FramebufferAttrs("phototesting-virtual-camera", width, height)
+            fbo = _platform.CreateFramebuffer(new FramebufferAttrs("phototesting-virtual-camera", width, height)
             {
                 Attachments = attachments.ToArray()
             });
@@ -356,7 +357,10 @@ namespace Phototesting.CameraCapture
 
             try
             {
-                if (selfPortrait) ApplySelfPortraitMode(camera, in selfPortraitSnap);
+                if (selfPortrait)
+                {
+                    ApplySelfPortraitMode(camera, in selfPortraitSnap);
+                }
 
                 UpdateCamera();
 
@@ -402,7 +406,7 @@ namespace Phototesting.CameraCapture
                     RenderTransparentPass(dt, transparentFbo, fbo.DepthTextureId);
                 }
 
-                GL.Disable(EnableCap.ClipPlane0);
+                GL.Disable(EnableCap.ClipDistance0);
                 _platform.GlDepthMask(true);
                 _platform.GlEnableDepthTest();
                 _platform.GlCullFaceBack();
@@ -454,10 +458,11 @@ namespace Phototesting.CameraCapture
             {
                 Entity entity = pair.Value;
                 if (ReferenceEquals(entity, playerEntity)) continue; // handled by the caller
+                EntityPos pos = entity.Pos;
                 saved[pair.Key] = entity.IsRendered;
-                entity.IsRendered = entity.Pos.Dimension == dim
+                entity.IsRendered = pos.Dimension == dim
                     && _main.frustumCuller.SphereInFrustum(
-                        entity.Pos.X, entity.Pos.InternalY, entity.Pos.Z,
+                        pos.X, pos.InternalY, pos.Z,
                         entity.FrustumSphereRadius);
             }
             return saved;
