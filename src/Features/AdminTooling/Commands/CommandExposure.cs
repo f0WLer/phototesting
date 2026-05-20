@@ -47,7 +47,8 @@ namespace Phototesting.AdminTooling
                             player.Entity.Pos.Yaw,
                             player.Entity.Pos.Pitch,
                             ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
-                            player.Entity.Pos.Dimension);
+                            player.Entity.Pos.Dimension,
+                            selfPortrait: true);
                     }
 
                     renderer.Start(cameraState, process);
