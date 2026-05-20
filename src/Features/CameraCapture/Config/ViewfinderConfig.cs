@@ -30,8 +30,8 @@ namespace Phototesting.CameraCapture
         public bool DebugPreviewEnabled = false;
         /// <summary>If true, keeps the debug preview visible even when the viewfinder is not active (dev-only).</summary>
         public bool DebugPreviewPeak = false;
-        /// <summary>If true, applies wetplate image effects to the live debug preview; final captures still use their own effects pipeline.</summary>
-        public bool DebugPreviewApplyEffects = true;
+        /// <summary>If true, applies the post-development finishing pass to the live debug preview.</summary>
+        public bool DebugPreviewApplyFinishing = true;
         /// <summary>Refresh interval in milliseconds for the live viewfinder debug preview (lower = more CPU/GPU use).</summary>
         public int DebugPreviewRefreshMs = 500;
         /// <summary>Max pixel size of the source capture used for the debug preview (higher = sharper but slower).</summary>

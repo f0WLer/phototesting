@@ -152,10 +152,10 @@ namespace Phototesting.CameraCapture
                 using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
                 using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, _maxDimension);
 
-                if (cfg?.DebugPreviewApplyEffects ?? true)
-                {
-                    EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
+                EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
 
+                if (cfg?.DebugPreviewApplyFinishing ?? true)
+                {
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
                 }
