@@ -31,17 +31,17 @@ namespace Phototesting.CameraCapture
         /// <summary>If true, keeps the debug preview visible even when the viewfinder is not active (dev-only).</summary>
         public bool DebugPreviewPeak = false;
         /// <summary>If true, applies the post-development finishing pass to the live debug preview.</summary>
-        public bool DebugPreviewApplyFinishing = true;
+        public bool DebugPreviewApplyFinishing = false;
         /// <summary>Refresh interval in milliseconds for the live viewfinder debug preview (lower = more CPU/GPU use).</summary>
         public int DebugPreviewRefreshMs = 500;
         /// <summary>Max pixel size of the source capture used for the debug preview (higher = sharper but slower).</summary>
-        public int DebugPreviewMaxDimension = 384;
+        public int DebugPreviewMaxDimension = 480;
         /// <summary>Preview window width in screen pixels.</summary>
-        public int DebugPreviewWidth = 640;
+        public int DebugPreviewWidth = 360;
         /// <summary>Preview window height in screen pixels.</summary>
         public int DebugPreviewHeight = 360;
         /// <summary>Preview anchor position: topleft | topright | bottomleft | bottomright.</summary>
-        public string DebugPreviewAnchor = "topright";
+        public string DebugPreviewAnchor = "topleft";
         /// <summary>Margin in pixels from the selected anchor edge.</summary>
         public int DebugPreviewMargin = 16;
 
@@ -91,13 +91,13 @@ namespace Phototesting.CameraCapture
             if (DebugPreviewMargin < 0) DebugPreviewMargin = 0;
             if (DebugPreviewMargin > 256) DebugPreviewMargin = 256;
 
-            DebugPreviewAnchor = (DebugPreviewAnchor ?? "topright").Trim().ToLowerInvariant();
+            DebugPreviewAnchor = (DebugPreviewAnchor ?? "topleft").Trim().ToLowerInvariant();
             if (DebugPreviewAnchor != "topleft"
                 && DebugPreviewAnchor != "topright"
                 && DebugPreviewAnchor != "bottomleft"
                 && DebugPreviewAnchor != "bottomright")
             {
-                DebugPreviewAnchor = "topright";
+                DebugPreviewAnchor = "topleft";
             }
         }
     }

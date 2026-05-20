@@ -72,7 +72,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal bool PhysicsNormalize        = false;
 
         // Post-development finishing toggle. When off, exposure preview/export stop after emulsion develop.
-        internal bool ApplyFinishing = true;
+        internal bool ApplyFinishing = false;
 
         // Copies the current physics settings onto a buffer.
         private void ApplyPhysicsToBuffer(IExposureAccumulator buf)
