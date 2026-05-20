@@ -27,7 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- <PackageReference Include="Vintagestory.API" Version="1.21.6" /> -->
+    <!-- <PackageReference Include="Vintagestory.API" Version="1.22.2" /> -->
   </ItemGroup>
 
   <!-- Referenced DLLs from the game installation -->
