@@ -28,6 +28,11 @@ namespace Phototesting.CameraCapture
         private long _lastRenderMs;
         private bool _disposed;
 
+        // The emulsion process used when applying EmulsionDevelop to standalone preview frames.
+        // Defaults to Iodide; updated to match the active exposure session when one is started
+        // so the standalone preview reflects the correct spectral response.
+        internal PlateProcessProfile EmulsionProcess { get; set; } = PlateProcessProfile.Iodide;
+
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
@@ -149,7 +154,7 @@ namespace Phototesting.CameraCapture
 
                 if (cfg?.DebugPreviewApplyEffects ?? true)
                 {
-                    EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
+                    EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
 
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);

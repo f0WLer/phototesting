@@ -51,6 +51,7 @@ namespace Phototesting.AdminTooling
                     }
 
                     renderer.Start(cameraState, process);
+                    if (previewRenderer != null) previewRenderer.EmulsionProcess = process;
                     string portraitMsg = cameraState.SelfPortrait ? ", self-portrait" : "";
                     _owner.ClientApi.ShowChatMessage(
                         $"Wetplate: {process.Name} exposure started — {process.SampleCount} samples over {process.DurationSeconds}s{portraitMsg}. Use 'stop' to close shutter.");
