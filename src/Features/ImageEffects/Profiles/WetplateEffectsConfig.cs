@@ -6,15 +6,6 @@ namespace Phototesting.ImageEffects
     {
         public bool Enabled = true;
 
-        // If true, convert to greyscale after color adjustments.
-        public bool Greyscale = true;
-
-        // Applied before greyscale conversion (and before sepia). 1 = unchanged.
-        // Use this to bias channels slightly before greyscale, e.g. boost blue and reduce red.
-        public float PreGrayRed = 0.92f;
-        public float PreGrayGreen = 1.0f;
-        public float PreGrayBlue = 1.18f;
-
         // Realism tuning (0..1). Keep subtle; these are meant to break the "perfect filter" feel.
         // Imperfection: biases dust toward edges and adds slight one-sided density pooling.
         public float Imperfection = 0.60f;
@@ -156,19 +147,6 @@ namespace Phototesting.ImageEffects
         public float LensAberrationStart = 0.55f;     // 0..1 normalised radius where softening begins
         public float LensAberrationSigma = 2.0f;      // max blur sigma at the image corner
 
-        // Per-channel tone curves applied before greyscale conversion.
-        // Quadratic Bezier through (0,Toe), (0.5,Mid), (1,Shoulder) for each channel.
-        // Defaults (0, 0.5, 1) produce a perfectly linear response — identical to existing behaviour.
-        public float CurveRedToe = 0.0f;
-        public float CurveRedMid = 0.5f;
-        public float CurveRedShoulder = 1.0f;
-        public float CurveGreenToe = 0.0f;
-        public float CurveGreenMid = 0.5f;
-        public float CurveGreenShoulder = 1.0f;
-        public float CurveBlueToe = 0.0f;
-        public float CurveBlueMid = 0.5f;
-        public float CurveBlueShoulder = 1.0f;
-
         // Per-photo dynamic variation (deterministic from photo id).
         // DynamicScale is a +/- percentage (0.05 => +/-5%) applied to select parameters.
         public bool DynamicEnabled = false;
@@ -185,7 +163,6 @@ namespace Phototesting.ImageEffects
             ClampUnevenDensitySettings();
             ClampToneCurveInternalSettings();
             ClampHalationAndLensSettings();
-            ClampChannelCurveSettings();
 
             DynamicScale = ClampRange(DynamicScale, 0f, 0.5f);
         }
@@ -213,10 +190,6 @@ namespace Phototesting.ImageEffects
             SkyTopFraction = Clamp01(SkyTopFraction);
 
             VignetteRadius = ClampRange(VignetteRadius, 0.2f, 2.0f);
-
-            PreGrayRed = ClampRange(PreGrayRed, 0f, 2f);
-            PreGrayGreen = ClampRange(PreGrayGreen, 0f, 2f);
-            PreGrayBlue = ClampRange(PreGrayBlue, 0f, 2f);
 
             Contrast = Math.Max(0.2f, Math.Min(2.5f, Contrast));
             Brightness = Math.Max(-0.5f, Math.Min(0.5f, Brightness));
@@ -325,20 +298,6 @@ namespace Phototesting.ImageEffects
             LensAberration = Clamp01(LensAberration);
             LensAberrationStart = ClampRange(LensAberrationStart, 0.1f, 1.0f);
             LensAberrationSigma = ClampRange(LensAberrationSigma, 0f, 20f);
-        }
-
-        // Clamps per-channel tone-curve control points.
-        private void ClampChannelCurveSettings()
-        {
-            CurveRedToe = ClampRange(CurveRedToe, 0f, 0.25f);
-            CurveRedMid = Clamp01(CurveRedMid);
-            CurveRedShoulder = ClampRange(CurveRedShoulder, 0.75f, 1.0f);
-            CurveGreenToe = ClampRange(CurveGreenToe, 0f, 0.25f);
-            CurveGreenMid = Clamp01(CurveGreenMid);
-            CurveGreenShoulder = ClampRange(CurveGreenShoulder, 0.75f, 1.0f);
-            CurveBlueToe = ClampRange(CurveBlueToe, 0f, 0.25f);
-            CurveBlueMid = Clamp01(CurveBlueMid);
-            CurveBlueShoulder = ClampRange(CurveBlueShoulder, 0.75f, 1.0f);
         }
 
         private static float Clamp01(float v) => GameMath.Clamp(v, 0f, 1f);

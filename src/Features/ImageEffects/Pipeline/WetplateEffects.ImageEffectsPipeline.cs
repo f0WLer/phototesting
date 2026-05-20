@@ -24,24 +24,7 @@ namespace Phototesting.ImageEffects
 
             var rng = new Random(StableHash(seedKey ?? string.Empty));
 
-            // 0) Per-channel tone curves — applied to raw colour pixels before any bias or greyscale.
-            //    No-op when all curves are at linear defaults (fast path).
-            ApplyChannelCurvesInPlace(bmp, effectiveCfg);
-
-            // 1) Channel bias (orthochromatic simulation) + 2) Greyscale conversion
-            using (var srcCopy = bmp.Copy())
-            using (var srcImg = SKImage.FromBitmap(srcCopy))
-            using (var canvas = new SKCanvas(bmp))
-#pragma warning disable CS0618 // Preserve existing sampling behavior on current Skia API
-            using (var paint = new SKPaint { FilterQuality = SKFilterQuality.High })
-#pragma warning restore CS0618
-            {
-                paint.ColorFilter = CreateBaseColorFilter(effectiveCfg);
-                paint.BlendMode = SKBlendMode.Src;
-                canvas.DrawImage(srcImg, new SKRect(0, 0, w, h), paint);
-            }
-
-            // 3) Nonlinear contrast curve + 4) Highlight shoulder/clipping
+            // 1) Nonlinear contrast curve + 2) Highlight shoulder/clipping
             ApplyToneCurveAndShoulderInPlace(bmp, effectiveCfg);
 
             // 3b) Halation — glow around bright areas from light scatter through the glass base.
