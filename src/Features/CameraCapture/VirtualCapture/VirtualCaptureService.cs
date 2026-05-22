@@ -3,6 +3,7 @@ using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 using Vintagestory.Client.NoObf;
+using Phototesting.CameraCapture.Exposure;
 using Phototesting.CameraCapture.Rendering;
 using Phototesting.ImageEffects;
 using Phototesting.PhotoSync.Storage;
@@ -73,6 +74,8 @@ namespace Phototesting.CameraCapture
 
                     using SKBitmap raw = ReadFramebuffer(_capi, cam.fbo);
                     using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
+
+                    EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
 
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, fileName, profile);

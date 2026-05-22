@@ -48,10 +48,12 @@ namespace Phototesting.AdminTooling
                             pos.Yaw,
                             pos.Pitch,
                             ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
-                            pos.Dimension);
+                            pos.Dimension,
+                            selfPortrait: true);
                     }
 
                     renderer.Start(cameraState, process);
+                    if (previewRenderer != null) previewRenderer.EmulsionProcess = process;
                     string portraitMsg = cameraState.SelfPortrait ? ", self-portrait" : "";
                     _owner.ClientApi.ShowChatMessage(
                         $"Wetplate: {process.Name} exposure started — {process.SampleCount} samples over {process.DurationSeconds}s{portraitMsg}. Use 'stop' to close shutter.");
@@ -149,6 +151,7 @@ namespace Phototesting.AdminTooling
                         $"Wetplate: {ap.Name} — state={renderer.State}, " +
                         $"samples={renderer.FramesAccumulated} (target {ap.SampleCount}), " +
                         $"elapsed={renderer.ElapsedSeconds:F1}s / {ap.DurationSeconds}s, " +
+                        $"finishing={(renderer.ApplyFinishing ? "on" : "off")}, " +
                         $"interval={ap.SampleInterval:F3}s{faultSuffix}");
                     return;
                 }
@@ -164,7 +167,7 @@ namespace Phototesting.AdminTooling
                             return;
                         }
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: {queried.Name} — {queried.SampleCount} samples over {queried.DurationSeconds}s, " +
+                            $"Wetplate: {queried.Name} — ISO {queried.IsoEquivalent:0.###}, {queried.SampleCount} samples over {queried.DurationSeconds}s, " +
                             $"interval={queried.SampleInterval:F3}s, " +
                             $"R/G/B sensitivity={queried.RedSensitivity:F2}/{queried.GreenSensitivity:F2}/{queried.BlueSensitivity:F2}");
                     }
@@ -189,7 +192,8 @@ namespace Phototesting.AdminTooling
                             $"Wetplate: physics — " +
                             $"linearize={(renderer.PhysicsLinearize ? "on" : "off")}, " +
                             $"spectral={(renderer.PhysicsSpectralWeights ? "on" : "off")}, " +
-                            $"hdcurve={(renderer.PhysicsHDCurve ? "on" : "off")}");
+                            $"hdcurve={(renderer.PhysicsHDCurve ? "on" : "off")}, " +
+                            $"normalize={(renderer.PhysicsNormalize ? "on" : "off")}");
                         return;
                     }
 
@@ -211,7 +215,7 @@ namespace Phototesting.AdminTooling
                     if (!renderer.SetPhysics(physFlag, onOff.Value))
                     {
                         _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: unknown physics flag '{physFlag}'. Valid: linearize, spectral, hdcurve");
+                            $"Wetplate: unknown physics flag '{physFlag}'. Valid: linearize, spectral, hdcurve, normalize");
                         return;
                     }
 
@@ -220,9 +224,40 @@ namespace Phototesting.AdminTooling
                     return;
                 }
 
+                case "finishing":
+                case "finish":
+                {
+                    string? onOffStr = args.PopWord()?.ToLowerInvariant();
+                    if (string.IsNullOrEmpty(onOffStr) || onOffStr == "status")
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: exposure finishing = {(renderer.ApplyFinishing ? "on" : "off")}");
+                        return;
+                    }
+
+                    bool? onOff = onOffStr switch
+                    {
+                        "on"  or "true"  or "1" or "yes" or "enable"  => true,
+                        "off" or "false" or "0" or "no"  or "disable" => false,
+                        _ => null
+                    };
+
+                    if (onOff == null)
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            "Wetplate: usage: .phototesting exposure finishing <on|off>");
+                        return;
+                    }
+
+                    renderer.ApplyFinishing = onOff.Value;
+                    _owner.ClientApi.ShowChatMessage(
+                        $"Wetplate: exposure finishing = {(onOff.Value ? "on" : "off")}");
+                    return;
+                }
+
                 default:
                     _owner.ClientApi.ShowChatMessage(
-                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics>");
+                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics|finishing>");
                     return;
             }
         }

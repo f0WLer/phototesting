@@ -72,16 +72,21 @@ namespace Phototesting.CameraCapture.Exposure
             => _shutterEndMs == 0 ? 0f : Math.Max(0f, (_shutterEndMs - GetEffectiveShutterNowMs()) / 1000f);
 
         // Physics layer toggles; persisted across Start()/Reset() and applied to each new buffer.
-        internal bool PhysicsLinearize      = true;
+        internal bool PhysicsLinearize       = true;
         internal bool PhysicsSpectralWeights = true;
         internal bool PhysicsHDCurve         = true;
+        internal bool PhysicsNormalize        = false;
+
+        // Post-development finishing toggle. When off, exposure preview/export stop after emulsion develop.
+        internal bool ApplyFinishing = false;
 
         // Copies the current physics settings onto a buffer.
         private void ApplyPhysicsToBuffer(IExposureAccumulator buf)
         {
-            buf.LinearizeInput      = PhysicsLinearize;
-            buf.ApplySpectralWeights = PhysicsSpectralWeights;
-            buf.ApplyHDCurve         = PhysicsHDCurve;
+            buf.LinearizeInput           = PhysicsLinearize;
+            buf.ApplySpectralWeights     = PhysicsSpectralWeights;
+            buf.ApplyHDCurve             = PhysicsHDCurve;
+            buf.NormalizeByActualFrameCount = PhysicsNormalize;
         }
 
         // Copies current physics settings and active process chemistry onto a buffer.
@@ -101,9 +106,10 @@ namespace Phototesting.CameraCapture.Exposure
         {
             switch (flag)
             {
-                case "linearize":   PhysicsLinearize      = value; break;
+                case "linearize":   PhysicsLinearize       = value; break;
                 case "spectral":    PhysicsSpectralWeights = value; break;
                 case "hdcurve":     PhysicsHDCurve         = value; break;
+                case "normalize":   PhysicsNormalize       = value; break;
                 default: return false;
             }
             if (_buffer != null) ApplyPhysicsToBuffer(_buffer);
@@ -180,6 +186,14 @@ namespace Phototesting.CameraCapture.Exposure
             _shutterFrozenMs = _capi.ElapsedMilliseconds;
             StopCamera();
             State = ExposureState.Done;
+
+            int frames = _buffer?.FramesAccumulated ?? 0;
+            long nowMs = _capi.ElapsedMilliseconds;
+            float elapsed = _shutterStartMs == 0 ? 0f : (nowMs - _shutterStartMs) / 1000f;
+            _capi.Logger.Notification(
+                $"Phototesting: {_process.Name} exposure stopped — " +
+                $"{frames}/{_process.SampleCount} samples over {elapsed:F2}s. " +
+                $"Use '.phototesting exposure export' to save.");
         }
 
         // Destroys the accumulated buffer and returns to Idle. Use after export or to abandon a session.
@@ -216,7 +230,7 @@ namespace Phototesting.CameraCapture.Exposure
             State = ExposureState.Capturing;
         }
 
-        // Develops the current accumulated buffer through the wetplate effects pipeline and saves a PNG.
+        // Develops the current accumulated buffer, optionally applies post-development finishing, and saves a PNG.
         // Can be called in any non-Idle state that has at least one accumulated frame.
         // Does not change state so the caller can continue accumulating or export repeatedly.
         // Throws InvalidOperationException when no frames are available.
@@ -235,8 +249,11 @@ namespace Phototesting.CameraCapture.Exposure
 
             try
             {
-                WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
-                ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "exposure-export", profile);
+                if (ApplyFinishing)
+                {
+                    WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
+                    ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "exposure-export", profile);
+                }
 
                 string now = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                 string rnd = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
@@ -257,7 +274,7 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Develops and shapes one debug-preview frame using the same crop/scale/effects policy
+        // Develops and shapes one debug-preview frame using the same crop/scale/finishing policy
         // as the normal virtual camera preview path.
         private void PushPreviewFrame()
         {
@@ -271,7 +288,7 @@ namespace Phototesting.CameraCapture.Exposure
             SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
             try
             {
-                if (cfg?.DebugPreviewApplyEffects ?? true)
+                if (ApplyFinishing && (cfg?.DebugPreviewApplyFinishing ?? true))
                 {
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, null);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "exposure-preview", profile);
@@ -318,7 +335,7 @@ namespace Phototesting.CameraCapture.Exposure
                 PushPreviewFrame();
                 _capi.Logger.Notification(
                     $"Phototesting: {_process.Name} exposure complete — " +
-                    $"{_buffer.FramesAccumulated} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
+                    $"{_buffer.FramesAccumulated}/{_process.SampleCount} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
                     $"Use '.phototesting exposure export' to save.");
                 return;
             }
@@ -397,10 +414,9 @@ namespace Phototesting.CameraCapture.Exposure
         {
             int sourceW = _capi.Render.FrameWidth;
             int sourceH = _capi.Render.FrameHeight;
-            int maxDim  = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
-                          ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
-            bool useGpu = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.UseGpuExposureAccumulator
-                          ?? false;
+            ViewfinderConfig? vfCfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            int maxDim  = vfCfg?.ExposureReadbackMaxDimension ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+            bool useGpu = vfCfg?.UseGpuExposureAccumulator    ?? false;
 
             if (useGpu)
             {

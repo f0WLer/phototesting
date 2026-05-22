@@ -96,8 +96,8 @@ void main() {
 in  vec2 v_uv;
 out vec4 out_sum;
 
-uniform sampler2D u_sample;
-uniform sampler2D u_accum;
+uniform sampler2D u_sample;   // RGBA8 - new frame blit from virtual camera
+uniform sampler2D u_accum;    // RGBA32F - running channel sums
 uniform bool      u_linearize;
 
 float srgbToLinear(float c) {

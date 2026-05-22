@@ -119,40 +119,5 @@ namespace Phototesting.ImageEffects
             System.Runtime.InteropServices.Marshal.Copy(src, 0, srcPtr, src.Length);
         }
 
-        // Builds the base color filter stack used before tonal post-processing.
-        private static SKColorFilter CreateBaseColorFilter(WetplateEffectsConfig cfg)
-        {
-            // Optional per-channel bias before greyscale/sepia.
-            float pr = cfg.PreGrayRed;
-            float pg = cfg.PreGrayGreen;
-            float pb = cfg.PreGrayBlue;
-
-            float[] preBalance =
-            {
-                pr,0, 0, 0, 0,
-                0, pg,0, 0, 0,
-                0, 0, pb,0, 0,
-                0, 0, 0, 1, 0
-            };
-
-            // Optional greyscale conversion.
-            // Luma weights (Rec.601-ish)
-            float[] gray =
-            {
-                0.299f, 0.587f, 0.114f, 0, 0,
-                0.299f, 0.587f, 0.114f, 0, 0,
-                0.299f, 0.587f, 0.114f, 0, 0,
-                0,      0,      0,      1, 0
-            };
-
-            var pre = SKColorFilter.CreateColorMatrix(preBalance);
-            if (!cfg.Greyscale)
-            {
-                return pre;
-            }
-
-            var gs = SKColorFilter.CreateColorMatrix(gray);
-            return SKColorFilter.CreateCompose(gs, pre);
-        }
     }
 }

@@ -28,6 +28,11 @@ namespace Phototesting.CameraCapture
         private long _lastRenderMs;
         private bool _disposed;
 
+        // The emulsion process used when applying EmulsionDevelop to standalone preview frames.
+        // Defaults to Iodide; updated to match the active exposure session when one is started
+        // so the standalone preview reflects the correct spectral response.
+        internal PlateProcessProfile EmulsionProcess { get; set; } = PlateProcessProfile.Iodide;
+
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
@@ -37,14 +42,15 @@ namespace Phototesting.CameraCapture
         // Exposure mode reuses this overlay surface but supplies already-developed frames.
         private bool _exposurePassthrough;
 
-        // Exposure preview takes ownership of this renderer's output surface and releases any live camera.
+        // Exposure preview takes ownership of this renderer's output surface.
+        // The vcam (_camera) is left alive so subsequent exposures can reuse the same view.
         public void BeginExposurePassthrough()
         {
-            StopCamera();
             _exposurePassthrough = true;
         }
 
         // Re-enables normal mode and clears the last pushed exposure frame.
+        // If a vcam was active it resumes rendering automatically on the next tick.
         public void EndExposurePassthrough()
         {
             _exposurePassthrough = false;
@@ -106,9 +112,11 @@ namespace Phototesting.CameraCapture
         internal bool TryConsumeLatestFrame(out int[] bgraPixels, out int width, out int height)
             => _previewBuffer.TryConsumeLatestFrame(out bgraPixels, out width, out height);
 
+        // Returns the current vcam state if one has been started via 'preview vcam'.
+        // Returns true even during exposure passthrough so subsequent exposures reuse the same view.
         internal bool TryGetActiveCameraState(out VirtualCameraState state)
         {
-            if (_camera != null && !_exposurePassthrough)
+            if (_camera != null)
             {
                 state = _camera.GetState();
                 return true;
@@ -147,7 +155,9 @@ namespace Phototesting.CameraCapture
                 using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
                 using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, _maxDimension);
 
-                if (cfg?.DebugPreviewApplyEffects ?? true)
+                EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
+
+                if (cfg?.DebugPreviewApplyFinishing ?? true)
                 {
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
