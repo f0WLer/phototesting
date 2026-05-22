@@ -1,4 +1,4 @@
-using System;
+#pragma warning disable IDE1006 // Harmony magic parameters require __ prefix
 using System.Reflection;
 using HarmonyLib;
 using Vintagestory.API.Common;
