@@ -136,6 +136,7 @@ namespace Phototesting.CameraCapture
             if (fbo != null)
             {
                 _capi.Render.DestroyFrameBuffer(fbo);
+                fbo = null!;
             }
         }
 
@@ -487,10 +488,14 @@ namespace Phototesting.CameraCapture
 
         private void RestoreEntityVisibility(Dictionary<long, bool> saved)
         {
-            foreach (var pair in saved)
+            Entity playerEntity = _capi.World.Player.Entity;
+            foreach (var pair in _main.LoadedEntities)
             {
-                if (_main.LoadedEntities.TryGetValue(pair.Key, out Entity? entity))
-                    entity.IsRendered = pair.Value;
+                if (ReferenceEquals(pair.Value, playerEntity)) continue;
+                if (saved.TryGetValue(pair.Key, out bool wasRendered))
+                    pair.Value.IsRendered = wasRendered;
+                else
+                    pair.Value.IsRendered = true; // spawned during virtual pass; OnBeforeRender re-evaluates next frame
             }
         }
 
