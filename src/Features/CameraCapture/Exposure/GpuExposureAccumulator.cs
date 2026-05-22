@@ -58,6 +58,22 @@ namespace Phototesting.CameraCapture.Exposure
         private int _developProgram;
         private int _quadVao;
 
+        // Cached uniform locations for _accumProgram.
+        private int _uAccumSample;
+        private int _uAccumAccum;
+        private int _uAccumLinearize;
+
+        // Cached uniform locations for _developProgram.
+        private int _uDevelopAccum;
+        private int _uDevelopInvRef;
+        private int _uDevelopSpectral;
+        private int _uDevelopHdCurve;
+        private int _uDevelopRedSens;
+        private int _uDevelopGreenSens;
+        private int _uDevelopBlueSens;
+        private int _uDevelopDevStrength;
+        private int _uDevelopGamma;
+
         private bool _disposed;
 
         // ── GLSL source (shared vertex shader + two fragment shaders) ─────────────────────
@@ -169,9 +185,9 @@ void main() {
                 GL.Viewport(0, 0, Width, Height);
 
                 GL.UseProgram(_accumProgram);
-                GL.Uniform1(GL.GetUniformLocation(_accumProgram, "u_sample"), 0);
-                GL.Uniform1(GL.GetUniformLocation(_accumProgram, "u_accum"),  1);
-                GL.Uniform1(GL.GetUniformLocation(_accumProgram, "u_linearize"), LinearizeInput ? 1 : 0);
+                GL.Uniform1(_uAccumSample,    0);
+                GL.Uniform1(_uAccumAccum,     1);
+                GL.Uniform1(_uAccumLinearize, LinearizeInput ? 1 : 0);
 
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, _sampleFbo.ColorTextureIds[0]);
@@ -235,15 +251,15 @@ void main() {
                 GL.Viewport(0, 0, Width, Height);
 
                 GL.UseProgram(_developProgram);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_accum"),        0);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_inv_ref"),      invRef);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_spectral"),     ApplySpectralWeights ? 1 : 0);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_hd_curve"),     ApplyHDCurve         ? 1 : 0);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_red_sens"),     rw);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_green_sens"),   gw);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_blue_sens"),    bw);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_dev_strength"), DevelopmentStrength);
-                GL.Uniform1(GL.GetUniformLocation(_developProgram, "u_gamma"),        HDGamma);
+                GL.Uniform1(_uDevelopAccum,       0);
+                GL.Uniform1(_uDevelopInvRef,      invRef);
+                GL.Uniform1(_uDevelopSpectral,    ApplySpectralWeights ? 1 : 0);
+                GL.Uniform1(_uDevelopHdCurve,     ApplyHDCurve         ? 1 : 0);
+                GL.Uniform1(_uDevelopRedSens,     rw);
+                GL.Uniform1(_uDevelopGreenSens,   gw);
+                GL.Uniform1(_uDevelopBlueSens,    bw);
+                GL.Uniform1(_uDevelopDevStrength, DevelopmentStrength);
+                GL.Uniform1(_uDevelopGamma,       HDGamma);
 
                 GL.ActiveTexture(TextureUnit.Texture0);
                 GL.BindTexture(TextureTarget.Texture2D, _accumTexIds[_readIdx]);
@@ -345,6 +361,21 @@ void main() {
             // Compile shaders.
             _accumProgram   = CompileProgram(VertSrc, AccumFragSrc);
             _developProgram = CompileProgram(VertSrc, DevelopFragSrc);
+
+            // Cache uniform locations (queried once here; zero-cost per draw call).
+            _uAccumSample    = GL.GetUniformLocation(_accumProgram,   "u_sample");
+            _uAccumAccum     = GL.GetUniformLocation(_accumProgram,   "u_accum");
+            _uAccumLinearize = GL.GetUniformLocation(_accumProgram,   "u_linearize");
+
+            _uDevelopAccum       = GL.GetUniformLocation(_developProgram, "u_accum");
+            _uDevelopInvRef      = GL.GetUniformLocation(_developProgram, "u_inv_ref");
+            _uDevelopSpectral    = GL.GetUniformLocation(_developProgram, "u_spectral");
+            _uDevelopHdCurve     = GL.GetUniformLocation(_developProgram, "u_hd_curve");
+            _uDevelopRedSens     = GL.GetUniformLocation(_developProgram, "u_red_sens");
+            _uDevelopGreenSens   = GL.GetUniformLocation(_developProgram, "u_green_sens");
+            _uDevelopBlueSens    = GL.GetUniformLocation(_developProgram, "u_blue_sens");
+            _uDevelopDevStrength = GL.GetUniformLocation(_developProgram, "u_dev_strength");
+            _uDevelopGamma       = GL.GetUniformLocation(_developProgram, "u_gamma");
 
             // Empty VAO for vertex-ID-based fullscreen draws.
             GL.GenVertexArrays(1, out _quadVao);
