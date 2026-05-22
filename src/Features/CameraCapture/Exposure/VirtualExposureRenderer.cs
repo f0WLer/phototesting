@@ -446,10 +446,8 @@ namespace Phototesting.CameraCapture.Exposure
             if (_readback == null || _buffer == null) return;
             EnsureScratch(_readback.Width * _readback.Height * 4);
             if (_buffer is ICpuExposureAccumulator cpuBuf)
-            {
-                foreach (byte[] frame in _readback.DrainPending(_readbackScratch!))
-                    cpuBuf.Accumulate(frame, _readback.Width, _readback.Height);
-            }
+                _readback.DrainPending(_readbackScratch!, bytes =>
+                    cpuBuf.Accumulate(bytes, _readback.Width, _readback.Height));
         }
 
         private void ReinitializeCameraAndBufferForResize()
