@@ -9,7 +9,7 @@ using Phototesting.PhotoSync.Storage;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    internal enum ExposureState { Idle, Capturing, Paused, Done }
+    internal enum ExposureState { Idle, Capturing, Paused, Faulted, Done }
 
     // Persistent renderer that drives a VirtualCamera across consecutive game frames,
     // accumulating pixel data via an IExposureAccumulator (currently ExposureAccumulationBuffer).
@@ -56,6 +56,8 @@ namespace Phototesting.CameraCapture.Exposure
         internal PlateProcessProfile ActiveProcess => _process;
 
         internal ExposureState State { get; private set; } = ExposureState.Idle;
+        // Set when a render exception transitions the session to Faulted; cleared on Start.
+        internal string? LastFaultMessage { get; private set; }
         internal int FramesAccumulated => _buffer?.FramesAccumulated ?? 0;
         internal int CapFrameCount => _process.SampleCount;
 
@@ -112,6 +114,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             Discard();
             _process = process;
+            LastFaultMessage = null;
             _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
 
@@ -349,10 +352,10 @@ namespace Phototesting.CameraCapture.Exposure
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                _capi.Logger.Warning($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex.Message}");
-                _pauseStartedMs = _capi.ElapsedMilliseconds;
+            catch (Exception Error($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex}");
+                LastFaultMessage = ex.Message;
+                _shutterFrozenMs = _capi.ElapsedMilliseconds;
+                State = ExposureState.FaultapsedMilliseconds;
                 _shutterFrozenMs = _pauseStartedMs;
                 State = ExposureState.Paused;
                 return;
@@ -399,7 +402,6 @@ namespace Phototesting.CameraCapture.Exposure
                 _buffer?.Dispose();
                 var gpu = new GpuExposureAccumulator(_capi, w, h, _process.SampleCount);
                 ApplyPhysicsToBuffer(gpu);
-                gpu.NormalizeByActualFrameCount = true;
                 gpu.RedSensitivity      = _process.RedSensitivity;
                 gpu.GreenSensitivity    = _process.GreenSensitivity;
                 gpu.BlueSensitivity     = _process.BlueSensitivity;
@@ -422,7 +424,6 @@ namespace Phototesting.CameraCapture.Exposure
             _buffer?.Dispose();
             var buf = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
             ApplyPhysicsToBuffer(buf);
-            buf.NormalizeByActualFrameCount = true;
             buf.RedSensitivity      = _process.RedSensitivity;
             buf.GreenSensitivity    = _process.GreenSensitivity;
             buf.BlueSensitivity     = _process.BlueSensitivity;

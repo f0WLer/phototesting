@@ -59,7 +59,7 @@ namespace Phototesting.AdminTooling
                 }
 
                 case "stop":
-                    if (renderer.State != ExposureState.Capturing && renderer.State != ExposureState.Paused)
+                    if (renderer.State != ExposureState.Capturing && renderer.State != ExposureState.Paused && renderer.State != ExposureState.Faulted)
                     {
                         _owner.ClientApi.ShowChatMessage($"Wetplate: cannot stop — state is {renderer.State}.");
                         return;
@@ -99,6 +99,11 @@ namespace Phototesting.AdminTooling
                         _owner.ClientApi.ShowChatMessage(
                             $"Wetplate: {renderer.ActiveProcess.Name} exposure resumed — {renderer.FramesAccumulated}/{renderer.ActiveProcess.SampleCount} samples so far.");
                     }
+                    else if (renderer.State == ExposureState.Faulted)
+                    {
+                        _owner.ClientApi.ShowChatMessage(
+                            $"Wetplate: cannot resume — session faulted: {renderer.LastFaultMessage}. Use 'export' to save partial frames or 'discard' to clear.");
+                    }
                     else
                     {
                         _owner.ClientApi.ShowChatMessage($"Wetplate: cannot resume — state is {renderer.State}.");
@@ -137,11 +142,14 @@ namespace Phototesting.AdminTooling
                 case "status":
                 {
                     PlateProcessProfile ap = renderer.ActiveProcess;
+                    string faultSuffix = renderer.State == ExposureState.Faulted && renderer.LastFaultMessage != null
+                        ? $", fault={renderer.LastFaultMessage}"
+                        : string.Empty;
                     _owner.ClientApi.ShowChatMessage(
                         $"Wetplate: {ap.Name} — state={renderer.State}, " +
                         $"samples={renderer.FramesAccumulated} (target {ap.SampleCount}), " +
                         $"elapsed={renderer.ElapsedSeconds:F1}s / {ap.DurationSeconds}s, " +
-                        $"interval={ap.SampleInterval:F3}s");
+                        $"interval={ap.SampleInterval:F3}s{faultSuffix}");
                     return;
                 }
 
