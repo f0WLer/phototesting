@@ -33,7 +33,7 @@ namespace Phototesting.CameraCapture
             if (val.MountedOn != null)
                 return;
 
-            float targetYaw = val.Pos.Yaw;
+            float targetYaw = val.SidedPos.Yaw;
             Traverse traverse = Traverse.Create(__instance);
             traverse.Field<float>("smoothedBodyYaw").Value = targetYaw;
             traverse.Field<float>("bodyYawLerped").Value = targetYaw;
