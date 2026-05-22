@@ -84,6 +84,17 @@ namespace Phototesting.CameraCapture.Exposure
             buf.ApplyHDCurve         = PhysicsHDCurve;
         }
 
+        // Copies current physics settings and active process chemistry onto a buffer.
+        private void ApplyProcessToBuffer(IExposureAccumulator buf)
+        {
+            ApplyPhysicsToBuffer(buf);
+            buf.RedSensitivity      = _process.RedSensitivity;
+            buf.GreenSensitivity    = _process.GreenSensitivity;
+            buf.BlueSensitivity     = _process.BlueSensitivity;
+            buf.DevelopmentStrength = _process.DevelopmentStrength;
+            buf.HDGamma             = _process.HDGamma;
+        }
+
         // Updates a named physics flag on both the renderer and the live buffer (if any).
         // Returns false if name is unrecognised.
         internal bool SetPhysics(string flag, bool value)
@@ -401,12 +412,7 @@ namespace Phototesting.CameraCapture.Exposure
                 ExposureReadbackPipeline.ComputeTargetDimensions(sourceW, sourceH, maxDim, out int w, out int h);
                 _buffer?.Dispose();
                 var gpu = new GpuExposureAccumulator(_capi, w, h, _process.SampleCount);
-                ApplyPhysicsToBuffer(gpu);
-                gpu.RedSensitivity      = _process.RedSensitivity;
-                gpu.GreenSensitivity    = _process.GreenSensitivity;
-                gpu.BlueSensitivity     = _process.BlueSensitivity;
-                gpu.DevelopmentStrength = _process.DevelopmentStrength;
-                gpu.HDGamma             = _process.HDGamma;
+                ApplyProcessToBuffer(gpu);
                 _buffer = gpu;
             }
             else
@@ -423,12 +429,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             _buffer?.Dispose();
             var buf = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, _process.SampleCount);
-            ApplyPhysicsToBuffer(buf);
-            buf.RedSensitivity      = _process.RedSensitivity;
-            buf.GreenSensitivity    = _process.GreenSensitivity;
-            buf.BlueSensitivity     = _process.BlueSensitivity;
-            buf.DevelopmentStrength = _process.DevelopmentStrength;
-            buf.HDGamma             = _process.HDGamma;
+            ApplyProcessToBuffer(buf);
             _buffer = buf;
         }
 
