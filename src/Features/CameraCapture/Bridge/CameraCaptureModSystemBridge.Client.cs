@@ -43,6 +43,7 @@ namespace Phototesting.CameraCapture
             {
                 _selfPortraitHarmony.Patch(
                     AccessTools.Method(playerShapeRendererType, "loadModelMatrixForPlayer"),
+                    prefix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "Prefix"),
                     postfix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "Postfix"));
             }
         }

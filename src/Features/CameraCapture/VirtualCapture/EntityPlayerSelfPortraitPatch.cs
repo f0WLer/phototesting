@@ -16,6 +16,29 @@ namespace Phototesting.CameraCapture
         private static FieldInfo? _modelMatField;
         private static bool _modelMatChecked;
 
+        [HarmonyPrefix]
+        internal static void Prefix(
+            object __instance,
+            Entity entity,
+            bool isSelf,
+            float dt,
+            bool isShadowPass)
+        {
+            if (!isSelf || !VirtualCameraSelfPortraitContext.Active)
+                return;
+
+            if (entity is not EntityPlayer val)
+                return;
+
+            if (val.MountedOn != null)
+                return;
+
+            float targetYaw = val.Pos.Yaw;
+            Traverse traverse = Traverse.Create(__instance);
+            traverse.Field<float>("smoothedBodyYaw").Value = targetYaw;
+            traverse.Field<float>("bodyYawLerped").Value = targetYaw;
+        }
+
         [HarmonyPostfix]
         internal static void Postfix(
             object __instance,
