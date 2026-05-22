@@ -174,13 +174,13 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Maps and copies all still-pending PBOs in ring order, yielding each filled scratch buffer.
+        // Maps and copies all still-pending PBOs in ring order, invoking onFrame for each.
         // Call on shutter close before transitioning to Done to avoid losing the last 1–2 samples.
         // MapBuffer may briefly stall if a PBO hasn't finished yet — that's acceptable at shutter close.
         // scratch must be at least Width * Height * 4 bytes.
-        internal IEnumerable<byte[]> DrainPending(byte[] scratch)
+        internal void DrainPending(byte[] scratch, Action<byte[]> onFrame)
         {
-            if (!_pbosAllocated) yield break;
+            if (!_pbosAllocated) return;
 
             GL.GetInteger(GetPName.PixelPackBufferBinding, out int prevPbo);
             try
@@ -197,7 +197,7 @@ namespace Phototesting.CameraCapture.Exposure
                     {
                         Marshal.Copy(mapped, scratch, 0, _pboByteSize);
                         GL.UnmapBuffer(BufferTarget.PixelPackBuffer);
-                        yield return scratch;
+                        onFrame(scratch);
                     }
                     _pboPending[idx] = false;
                 }

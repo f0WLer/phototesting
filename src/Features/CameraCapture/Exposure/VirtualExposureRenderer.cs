@@ -352,12 +352,12 @@ namespace Phototesting.CameraCapture.Exposure
                     }
                 }
             }
-            catch (Exception Error($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex}");
+            catch (Exception ex)
+            {
+                _capi.Logger.Error($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex}");
                 LastFaultMessage = ex.Message;
                 _shutterFrozenMs = _capi.ElapsedMilliseconds;
-                State = ExposureState.FaultapsedMilliseconds;
-                _shutterFrozenMs = _pauseStartedMs;
-                State = ExposureState.Paused;
+                State = ExposureState.Faulted;
                 return;
             }
 
