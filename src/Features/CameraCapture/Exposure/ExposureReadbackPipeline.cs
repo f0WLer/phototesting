@@ -126,15 +126,9 @@ namespace Phototesting.CameraCapture.Exposure
             try
             {
                 // --- Stage 1: blit-downsample with Y-flip ---
-                // The Y-flip (dstY0=Height, dstY1=0) converts OpenGL's bottom-left-origin image
-                // to top-left origin, replacing the Skia rotate+mirror pass in ReadFramebuffer.
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fromFbo.FboId);
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _downsampleFbo.FboId);
-                GL.BlitFramebuffer(
-                    0, 0, fromFbo.Width, fromFbo.Height,
-                    0, Height, Width, 0,                   // dst Y inverted = vertical flip
-                    ClearBufferMask.ColorBufferBit,
-                    BlitFramebufferFilter.Linear);
+                // The Y-flip converts OpenGL's bottom-left-origin image to top-left origin,
+                // replacing the Skia rotate+mirror pass in ReadFramebuffer.
+                ExposureGlUtils.BlitYFlipped(fromFbo, _downsampleFbo!);
 
                 // --- Stage 2: async ReadPixels into write PBO (no CPU stall) ---
                 int writeIdx = _kickCount % RingSize;

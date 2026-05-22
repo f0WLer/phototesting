@@ -162,13 +162,7 @@ void main() {
                 DisableRenderStateForFullscreenPass();
 
                 // 1. Blit source → sample FBO (Y-flipped downsample, same as CPU path).
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, sourceFbo.FboId);
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _sampleFbo.FboId);
-                GL.BlitFramebuffer(
-                    0, 0, sourceFbo.Width, sourceFbo.Height,
-                    0, Height, Width, 0,            // dst Y inverted = vertical flip
-                    ClearBufferMask.ColorBufferBit,
-                    BlitFramebufferFilter.Linear);
+                ExposureGlUtils.BlitYFlipped(sourceFbo, _sampleFbo);
 
                 // 2. Accumulate: sample + current accum → next accum.
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
