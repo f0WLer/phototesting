@@ -112,6 +112,8 @@ namespace Phototesting.CameraCapture
 
         public FrameBufferRef fbo = null!; // Assigned by InitBuffer() before first use
 
+        private long _lastSelfPortraitRenderMs;
+
         private const string CameraModeFieldName = "CameraMode";
         private const string RendererRenderModeFieldName = "renderMode";
         private const string ChunkRendererFieldName = "chunkRenderer";
@@ -145,6 +147,7 @@ namespace Phototesting.CameraCapture
             Fov = state.Fov;
             Dimension = state.Dimension;
             SelfPortrait = state.SelfPortrait;
+            _lastSelfPortraitRenderMs = 0;
         }
 
         internal VirtualCameraState GetState()
@@ -357,7 +360,11 @@ namespace Phototesting.CameraCapture
 
             try
             {
-                if (selfPortrait) ApplySelfPortraitMode(camera, in selfPortraitSnap);
+                if (selfPortrait)
+                {
+                    ApplySelfPortraitMode(camera, in selfPortraitSnap);
+                    _main.EntityPlayer.OnSelfBeforeRender(GetSelfPortraitDeltaTime(dt));
+                }
 
                 UpdateCamera();
 
@@ -441,6 +448,19 @@ namespace Phototesting.CameraCapture
                 _platform.FrameBuffers[0] = primaryFbo;
                 _platform.CurrentFrameBuffer = currentFbo;
             }
+        }
+
+        private float GetSelfPortraitDeltaTime(float fallbackDt)
+        {
+            long nowMs = _capi.ElapsedMilliseconds;
+            long lastMs = _lastSelfPortraitRenderMs;
+            _lastSelfPortraitRenderMs = nowMs;
+
+            if (lastMs == 0)
+                return fallbackDt;
+
+            float elapsed = Math.Max(0f, (nowMs - lastMs) / 1000f);
+            return elapsed > 0f ? elapsed : fallbackDt;
         }
 
         // Re-evaluate entity.IsRendered for all non-player entities using the virtual camera's

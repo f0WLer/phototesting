@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using HarmonyLib;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -11,6 +12,10 @@ namespace Phototesting.CameraCapture
     // virtual eye anchor, so this postfix shifts the self model back to the player's body.
     internal static class EntityPlayerSelfPortraitPatch
     {
+        // Resolved once on first invocation; null means the field is absent on this engine version.
+        private static FieldInfo? _modelMatField;
+        private static bool _modelMatChecked;
+
         [HarmonyPostfix]
         internal static void Postfix(
             object __instance,
@@ -28,6 +33,17 @@ namespace Phototesting.CameraCapture
             if (val.MountedOn != null)
                 return;
 
+            // Resolve the ModelMat field once and cache; degrade gracefully if absent.
+            if (!_modelMatChecked)
+            {
+                _modelMatChecked = true;
+                FieldInfo? f = AccessTools.Field(__instance.GetType(), "ModelMat");
+                _modelMatField = f?.FieldType == typeof(float[]) ? f : null;
+                if (_modelMatField == null)
+                    Log.Warning("Phototesting: 'ModelMat' field not found on player shape renderer — self-portrait matrix correction disabled.");
+            }
+            if (_modelMatField == null) return;
+
             EntityPos entityPos = val.SidedPos;
 
             double dx = entityPos.X         - val.CameraPos.X;
@@ -37,16 +53,15 @@ namespace Phototesting.CameraCapture
             if (Math.Abs(dx) < 1e-7 && Math.Abs(dy) < 1e-7 && Math.Abs(dz) < 1e-7)
                 return;
 
-            // The patch runs during rendering, so reuse thread-local scratch matrices.
+            // Reuse thread-local scratch matrices; the correction is prepended to the existing
+            // pose so orientation and scale are preserved.
             float[] translate = VirtualCameraSelfPortraitContext.TmpTranslate;
             float[] copy      = VirtualCameraSelfPortraitContext.TmpModel;
-
-            float[] modelMat = Traverse.Create(__instance).Field<float[]>("ModelMat").Value;
+            float[] modelMat  = (float[])_modelMatField.GetValue(__instance)!;
 
             Array.Copy(modelMat, copy, 16);
             Mat4f.Identity(translate);
             Mat4f.Translate(translate, translate, (float)dx, (float)dy, (float)dz);
-            // Prepend the correction so the existing pose/orientation stays intact.
             Mat4f.Mul(modelMat, translate, copy);
         }
     }
