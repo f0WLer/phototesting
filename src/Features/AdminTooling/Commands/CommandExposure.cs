@@ -42,7 +42,7 @@ namespace Phototesting.AdminTooling
                     if (previewRenderer == null || !previewRenderer.TryGetActiveCameraState(out VirtualCameraState cameraState))
                     {
                         var player = _owner.ClientApi.World.Player;
-                        var pos = player.Entity.SidedPos;
+                        var pos = player.Entity.Pos;
                         cameraState = new VirtualCameraState(
                             pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
                             pos.Yaw,

@@ -73,7 +73,7 @@ namespace Phototesting.Frame
                 ItemStack stored = _inventory[0].Itemstack!;
                 if (!byPlayer.InventoryManager.TryGiveItemstack(stored))
                 {
-                    world.SpawnItemEntity(stored, byPlayer.Entity.SidedPos.XYZ);
+                    world.SpawnItemEntity(stored, byPlayer.Entity.Pos.XYZ);
                 }
                 _inventory[0].TakeOutWhole();
                 MarkDirty(true);

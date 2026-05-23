@@ -43,7 +43,7 @@ namespace Phototesting.CameraCapture
             if (val.MountedOn != null)
                 return;
 
-            float targetYaw = val.SidedPos.Yaw;
+            float targetYaw = val.Pos.Yaw;
             Traverse traverse = Traverse.Create(__instance);
             traverse.Field<float>("smoothedBodyYaw").Value = targetYaw;
             traverse.Field<float>("bodyYawLerped").Value = targetYaw;
@@ -77,7 +77,7 @@ namespace Phototesting.CameraCapture
             }
             if (_modelMatField == null) return;
 
-            EntityPos entityPos = val.SidedPos;
+            EntityPos entityPos = val.Pos;
 
             double dx = entityPos.X         - val.CameraPos.X;
             double dy = entityPos.InternalY - val.CameraPos.Y;

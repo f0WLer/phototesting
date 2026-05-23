@@ -217,7 +217,7 @@ namespace Phototesting.AdminTooling
                         }
 
                         var player = _owner.ClientApi.World.Player;
-                        var pos = player.Entity.SidedPos;
+                        var pos = player.Entity.Pos;
                         Vec3d eyePos = pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
                         float yaw = pos.Yaw;
                         float pitch = pos.Pitch;

@@ -86,7 +86,7 @@ namespace Phototesting.CameraCapture
                 yaw,
                 pitch,
                 fov,
-                _capi.World.Player.Entity.SidedPos.Dimension,
+                _capi.World.Player.Entity.Pos.Dimension,
                 selfPortrait));
             cam.InitBuffer();
 

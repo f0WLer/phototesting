@@ -654,7 +654,7 @@ namespace Phototesting.CameraCapture
 
                 // Snapshot the player's eye position and orientation at the moment the shutter opens.
                 var player = clientApi.World.Player;
-                var sidedPos = player.Entity.SidedPos;
+                var sidedPos = player.Entity.Pos;
                 var cameraState = new VirtualCameraState(
                     sidedPos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
                     sidedPos.Yaw,

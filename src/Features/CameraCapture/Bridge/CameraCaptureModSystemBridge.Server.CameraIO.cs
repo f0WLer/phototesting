@@ -207,7 +207,7 @@ namespace Phototesting.CameraCapture
                 if (existing?.Code == CameraItemHelper.MountedCameraBlockCode) return;
             }
 
-            BlockPos pos = player.Entity.SidedPos.AsBlockPos;
+            BlockPos pos = player.Entity.Pos.AsBlockPos;
             Block current = Api.World.BlockAccessor.GetBlock(pos);
             if (current.Replaceable < 6000)
             {
