@@ -23,7 +23,8 @@ namespace Phototesting.CameraCapture
         public override void GetHeldItemInfo(ItemSlot inSlot, System.Text.StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
         {
             base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
-            dsc.AppendLine("RMB to look through the viewfinder. LMB to start/pause exposure. Exposure seals automatically when the target is reached.");
+            dsc.AppendLine("RMB to look through the viewfinder. LMB to start/pause exposure.");
+            dsc.AppendLine("Shift+RMB with a tripod in offhand mounts it; Shift+RMB with empty offhand removes it after unloading the plate.");
 
             string? loadedPlate = inSlot?.Itemstack?.Attributes?.GetString(AttrLoadedPlate, null);
             if (!string.IsNullOrEmpty(loadedPlate))

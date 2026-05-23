@@ -23,7 +23,7 @@ namespace Phototesting.CameraCapture
         private void ConfigureServerCameraCaptureCore(ICoreServerAPI api)
         {
             ServerChannel = api.Network.GetChannel("phototesting");
-            CameraCaptureChannelRegistration.ConfigureServerCoreHandlers(ServerChannel, OnPhotoTakenReceived, OnCameraLoadPlateReceived, OnExposureStateReceived);
+            CameraCaptureChannelRegistration.ConfigureServerCoreHandlers(ServerChannel, OnPhotoTakenReceived, OnCameraLoadPlateReceived, OnCameraTripodReceived, OnExposureStateReceived);
 
             _owner.PhotoSyncBridge.ConfigureServerPhotoSyncRuntime(api);
         }
@@ -95,6 +95,9 @@ namespace Phototesting.CameraCapture
 
             if (PlateDryingTransition.IsDry(Api.World, loadedPlate)) return;
 
+            if (CameraItemHelper.HasMountedTripod(cameraStack))
+                ClearMountedCameraBlock(cameraStack);
+
             PlateStateService.SetStage(loadedPlate, PlateStage.Exposed);
             loadedPlate.Attributes.SetString("photoId", photoId);
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureId);
@@ -123,6 +126,9 @@ namespace Phototesting.CameraCapture
             if (cameraSlot == null || cameraStack == null) return;
 
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return;
+
+            if (packet.IsExposing && CameraItemHelper.HasMountedTripod(cameraStack))
+                EnsureMountedCameraBlock(cameraStack, player);
 
             PlateStage stage = PlateStateService.GetStage(loadedPlate);
 

@@ -1,0 +1,28 @@
+{
+    "code": "tripod",
+    "shape": { "base": "phototesting:item/tripod" },
+    "maxstacksize": 1,
+    "storageFlags": 257,
+    "creativeinventory": { "general": ["*"], "items": ["*"] },
+    "attributes": {
+        "offhandAllowed": true
+    },
+    "guiTransform": {
+        "translation": { "x": 0, "y": -25, "z": 0 },
+        "rotation": { "x": -35, "y": 35, "z": 180 },
+        "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+        "scale": 3.0
+    },
+    "tpHandTransform": {
+        "translation": { "x": -0.1, "y": 0, "z": -0.2 },
+        "rotation": { "x": -80, "y": 10, "z": -100 },
+        "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+        "scale": 1.0
+    },
+    "groundTransform": {
+        "translation": { "x": 0, "y": 0.25, "z": 0 },
+        "rotation": { "x": 0, "y": 45, "z": 0 },
+        "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+        "scale": 2.0
+    }
+}

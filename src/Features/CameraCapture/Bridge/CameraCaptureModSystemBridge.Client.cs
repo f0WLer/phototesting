@@ -9,6 +9,7 @@ using Phototesting.PhotoSync.Integration;
 using Phototesting.PlateLifecycle;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture
 {
@@ -252,11 +253,10 @@ namespace Phototesting.CameraCapture
         private CameraCaptureClientRuntime? _cameraCaptureClientRuntime;
         private CameraCaptureClientRuntime CaptureClientRuntime => _cameraCaptureClientRuntime ??= new CameraCaptureClientRuntime(this);
 
-        // Starts a manual accumulation exposure for a mounted (tripod-attached) camera.
-        // Delegates to the viewfinder accumulation path until dedicated virtual accumulation is implemented.
+        // Starts or toggles a fixed-position virtual accumulation exposure for a mounted (tripod-attached) camera.
         internal bool RequestMountedPhotoCapture(EntityAgent byEntity, bool silentIfBusy = false)
         {
-            return CaptureClientRuntime.TryToggleViewfinderExposure(byEntity, silentIfBusy, ExposureStartOptions.Manual());
+            return CaptureClientRuntime.TryToggleMountedExposure(silentIfBusy);
         }
 
         // Toggles viewport accumulation: starts/resumes when idle, pauses when capturing.
@@ -279,6 +279,8 @@ namespace Phototesting.CameraCapture
             private const float RmbReleaseGraceSeconds = 0.04f;
 
             private readonly CameraCaptureModSystemBridge _owner;
+
+            private string _mountedExposureId = string.Empty;
 
             private bool _suppressViewfinderUntilRmbReleased;
             private bool _captureInProgress;
@@ -325,6 +327,10 @@ namespace Phototesting.CameraCapture
             {
                 if (_owner.ClientApi == null) return;
 
+                // Mounted exposure auto-halt: export and seal once the virtual renderer finishes.
+                if (!string.IsNullOrEmpty(_mountedExposureId) && _owner._virtualExposureRenderer?.State == ExposureState.Done)
+                    ExportAndSealMountedExposure();
+
                 ItemSlot? activeCameraSlot = CameraItemHelper.GetActiveCameraSlot(_owner.ClientApi);
                 bool holdingCamera = activeCameraSlot != null;
 
@@ -356,12 +362,25 @@ namespace Phototesting.CameraCapture
 
                     ItemSlot? offhand = _owner.ClientApi.World.Player?.InventoryManager?.OffhandHotbarSlot;
                     ItemStack? offstack = offhand?.Itemstack;
+                    ItemStack? cameraStack = activeCameraSlot?.Itemstack;
 
-                    bool cameraLoaded = CameraCaptureModSystemBridge.CameraHasLoadedPlate(activeCameraSlot?.Itemstack);
+                    bool cameraLoaded = CameraCaptureModSystemBridge.CameraHasLoadedPlate(cameraStack);
 
                     // Load: accept consolidated sensitized plates.
                     if (!cameraLoaded)
                     {
+                        if (offhand != null && offhand.Empty && CameraItemHelper.HasMountedTripod(cameraStack))
+                        {
+                            _owner.ClientChannel.SendPacket(new CameraTripodPacket { Mount = false });
+                            return;
+                        }
+
+                        if (CameraItemHelper.IsTripodItemStack(offstack) && !CameraItemHelper.HasMountedTripod(cameraStack))
+                        {
+                            _owner.ClientChannel.SendPacket(new CameraTripodPacket { Mount = true });
+                            return;
+                        }
+
                         if (CameraPlateEligibility.CanLoadIntoCamera(offstack)) _owner.ClientChannel.SendPacket(new CameraLoadPlatePacket { Load = true });
                         return;
                     }
@@ -600,6 +619,103 @@ namespace Phototesting.CameraCapture
             internal bool GetRightMouseDown()
             {
                 return _rightMouseDown;
+            }
+
+            // Starts, pauses, or resumes a fixed-position virtual exposure for a mounted (tripod) camera.
+            // On start, snapshots the player's current eye position and orientation as the capture origin;
+            // the exposure then accumulates from that frozen pose regardless of where the player moves.
+            internal bool TryToggleMountedExposure(bool silentIfBusy)
+            {
+                var renderer = _owner._virtualExposureRenderer;
+                if (renderer == null) return false;
+
+                if (renderer.State == ExposureState.Capturing)
+                {
+                    renderer.Pause();
+                    SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+                    return true;
+                }
+
+                if (renderer.State == ExposureState.Paused)
+                {
+                    renderer.Resume();
+                    SendExposureStatePacket(true, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+                    return true;
+                }
+
+                // Guard: don't overwrite a completed but not-yet-exported session.
+                if (renderer.State == ExposureState.Done) return true;
+
+                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(
+                    _owner, silentIfBusy, isMounted: false, out ItemStack? loadedPlateStack)) return false;
+
+                var clientApi = _owner.ClientApi;
+                if (clientApi == null) return false;
+
+                // Snapshot the player's eye position and orientation at the moment the shutter opens.
+                var player = clientApi.World.Player;
+                var sidedPos = player.Entity.SidedPos;
+                var cameraState = new VirtualCameraState(
+                    sidedPos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
+                    sidedPos.Yaw,
+                    sidedPos.Pitch,
+                    ((ClientMain)clientApi.World).MainCamera.Fov,
+                    sidedPos.Dimension);
+
+                string processId = PlateStateService.GetProcessId(loadedPlateStack);
+                if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
+                    profile = PlateProcessProfile.Iodide;
+
+                _mountedExposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+                if (string.IsNullOrEmpty(_mountedExposureId))
+                    _mountedExposureId = Guid.NewGuid().ToString("N");
+
+                renderer.ApplyFinishing = true;
+                renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
+                renderer.Start(cameraState, profile);
+                SendExposureStatePacket(true, 0, _mountedExposureId, renderer.CapFrameCount);
+                return true;
+            }
+
+            // Exports the completed virtual exposure buffer, notifies the server, and cleans up.
+            private void ExportAndSealMountedExposure()
+            {
+                var renderer = _owner._virtualExposureRenderer;
+                if (renderer == null || renderer.FramesAccumulated == 0)
+                {
+                    renderer?.Discard();
+                    _mountedExposureId = string.Empty;
+                    return;
+                }
+
+                try
+                {
+                    var clientApi = _owner.ClientApi;
+                    if (clientApi == null) return;
+
+                    ItemStack? camStack = CameraItemHelper.GetActiveCameraStack(clientApi);
+                    CameraItemHelper.TryGetLoadedPlateStack(camStack, clientApi.World, out ItemStack? loadedPlate);
+                    WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlate);
+
+                    string fileName = renderer.Export(effectsOverride);
+                    _owner.ClientChannel?.SendPacket(new PhotoTakenPacket { PhotoId = fileName });
+                    ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
+
+                    var entity = clientApi.World.Player?.Entity;
+                    if (entity != null)
+                        clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), entity, null, true, 32, 1f);
+                }
+                catch (Exception ex)
+                {
+                    _owner.ClientApi?.Logger.Error("Phototesting: mounted exposure export failed — " + ex);
+                }
+                finally
+                {
+                    if (_owner._virtualExposureRenderer != null)
+                        _owner._virtualExposureRenderer.ApplyFinishing = false;
+                    _owner._virtualExposureRenderer?.Discard();
+                    _mountedExposureId = string.Empty;
+                }
             }
         }
 }

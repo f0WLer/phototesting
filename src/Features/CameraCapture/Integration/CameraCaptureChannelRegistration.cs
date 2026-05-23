@@ -13,6 +13,7 @@ namespace Phototesting.CameraCapture.Integration
             return channel
                 .RegisterMessageType(typeof(PhotoTakenPacket))
                 .RegisterMessageType(typeof(CameraLoadPlatePacket))
+                .RegisterMessageType(typeof(CameraTripodPacket))
                 .RegisterMessageType(typeof(ExposureStatePacket));
         }
 
@@ -39,6 +40,7 @@ namespace Phototesting.CameraCapture.Integration
             IServerNetworkChannel channel,
             NetworkClientMessageHandler<PhotoTakenPacket> onPhotoTakenReceived,
             NetworkClientMessageHandler<CameraLoadPlatePacket> onCameraLoadPlateReceived,
+            NetworkClientMessageHandler<CameraTripodPacket> onCameraTripodReceived,
             NetworkClientMessageHandler<ExposureStatePacket> onExposureStateReceived)
         {
             if (channel == null) return;
@@ -48,6 +50,9 @@ namespace Phototesting.CameraCapture.Integration
 
             if (onCameraLoadPlateReceived != null)
                 channel.SetMessageHandler<CameraLoadPlatePacket>(onCameraLoadPlateReceived);
+
+            if (onCameraTripodReceived != null)
+                channel.SetMessageHandler<CameraTripodPacket>(onCameraTripodReceived);
 
             if (onExposureStateReceived != null)
                 channel.SetMessageHandler<ExposureStatePacket>(onExposureStateReceived);

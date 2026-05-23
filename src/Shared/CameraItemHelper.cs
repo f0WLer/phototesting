@@ -9,7 +9,11 @@ namespace Phototesting
     /// </summary>
     public static class CameraItemHelper
     {
-        public const string MountedTripodCodeAttrKey = "phototestingMountedTripodCode";
+        public static readonly AssetLocation TripodItemCode = new AssetLocation("phototesting", "tripod");
+        public static readonly AssetLocation MountedCameraBlockCode = new AssetLocation("phototesting", "camera-mounted");
+
+        public const string MountedAttrKey    = "phototestingMounted";
+        public const string MountedPosAttrKey = "phototestingMountedPos";
 
         // Gets the currently active hotbar slot only when it holds the wetplate camera.
         public static ItemSlot? GetActiveCameraSlot(ICoreClientAPI? capi)
@@ -28,7 +32,13 @@ namespace Phototesting
         public static bool HasMountedTripod(ItemStack? cameraStack)
         {
             if (cameraStack?.Item is not ItemWetplateCamera) return false;
-            return !string.IsNullOrEmpty(cameraStack.Attributes.GetString(MountedTripodCodeAttrKey, string.Empty));
+            return !string.IsNullOrEmpty(cameraStack.Attributes.GetString(MountedAttrKey, string.Empty));
+        }
+
+        // Returns true when the stack is the dedicated tripod item.
+        public static bool IsTripodItemStack(ItemStack? stack)
+        {
+            return stack?.Collectible?.Code == TripodItemCode;
         }
 
         // Rehydrates the loaded plate from full stored stack first, then legacy code-only attribute.

@@ -12,6 +12,13 @@ namespace Phototesting.CameraCapture.Contracts
     }
 
     [ProtoContract]
+    public class CameraTripodPacket
+    {
+        [ProtoMember(1)]
+        public bool Mount { get; set; }
+    }
+
+    [ProtoContract]
     public class PhotoCaptureConfigPacket
     {
         [ProtoMember(1)]
