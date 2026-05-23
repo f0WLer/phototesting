@@ -252,18 +252,18 @@ namespace Phototesting.CameraCapture
         private CameraCaptureClientRuntime? _cameraCaptureClientRuntime;
         private CameraCaptureClientRuntime CaptureClientRuntime => _cameraCaptureClientRuntime ??= new CameraCaptureClientRuntime(this);
 
-        // Validates current camera state, schedules the screenshot, and queues the eventual authoritative PhotoTaken packet flow.
-        internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy = false)
+        // Starts a manual accumulation exposure for a mounted (tripod-attached) camera.
+        // Delegates to the viewfinder accumulation path until dedicated virtual accumulation is implemented.
+        internal bool RequestMountedPhotoCapture(EntityAgent byEntity, bool silentIfBusy = false)
         {
-            return CaptureClientRuntime.RequestPhotoCaptureFromViewfinder(byEntity, silentIfBusy);
+            return CaptureClientRuntime.TryToggleViewfinderExposure(byEntity, silentIfBusy, ExposureStartOptions.Manual());
         }
 
         // Toggles viewport accumulation: starts/resumes when idle, pauses when capturing.
-        // Seals (exports + sends PhotoTakenPacket) automatically when accumulated frames >= target.
-        // autoHaltAfterTarget controls whether a fresh exposure seals itself once target frames are reached.
-        internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy = false, bool autoHaltAfterTarget = true)
+        // The stop policy is chosen by the camera item at exposure start.
+        internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy = false, ExposureStartOptions startOptions = default)
         {
-            return CaptureClientRuntime.TryToggleViewfinderExposure(byEntity, silentIfBusy, autoHaltAfterTarget);
+            return CaptureClientRuntime.TryToggleViewfinderExposure(byEntity, silentIfBusy, startOptions);
         }
 
         // Resolves capture effects override for the currently loaded camera plate, if present.
@@ -423,8 +423,8 @@ namespace Phototesting.CameraCapture
             }
 
             // Toggle: starts/resumes accumulation when not capturing; pauses (and optionally seals) when capturing.
-            // autoHaltAfterTarget only applies when starting a fresh exposure; resume and pause paths ignore it.
-            internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy, bool autoHaltAfterTarget = true)
+            // startOptions only applies when starting a fresh exposure; resume and pause paths ignore it.
+            internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy, ExposureStartOptions startOptions = default)
             {
                 var acc = _owner.ActiveAccumulator;
 
@@ -474,7 +474,7 @@ namespace Phototesting.CameraCapture
 
                 var newAcc = new ViewportExposureAccumulator(clientApi);
                 newAcc.OnAutoHalt = () => OnAccumulatorAutoHalt(byEntity, newAcc, exposureId);
-                newAcc.Start(profile, autoHaltAfterTarget);
+                newAcc.Start(profile, startOptions);
 
                 ViewfinderExposureRegistry.Register(exposureId, newAcc);
                 _owner.ActiveAccumulator = newAcc;
@@ -559,82 +559,6 @@ namespace Phototesting.CameraCapture
                 });
             }
 
-            internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy)
-            {
-                bool isMounted = _owner._virtualCaptureService != null && IsHoldingTripod(_owner.ClientApi);
-
-                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(_owner, silentIfBusy, isMounted, out ItemStack? loadedPlateStack)) return false;
-
-                var clientApi = _owner.ClientApi;
-                if (clientApi == null) return false;
-
-                // If the player wants an immersive, HUD-free viewfinder, rely on the game's built-in gui-less mode.
-                _owner.MaybeShowF4GuiLessTip();
-
-                // After taking a shot we want to exit viewfinder and not instantly re-enter until RMB is released.
-                _suppressViewfinderUntilRmbReleased = true;
-
-                WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlateStack);
-
-                if (isMounted)
-                {
-                    return RequestVirtualCapture(clientApi, byEntity, effectsOverride, silentIfBusy);
-                }
-
-                PhotoCaptureRenderer? captureRenderer = _owner._captureRenderer;
-                if (captureRenderer == null) return false;
-
-                if (!captureRenderer.TryScheduleCapture(
-                    out string fileName,
-                    onSuccess: fn => OnCaptureSuccess(clientApi, byEntity, fn),
-                    onError: ex => OnCaptureFailure(clientApi, ex),
-                    effectsOverride: effectsOverride
-                ))
-                {
-                    if (!silentIfBusy) clientApi.ShowChatMessage("Wetplate: capture already in progress...");
-                    return false;
-                }
-
-                _captureInProgress = true;
-
-                return true;
-            }
-
-            private bool RequestVirtualCapture(ICoreClientAPI clientApi, EntityAgent byEntity, WetplateEffectsConfig? effectsOverride, bool silentIfBusy)
-            {
-                VirtualCaptureService service = _owner._virtualCaptureService!;
-                if (service.IsCapturing)
-                {
-                    if (!silentIfBusy) clientApi.ShowChatMessage("Wetplate: capture already in progress...");
-                    return false;
-                }
-
-                var pos = byEntity.SidedPos;
-                Vintagestory.API.MathTools.Vec3d eyePos = pos.XYZ.AddCopy(0, byEntity.LocalEyePos.Y, 0);
-                float yaw = pos.Yaw;
-                float pitch = pos.Pitch;
-                float fov = _owner._viewfinderTargetFov;
-                int maxDimension = _owner.Config?.Viewfinder?.PhotoCaptureMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
-
-                _captureInProgress = true;
-
-                service.TryCaptureOneShot(
-                    eyePos, yaw, pitch, fov, maxDimension, effectsOverride,
-                    onSuccess: fn => OnCaptureSuccess(clientApi, byEntity, fn),
-                    onError: ex => OnCaptureFailure(clientApi, ex));
-
-                return true;
-            }
-
-            // Returns true when the player's offhand slot holds an item whose code path contains "tripod".
-            // Placeholder until the tripod item exists; the check is intentionally loose.
-            private static bool IsHoldingTripod(ICoreClientAPI? clientApi)
-            {
-                if (clientApi == null) return false;
-                ItemSlot? offhand = clientApi.World.Player?.InventoryManager?.OffhandHotbarSlot;
-                if (offhand == null || offhand.Empty) return false;
-                return offhand.Itemstack?.Collectible?.Code?.Path?.Contains("tripod", StringComparison.OrdinalIgnoreCase) == true;
-            }
 
             // Completes local post-capture flow once the renderer finishes writing the screenshot.
             private void OnCaptureSuccess(ICoreClientAPI clientApi, EntityAgent byEntity, string fileName)

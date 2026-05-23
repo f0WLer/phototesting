@@ -19,16 +19,17 @@ namespace Phototesting.CameraCapture.Exposure
     //   Stop()   — unregister renderer, finalize without export (sets State = Done)
     //   Export() — develop buffer, apply effects, write PNG, return file name
     //
-    // Auto-halt: when FramesAccumulated >= TargetFrames and AutoHaltAfterTarget is true,
-    // State transitions to Done, renderer unregistration is deferred, and OnAutoHalt fires.
+    // Auto-stop: timer- or sample-based stop policies can transition the accumulator to Done,
+    // defer renderer unregistration, and fire OnAutoHalt.
     internal sealed class ViewportExposureAccumulator : IGameplayExposureAccumulator, IRenderer
     {
         private readonly ICoreClientAPI _capi;
         private readonly WetplateEffectsConfig _baselineEffects;
         private ExposureAccumulationBuffer? _buffer;
         private PlateProcessProfile _process;
-        private bool _autoHaltAfterTarget;
+        private ExposureStartOptions _startOptions;
         private float _elapsedSinceLastSample;
+        private float _elapsedCaptureSeconds;
         private bool _rendererRegistered;
         private bool _disposed;
         private long _lastPreviewMs;
@@ -52,15 +53,16 @@ namespace Phototesting.CameraCapture.Exposure
 
         // Starts a fresh accumulation session. If already Paused, resumes instead.
         // If already Capturing, this is a no-op.
-        internal void Start(PlateProcessProfile process, bool autoHaltAfterTarget)
+        internal void Start(PlateProcessProfile process, ExposureStartOptions startOptions)
         {
             if (_disposed) return;
             if (State == ExposureState.Paused) { Resume(); return; }
             if (State == ExposureState.Capturing) return;
 
             _process = process;
-            _autoHaltAfterTarget = autoHaltAfterTarget;
+            _startOptions = startOptions;
             _elapsedSinceLastSample = 0f;
+            _elapsedCaptureSeconds = 0f;
 
             int w = Math.Max(1, _capi.Render.FrameWidth);
             int h = Math.Max(1, _capi.Render.FrameHeight);
@@ -168,6 +170,13 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (State != ExposureState.Capturing || _buffer == null) return;
 
+            _elapsedCaptureSeconds += deltaTime;
+            if (_startOptions.StopMode == ExposureStopMode.Timer && _elapsedCaptureSeconds >= _startOptions.StopAfterSeconds)
+            {
+                CompleteAutoStop();
+                return;
+            }
+
             _elapsedSinceLastSample += deltaTime;
             if (_elapsedSinceLastSample < _process.SampleInterval) return;
             _elapsedSinceLastSample -= _process.SampleInterval;
@@ -208,20 +217,23 @@ namespace Phototesting.CameraCapture.Exposure
             // Do NOT call Stop() here — UnregisterRenderer() must not be called from within
             // a renderer iteration loop (causes ArgumentOutOfRangeException). Instead, set
             // Done immediately to stop accumulating and defer the unregister to the next frame.
-            if (_autoHaltAfterTarget && _buffer.FramesAccumulated >= _process.SampleCount)
-            {
-                ViewportExposureSuppressContext.SuppressLocalPlayer = false;
-                State = ExposureState.Done;
-                // Clear the flag NOW (before OnAutoHalt fires) so any Dispose() call triggered
-                // by the auto-halt callback chain (e.g. Registry.Remove → Dispose) hits the
-                // early-return guard in UnregisterRenderer() instead of crashing the iterator.
-                // The deferred task calls the API directly because the flag is already false.
-                _rendererRegistered = false;
-                _capi.Event.EnqueueMainThreadTask(
-                    () => _capi.Event.UnregisterRenderer(this, EnumRenderStage.AfterBlit),
-                    "phototesting-unregister-exposure");
-                OnAutoHalt?.Invoke();
-            }
+            if (_startOptions.StopMode == ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
+                CompleteAutoStop();
+        }
+
+        private void CompleteAutoStop()
+        {
+            ViewportExposureSuppressContext.SuppressLocalPlayer = false;
+            State = ExposureState.Done;
+            // Clear the flag NOW (before OnAutoHalt fires) so any Dispose() call triggered
+            // by the auto-stop callback chain (e.g. Registry.Remove → Dispose) hits the
+            // early-return guard in UnregisterRenderer() instead of crashing the iterator.
+            // The deferred task calls the API directly because the flag is already false.
+            _rendererRegistered = false;
+            _capi.Event.EnqueueMainThreadTask(
+                () => _capi.Event.UnregisterRenderer(this, EnumRenderStage.AfterBlit),
+                "phototesting-unregister-exposure");
+            OnAutoHalt?.Invoke();
         }
 
         private static void ApplyProcessToBuffer(ExposureAccumulationBuffer buf, PlateProcessProfile process)

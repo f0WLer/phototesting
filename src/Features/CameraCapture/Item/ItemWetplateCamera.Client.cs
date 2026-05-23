@@ -1,5 +1,7 @@
 using Vintagestory.API.Common;
+using Vintagestory.API.Client;
 using Phototesting.AdminTooling;
+using Phototesting.CameraCapture.Exposure;
 
 namespace Phototesting.CameraCapture
 {
@@ -13,12 +15,18 @@ namespace Phototesting.CameraCapture
             return modSys != null && modSys.CameraCaptureBridge.IsViewfinderActive;
         }
 
-        private static bool TryToggleExposure(ICoreAPI api, EntityAgent byEntity, bool silentIfBusy)
+        private static bool TryStartCapture(ICoreAPI api, EntityAgent byEntity, bool silentIfBusy)
         {
+            if (api is not ICoreClientAPI capi) return false;
+
             PhotoTestingModSystem? modSys = PhotoTestingConfigAccess.ResolveModSystem(api);
             if (modSys == null) return false;
-            // Handheld camera always auto-halts once the target frame count is reached.
-            return modSys.CameraCaptureBridge.TryToggleViewfinderExposure(byEntity, silentIfBusy, autoHaltAfterTarget: true);
+
+            ItemStack? cameraStack = CameraItemHelper.GetActiveCameraStack(capi);
+            if (CameraItemHelper.HasMountedTripod(cameraStack))
+                return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy);
+
+            return modSys.CameraCaptureBridge.TryToggleViewfinderExposure(byEntity, silentIfBusy, ExposureStartOptions.Manual());
         }
 
         // Drives shutter clicks while RMB viewfinder mode is active on the client.
@@ -36,7 +44,7 @@ namespace Phototesting.CameraCapture
             SetLmbPrev(byEntity, leftDown);
 
             if (leftPressed)
-                TryToggleExposure(api, byEntity, silentIfBusy: true);
+                TryStartCapture(api, byEntity, silentIfBusy: true);
 
             // Keep the interact chain alive while RMB viewfinder is active.
             return true;
