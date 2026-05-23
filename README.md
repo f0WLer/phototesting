@@ -1,3 +1,7 @@
+## Quickstart
+
+Create a `.env` file in the repo root with at least `VINTAGE_STORY_PATH` and `MODS_PATH` set to your local Vintage Story install and mods folder.
+
 ## Docs
 
 - `docs/FEATURE_PILLARS.md` for a feature-level overview
