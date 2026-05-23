@@ -98,7 +98,7 @@ namespace Phototesting.PlateBox
                     world.SpawnItemEntity(stack, pos.ToVec3d().Add(0.5, 0.5, 0.5));
                 }
 
-                AssetLocation? breakSound = Sounds?.GetBreakSound(byPlayer);
+                AssetLocation? breakSound = Sounds?.GetBreakSound(byPlayer).Location;
                 if (breakSound != null)
                 {
                     world.PlaySoundAt(breakSound, pos, 0.0, byPlayer);
