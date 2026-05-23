@@ -384,7 +384,7 @@ namespace Phototesting.PlateLifecycle.Tray
         private bool TryInsertHeldPlateIntoTray(IWorldAccessor world, IPlayer byPlayer, BlockPos trayPos, BlockEntityDevelopmentTray be, ItemSlot activeSlot, ItemStack held, PlateStage trayStage)
         {
             // Ensure tray photo orientation always tracks the player who is actively using the tray.
-            BlockFacing insertFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.Pos?.Yaw ?? 0f);
+            BlockFacing insertFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.SidedPos?.Yaw ?? 0f);
             be.SetPlacementFacing(insertFacing.Code, markBlockDirty: false);
 
             ItemStack toInsert = held.Clone();

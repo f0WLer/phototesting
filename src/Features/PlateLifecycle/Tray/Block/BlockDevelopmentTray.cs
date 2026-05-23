@@ -43,7 +43,7 @@ namespace Phototesting.PlateLifecycle.Tray
             BlockPos placedPos = ResolvePlacedPos(world, blockSel);
             if (world.BlockAccessor.GetBlockEntity(placedPos) is BlockEntityDevelopmentTray be)
             {
-                BlockFacing playerFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.Pos?.Yaw ?? 0f);
+                BlockFacing playerFacing = BlockFacing.HorizontalFromYaw(byPlayer?.Entity?.SidedPos?.Yaw ?? 0f);
                 be.SetPlacementFacing(playerFacing.Code, markBlockDirty: true);
             }
 
