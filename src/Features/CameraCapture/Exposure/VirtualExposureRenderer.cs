@@ -36,6 +36,7 @@ namespace Phototesting.CameraCapture.Exposure
         private ExposureReadbackPipeline? _readback;
         private byte[]? _readbackScratch;
         private PlateProcessProfile _process = PlateProcessProfile.Iodide;
+        private ExposureStartOptions _startOptions = ExposureStartOptions.Manual();
         private float _elapsedSinceLastSample;
         private float _elapsedSinceLastPreview;
 
@@ -127,17 +128,37 @@ namespace Phototesting.CameraCapture.Exposure
             _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
         }
 
-        internal void Start(VirtualCameraState cameraState, PlateProcessProfile process)
+        private long ResolveShutterEndMs(long startMs)
+        {
+            return _startOptions.StopMode == ExposureStopMode.Timer
+                ? startMs + (long)(_startOptions.StopAfterSeconds * 1000f)
+                : 0;
+        }
+
+        private void CompleteAutoStop(long nowMs)
+        {
+            DrainReadbackPipeline();
+            _shutterFrozenMs = nowMs;
+            State = ExposureState.Done;
+            PushPreviewFrame();
+            _capi.Logger.Notification(
+                $"Phototesting: {_process.Name} exposure complete — " +
+                $"{_buffer?.FramesAccumulated ?? 0}/{_process.SampleCount} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
+                $"Use '.phototesting exposure export' to save.");
+        }
+
+        internal void Start(VirtualCameraState cameraState, PlateProcessProfile process, ExposureStartOptions startOptions = default)
         {
             Discard();
             _process = process;
+            _startOptions = startOptions;
             LastFaultMessage = null;
             _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
 
             long now = _capi.ElapsedMilliseconds;
             _shutterStartMs = now;
-            _shutterEndMs   = now + (long)(process.DurationSeconds * 1000f);
+            _shutterEndMs   = ResolveShutterEndMs(now);
             _pauseStartedMs = 0;
             _shutterFrozenMs = 0;
 
@@ -224,7 +245,7 @@ namespace Phototesting.CameraCapture.Exposure
             _elapsedSinceLastPreview = 0f;
             long now = _capi.ElapsedMilliseconds;
             _shutterStartMs = now;
-            _shutterEndMs   = now + (long)(_process.DurationSeconds * 1000f);
+            _shutterEndMs   = ResolveShutterEndMs(now);
             _pauseStartedMs = 0;
             _shutterFrozenMs = 0;
             State = ExposureState.Capturing;
@@ -327,16 +348,9 @@ namespace Phototesting.CameraCapture.Exposure
             // Wall-clock shutter close: shutter has been open long enough.
             // Drain in-flight PBOs first so no samples from the last two kicks are lost.
             long nowMs = _capi.ElapsedMilliseconds;
-            if (nowMs >= _shutterEndMs)
+            if (_startOptions.StopMode == ExposureStopMode.Timer && _shutterEndMs != 0 && nowMs >= _shutterEndMs)
             {
-                DrainReadbackPipeline();
-                _shutterFrozenMs = nowMs;
-                State = ExposureState.Done;
-                PushPreviewFrame();
-                _capi.Logger.Notification(
-                    $"Phototesting: {_process.Name} exposure complete — " +
-                    $"{_buffer.FramesAccumulated}/{_process.SampleCount} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
-                    $"Use '.phototesting exposure export' to save.");
+                CompleteAutoStop(nowMs);
                 return;
             }
 
@@ -386,6 +400,12 @@ namespace Phototesting.CameraCapture.Exposure
                 LastFaultMessage = ex.Message;
                 _shutterFrozenMs = _capi.ElapsedMilliseconds;
                 State = ExposureState.Faulted;
+                return;
+            }
+
+            if (_startOptions.StopMode == ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
+            {
+                CompleteAutoStop(_capi.ElapsedMilliseconds);
                 return;
             }
 

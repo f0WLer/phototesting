@@ -60,7 +60,7 @@ namespace Phototesting.CameraCapture
             if (ClientChannel == null) return;
 
             _owner.PhotoSyncBridge.ConfigureClientPhotoSyncTransferChannelHandlers();
-            CameraCaptureChannelRegistration.ConfigureClientHandlers(ClientChannel, OnPhotoCaptureConfigReceived);
+            CameraCaptureChannelRegistration.ConfigureClientHandlers(ClientChannel, OnPhotoCaptureConfigReceived, OnMountedCameraControlReceived);
         }
 
         // Wires client camera-capture renderers and requests server-authoritative capture config.
@@ -114,6 +114,12 @@ namespace Phototesting.CameraCapture
             Config.Viewfinder.ClampInPlace();
 
             _captureRenderer?.SetCaptureMaxDimension(Config.Viewfinder.PhotoCaptureMaxDimension);
+        }
+
+        private void OnMountedCameraControlReceived(MountedCameraControlPacket packet)
+        {
+            if (packet == null) return;
+            CaptureClientRuntime.ApplyMountedExposureControl(packet.IsExposing, packet.IsBlockRemoved);
         }
 
         // Sends the capture-config request immediately when connected or defers it until the client channel comes up.
@@ -254,9 +260,9 @@ namespace Phototesting.CameraCapture
         private CameraCaptureClientRuntime CaptureClientRuntime => _cameraCaptureClientRuntime ??= new CameraCaptureClientRuntime(this);
 
         // Starts or toggles a fixed-position virtual accumulation exposure for a mounted (tripod-attached) camera.
-        internal bool RequestMountedPhotoCapture(EntityAgent byEntity, bool silentIfBusy = false)
+        internal bool RequestMountedPhotoCapture(EntityAgent byEntity, bool silentIfBusy = false, ExposureStartOptions startOptions = default)
         {
-            return CaptureClientRuntime.TryToggleMountedExposure(silentIfBusy);
+            return CaptureClientRuntime.TryToggleMountedExposure(silentIfBusy, startOptions);
         }
 
         // Toggles viewport accumulation: starts/resumes when idle, pauses when capturing.
@@ -281,6 +287,7 @@ namespace Phototesting.CameraCapture
             private readonly CameraCaptureModSystemBridge _owner;
 
             private string _mountedExposureId = string.Empty;
+            private ItemStack? _mountedCameraStackSnapshot;
 
             private bool _suppressViewfinderUntilRmbReleased;
             private bool _captureInProgress;
@@ -624,7 +631,7 @@ namespace Phototesting.CameraCapture
             // Starts, pauses, or resumes a fixed-position virtual exposure for a mounted (tripod) camera.
             // On start, snapshots the player's current eye position and orientation as the capture origin;
             // the exposure then accumulates from that frozen pose regardless of where the player moves.
-            internal bool TryToggleMountedExposure(bool silentIfBusy)
+            internal bool TryToggleMountedExposure(bool silentIfBusy, ExposureStartOptions startOptions = default)
             {
                 var renderer = _owner._virtualExposureRenderer;
                 if (renderer == null) return false;
@@ -652,6 +659,8 @@ namespace Phototesting.CameraCapture
                 var clientApi = _owner.ClientApi;
                 if (clientApi == null) return false;
 
+                _mountedCameraStackSnapshot = CameraItemHelper.GetActiveCameraStack(clientApi)?.Clone();
+
                 // Snapshot the player's eye position and orientation at the moment the shutter opens.
                 var player = clientApi.World.Player;
                 var sidedPos = player.Entity.Pos;
@@ -672,9 +681,37 @@ namespace Phototesting.CameraCapture
 
                 renderer.ApplyFinishing = true;
                 renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
-                renderer.Start(cameraState, profile);
+                renderer.Start(cameraState, profile, startOptions);
                 SendExposureStatePacket(true, 0, _mountedExposureId, renderer.CapFrameCount);
                 return true;
+            }
+
+            internal void ApplyMountedExposureControl(bool isExposing, bool isBlockRemoved = false)
+            {
+                var renderer = _owner._virtualExposureRenderer;
+                if (renderer == null || string.IsNullOrEmpty(_mountedExposureId)) return;
+
+                if (isBlockRemoved)
+                {
+                    renderer.Discard();
+                    _mountedCameraStackSnapshot = null;
+                    _mountedExposureId = string.Empty;
+                    return;
+                }
+
+                if (isExposing)
+                {
+                    if (renderer.State != ExposureState.Paused) return;
+
+                    renderer.Resume();
+                    SendExposureStatePacket(true, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+                    return;
+                }
+
+                if (renderer.State != ExposureState.Capturing) return;
+
+                renderer.Pause();
+                SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
             }
 
             // Exports the completed virtual exposure buffer, notifies the server, and cleans up.
@@ -684,6 +721,7 @@ namespace Phototesting.CameraCapture
                 if (renderer == null || renderer.FramesAccumulated == 0)
                 {
                     renderer?.Discard();
+                    _mountedCameraStackSnapshot = null;
                     _mountedExposureId = string.Empty;
                     return;
                 }
@@ -693,7 +731,7 @@ namespace Phototesting.CameraCapture
                     var clientApi = _owner.ClientApi;
                     if (clientApi == null) return;
 
-                    ItemStack? camStack = CameraItemHelper.GetActiveCameraStack(clientApi);
+                    ItemStack? camStack = _mountedCameraStackSnapshot ?? CameraItemHelper.GetActiveCameraStack(clientApi);
                     CameraItemHelper.TryGetLoadedPlateStack(camStack, clientApi.World, out ItemStack? loadedPlate);
                     WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlate);
 
@@ -714,6 +752,7 @@ namespace Phototesting.CameraCapture
                     if (_owner._virtualExposureRenderer != null)
                         _owner._virtualExposureRenderer.ApplyFinishing = false;
                     _owner._virtualExposureRenderer?.Discard();
+                    _mountedCameraStackSnapshot = null;
                     _mountedExposureId = string.Empty;
                 }
             }

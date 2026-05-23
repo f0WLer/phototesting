@@ -82,10 +82,8 @@ namespace Phototesting.CameraCapture
             string photoId = PhotoAssetStoragePaths.NormalizePhotoId(packet.PhotoId);
             if (string.IsNullOrWhiteSpace(photoId)) return;
 
-            ItemSlot? cameraSlot = player.InventoryManager.ActiveHotbarSlot;
-            ItemStack? cameraStack = cameraSlot?.Itemstack;
-            if (!IsWetplateCameraStack(cameraStack) || !CameraHasLoadedPlate(cameraStack)) return;
-            if (cameraSlot == null || cameraStack == null) return;
+            if (!TryResolveCameraStorage(player, out ItemSlot? cameraSlot, out ItemStack? cameraStack, out BlockEntityMountedCamera? mountedBe)) return;
+            if (cameraStack == null || !CameraHasLoadedPlate(cameraStack)) return;
 
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return;
 
@@ -95,9 +93,6 @@ namespace Phototesting.CameraCapture
 
             if (PlateDryingTransition.IsDry(Api.World, loadedPlate)) return;
 
-            if (CameraItemHelper.HasMountedTripod(cameraStack))
-                ClearMountedCameraBlock(cameraStack);
-
             PlateStateService.SetStage(loadedPlate, PlateStage.Exposed);
             loadedPlate.Attributes.SetString("photoId", photoId);
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureId);
@@ -105,8 +100,17 @@ namespace Phototesting.CameraCapture
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureTargetFrames);
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
-            SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));
-            cameraSlot.MarkDirty();
+            if (mountedBe != null)
+            {
+                ItemStack? updatedCamera = ReplaceCameraCode(cameraStack, GetLoadedCameraCodeForPlate(loadedPlate));
+                if (updatedCamera == null) return;
+                mountedBe.SetStoredCameraStack(updatedCamera, mountedBe.OwnerPlayerUid, Api.World);
+            }
+            else if (cameraSlot != null)
+            {
+                SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));
+                cameraSlot.MarkDirty();
+            }
 
             _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);
 
@@ -120,22 +124,23 @@ namespace Phototesting.CameraCapture
             if (Api?.Side != EnumAppSide.Server || Api.World == null) return;
             if (player == null || packet == null) return;
 
-            ItemSlot? cameraSlot = player.InventoryManager.ActiveHotbarSlot;
-            ItemStack? cameraStack = cameraSlot?.Itemstack;
-            if (!IsWetplateCameraStack(cameraStack) || !CameraHasLoadedPlate(cameraStack)) return;
-            if (cameraSlot == null || cameraStack == null) return;
+            if (!TryResolveCameraStorage(player, out ItemSlot? cameraSlot, out ItemStack? cameraStack, out BlockEntityMountedCamera? mountedBe)) return;
+            if (cameraStack == null || !CameraHasLoadedPlate(cameraStack)) return;
+
+            if (packet.IsExposing && cameraSlot != null && CameraItemHelper.HasMountedTripod(cameraStack))
+            {
+                if (!EnsureMountedCameraBlock(cameraSlot, cameraStack, player)) return;
+                if (!TryResolveCameraStorage(player, out cameraSlot, out cameraStack, out mountedBe) || cameraStack == null) return;
+            }
 
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return;
-
-            if (packet.IsExposing && CameraItemHelper.HasMountedTripod(cameraStack))
-                EnsureMountedCameraBlock(cameraStack, player);
 
             PlateStage stage = PlateStateService.GetStage(loadedPlate);
 
             if (packet.IsExposing)
             {
                 // Plate must be exposable to transition to Exposing.
-                if (stage != PlateStage.Sensitized && stage != PlateStage.ExposurePaused) return;
+                if (stage != PlateStage.Sensitized && stage != PlateStage.ExposurePaused && stage != PlateStage.Exposing) return;
 
                 PlateStateService.SetStage(loadedPlate, PlateStage.Exposing);
                 if (!string.IsNullOrEmpty(packet.ExposureId))
@@ -146,14 +151,17 @@ namespace Phototesting.CameraCapture
             else
             {
                 // Pausing: accept only from Exposing.
-                if (stage != PlateStage.Exposing) return;
+                if (stage != PlateStage.Exposing && stage != PlateStage.ExposurePaused) return;
 
                 PlateStateService.SetStage(loadedPlate, PlateStage.ExposurePaused);
                 loadedPlate.Attributes.SetInt(PlateStateAttributes.ExposedFrames, packet.ExposedFrames);
             }
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
-            cameraSlot.MarkDirty();
+            if (mountedBe != null)
+                mountedBe.MarkCameraDirty();
+            else
+                cameraSlot?.MarkDirty();
         }
 
         // Clamps packet-provided floats to a safe range, treating NaN/Infinity as the lower bound.

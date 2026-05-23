@@ -59,10 +59,12 @@ namespace Phototesting
             api.RegisterBlockClass("DevelopmentTray", typeof(BlockDevelopmentTray));
             api.RegisterBlockClass("PlateBox", typeof(BlockPlateBox));
             api.RegisterBlockClass("BlockFrame", typeof(BlockFrame));
+            api.RegisterBlockClass("BlockMountedCamera", typeof(BlockMountedCamera));
             api.RegisterBlockEntityClass("BlockEntityDevelopmentTray", typeof(BlockEntityDevelopmentTray));
             api.RegisterBlockEntityClass("BlockEntityPlateBox", typeof(BlockEntityPlateBox));
             api.RegisterBlockEntityClass("BlockEntityPlateProcessState", typeof(BlockEntityPlateProcessState));
             api.RegisterBlockEntityClass("BlockEntityFrame", typeof(BlockEntityFrame));
+            api.RegisterBlockEntityClass("BlockEntityMountedCamera", typeof(BlockEntityMountedCamera));
 
             // Register Network Channel
             var channel = CameraCaptureChannelRegistration.RegisterCameraCaptureMessageTypes(api.Network.RegisterChannel("phototesting"));

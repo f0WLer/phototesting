@@ -11,6 +11,7 @@ namespace Phototesting.CameraCapture.Integration
         internal static INetworkChannel RegisterCameraCaptureMessageTypes(INetworkChannel channel)
         {
             return channel
+                .RegisterMessageType(typeof(MountedCameraControlPacket))
                 .RegisterMessageType(typeof(PhotoTakenPacket))
                 .RegisterMessageType(typeof(CameraLoadPlatePacket))
                 .RegisterMessageType(typeof(CameraTripodPacket))
@@ -28,11 +29,15 @@ namespace Phototesting.CameraCapture.Integration
         // Wires the client-side capture-config packet handler.
         internal static void ConfigureClientHandlers(
             IClientNetworkChannel channel,
-            NetworkServerMessageHandler<PhotoCaptureConfigPacket> onPhotoCaptureConfigReceived)
+            NetworkServerMessageHandler<PhotoCaptureConfigPacket> onPhotoCaptureConfigReceived,
+            NetworkServerMessageHandler<MountedCameraControlPacket> onMountedCameraControlReceived)
         {
             if (channel == null || onPhotoCaptureConfigReceived == null) return;
 
             channel.SetMessageHandler<PhotoCaptureConfigPacket>(onPhotoCaptureConfigReceived);
+
+            if (onMountedCameraControlReceived != null)
+                channel.SetMessageHandler<MountedCameraControlPacket>(onMountedCameraControlReceived);
         }
 
         // Wires server-side packet handlers used by camera authority paths.

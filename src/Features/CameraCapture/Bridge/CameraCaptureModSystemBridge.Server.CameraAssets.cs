@@ -23,17 +23,24 @@ namespace Phototesting.CameraCapture
             return _wetplateCameraLoadedSensitizedCode;
         }
 
+        private ItemStack? ReplaceCameraCode(ItemStack? cameraStack, AssetLocation code)
+        {
+            if (Api == null || cameraStack == null) return cameraStack;
+            if (cameraStack.Collectible?.Code == code) return cameraStack;
+
+            Item? item = Api.World.GetItem(code);
+            if (item == null) return cameraStack;
+
+            ItemStack replacement = new ItemStack(item, cameraStack.StackSize);
+            replacement.Attributes.MergeTree(cameraStack.Attributes.Clone());
+            return replacement;
+        }
+
         // Swaps the active camera item code without losing loaded-plate attributes or stack count.
         private void SetCameraCode(ItemSlot cameraSlot, AssetLocation code)
         {
-            if (Api == null || cameraSlot.Itemstack == null) return;
-            if (cameraSlot.Itemstack.Collectible?.Code == code) return;
-
-            Item? item = Api.World.GetItem(code);
-            if (item == null) return;
-
-            ItemStack replacement = new ItemStack(item, cameraSlot.Itemstack.StackSize);
-            replacement.Attributes.MergeTree(cameraSlot.Itemstack.Attributes.Clone());
+            ItemStack? replacement = ReplaceCameraCode(cameraSlot.Itemstack, code);
+            if (replacement == null) return;
             cameraSlot.Itemstack = replacement;
             cameraSlot.MarkDirty();
         }

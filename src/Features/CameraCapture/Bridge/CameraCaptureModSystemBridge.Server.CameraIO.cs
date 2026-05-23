@@ -8,6 +8,8 @@ namespace Phototesting.CameraCapture
 {
     internal sealed partial class CameraCaptureModSystemBridge
     {
+        private readonly Dictionary<string, BlockPos> _mountedCameraPositionsByPlayerUid = new(StringComparer.Ordinal);
+
     // Shared server-side camera stack helpers for loaded-plate and tripod state persistence.
     // Centralizes attribute reads/writes and world mutations so all camera packet handlers stay consistent.
 
@@ -62,6 +64,171 @@ namespace Phototesting.CameraCapture
         private static void ClearMountedCameraPos(ItemStack cameraStack)
         {
             cameraStack.Attributes.RemoveAttribute(CameraItemHelper.MountedPosAttrKey);
+        }
+
+        private void RememberMountedCameraPos(string playerUid, BlockPos pos)
+        {
+            if (string.IsNullOrWhiteSpace(playerUid)) return;
+            _mountedCameraPositionsByPlayerUid[playerUid] = pos.Copy();
+        }
+
+        private void ForgetMountedCameraPos(string playerUid)
+        {
+            if (string.IsNullOrWhiteSpace(playerUid)) return;
+            _mountedCameraPositionsByPlayerUid.Remove(playerUid);
+        }
+
+        private bool TryGetMountedCameraEntity(string playerUid, out BlockEntityMountedCamera? mountedBe)
+        {
+            mountedBe = null;
+            if (Api?.World == null || string.IsNullOrWhiteSpace(playerUid)) return false;
+            if (!_mountedCameraPositionsByPlayerUid.TryGetValue(playerUid, out BlockPos? pos) || pos == null) return false;
+
+            if (Api.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityMountedCamera be)
+            {
+                ForgetMountedCameraPos(playerUid);
+                return false;
+            }
+
+            if (!string.Equals(be.OwnerPlayerUid, playerUid, StringComparison.Ordinal) || !be.HasStoredCamera(Api.World))
+            {
+                ForgetMountedCameraPos(playerUid);
+                return false;
+            }
+
+            mountedBe = be;
+            return true;
+        }
+
+        private bool TryResolveCameraStorage(IServerPlayer player, out ItemSlot? cameraSlot, out ItemStack? cameraStack, out BlockEntityMountedCamera? mountedBe)
+        {
+            cameraSlot = player.InventoryManager.ActiveHotbarSlot;
+            cameraStack = cameraSlot?.Itemstack;
+            if (IsWetplateCameraStack(cameraStack))
+            {
+                mountedBe = null;
+                return cameraSlot != null && cameraStack != null;
+            }
+
+            if (TryGetMountedCameraEntity(player.PlayerUID, out mountedBe))
+            {
+                cameraStack = mountedBe?.GetStoredCameraStack(Api?.World);
+                return IsWetplateCameraStack(cameraStack);
+            }
+
+            mountedBe = null;
+            cameraStack = null;
+            return false;
+        }
+
+        private bool PauseMountedCameraStorage(ItemStack cameraStack)
+        {
+            if (Api?.World == null) return false;
+            if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return false;
+
+            PlateStage stage = PlateStateService.GetStage(loadedPlate);
+            if (stage != PlateStage.Exposing) return false;
+
+            PlateStateService.SetStage(loadedPlate, PlateStage.ExposurePaused);
+            SetLoadedPlateAttributes(cameraStack, loadedPlate);
+            return true;
+        }
+
+        private bool ResumeMountedCameraStorage(ItemStack cameraStack)
+        {
+            if (Api?.World == null) return false;
+            if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return false;
+
+            PlateStage stage = PlateStateService.GetStage(loadedPlate);
+            if (stage != PlateStage.ExposurePaused && stage != PlateStage.Sensitized) return false;
+
+            PlateStateService.SetStage(loadedPlate, PlateStage.Exposing);
+            SetLoadedPlateAttributes(cameraStack, loadedPlate);
+            return true;
+        }
+
+        private void SendMountedCameraControl(IServerPlayer player, bool isExposing, bool isBlockRemoved = false)
+        {
+            ServerChannel?.SendPacket(new MountedCameraControlPacket { IsExposing = isExposing, IsBlockRemoved = isBlockRemoved }, player);
+        }
+
+        private static void TryGiveOrSpawnMountedCamera(IWorldAccessor world, IServerPlayer player, BlockPos pos, ItemStack cameraStack)
+        {
+            if (!(player.InventoryManager?.TryGiveItemstack(cameraStack) ?? false))
+                world.SpawnItemEntity(cameraStack, pos.ToVec3d().Add(0.5, 0.5, 0.5));
+        }
+
+        internal bool TryHandleMountedCameraBlockInteract(IWorldAccessor world, BlockPos pos, IPlayer? byPlayer, bool recoverToPlayer)
+        {
+            if (Api?.Side != EnumAppSide.Server || Api.World == null) return false;
+            if (byPlayer is not IServerPlayer serverPlayer) return false;
+            if (world.BlockAccessor.GetBlockEntity(pos) is not BlockEntityMountedCamera mountedBe) return false;
+            if (!string.Equals(mountedBe.OwnerPlayerUid, serverPlayer.PlayerUID, StringComparison.Ordinal)) return false;
+
+            ItemStack? cameraStack = mountedBe.GetStoredCameraStack(Api.World);
+            if (cameraStack == null || !IsWetplateCameraStack(cameraStack)) return false;
+
+            if (recoverToPlayer)
+            {
+                PauseMountedCameraStorage(cameraStack);
+                SendMountedCameraControl(serverPlayer, false, isBlockRemoved: true);
+
+                ItemStack? recovered = mountedBe.TakeStoredCameraStack(Api.World);
+                if (recovered == null) return false;
+
+                ClearMountedCameraPos(recovered);
+                ForgetMountedCameraPos(serverPlayer.PlayerUID);
+                TryGiveOrSpawnMountedCamera(world, serverPlayer, pos, recovered);
+                world.BlockAccessor.SetBlock(0, pos);
+                world.BlockAccessor.RemoveBlockEntity(pos);
+                return true;
+            }
+
+            if (PauseMountedCameraStorage(cameraStack))
+            {
+                mountedBe.MarkCameraDirty();
+                SendMountedCameraControl(serverPlayer, false);
+                return true;
+            }
+
+            if (ResumeMountedCameraStorage(cameraStack))
+            {
+                mountedBe.MarkCameraDirty();
+                SendMountedCameraControl(serverPlayer, true);
+                return true;
+            }
+
+            return false;
+        }
+
+        internal void HandleMountedCameraBlockBroken(IWorldAccessor world, BlockPos pos, IPlayer? byPlayer)
+        {
+            if (Api?.World == null) return;
+            if (world.BlockAccessor.GetBlockEntity(pos) is not BlockEntityMountedCamera mountedBe) return;
+
+            string ownerPlayerUid = mountedBe.OwnerPlayerUid;
+            ItemStack? cameraStack = mountedBe.GetStoredCameraStack(world);
+            if (cameraStack == null || !IsWetplateCameraStack(cameraStack))
+            {
+                ForgetMountedCameraPos(ownerPlayerUid);
+                return;
+            }
+
+            bool paused = PauseMountedCameraStorage(cameraStack);
+            ItemStack? droppedCamera = mountedBe.TakeStoredCameraStack(world);
+            if (droppedCamera == null)
+            {
+                ForgetMountedCameraPos(ownerPlayerUid);
+                return;
+            }
+
+            ClearMountedCameraPos(droppedCamera);
+            ForgetMountedCameraPos(ownerPlayerUid);
+
+            if (Api.World.PlayerByUid(ownerPlayerUid) is IServerPlayer ownerPlayer)
+                SendMountedCameraControl(ownerPlayer, false, isBlockRemoved: true);
+
+            world.SpawnItemEntity(droppedCamera, pos.ToVec3d().Add(0.5, 0.5, 0.5));
         }
 
     // Authoritative server load/unload operations for camera and offhand plate transfer.
@@ -197,14 +364,14 @@ namespace Phototesting.CameraCapture
         }
 
         // Places the mounted camera block at the player's standing position and remembers the location on the camera stack.
-        private void EnsureMountedCameraBlock(ItemStack cameraStack, IServerPlayer player)
+        private bool EnsureMountedCameraBlock(ItemSlot cameraSlot, ItemStack cameraStack, IServerPlayer player)
         {
-            if (Api?.World == null || player?.Entity == null) return;
+            if (Api?.World == null || player?.Entity == null) return false;
 
             if (TryReadMountedCameraPos(cameraStack, out BlockPos existingPos))
             {
                 Block existing = Api.World.BlockAccessor.GetBlock(existingPos);
-                if (existing?.Code == CameraItemHelper.MountedCameraBlockCode) return;
+                if (existing?.Code == CameraItemHelper.MountedCameraBlockCode) return true;
             }
 
             BlockPos pos = player.Entity.Pos.AsBlockPos;
@@ -213,27 +380,22 @@ namespace Phototesting.CameraCapture
             {
                 pos = pos.UpCopy();
                 current = Api.World.BlockAccessor.GetBlock(pos);
-                if (current.Replaceable < 6000) return;
+                if (current.Replaceable < 6000) return false;
             }
 
-            Block mountedBlock = Api.World.GetBlock(CameraItemHelper.MountedCameraBlockCode);
-            if (mountedBlock == null) return;
+            Block? mountedBlock = Api.World.GetBlock(CameraItemHelper.MountedCameraBlockCode);
+            if (mountedBlock == null) return false;
 
             Api.World.BlockAccessor.SetBlock(mountedBlock.BlockId, pos);
             SetMountedCameraPos(cameraStack, pos);
-        }
 
-        // Removes the mounted camera block if the camera currently remembers one.
-        private void ClearMountedCameraBlock(ItemStack cameraStack)
-        {
-            if (Api?.World == null) return;
-            if (!TryReadMountedCameraPos(cameraStack, out BlockPos pos)) return;
+            if (Api.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityMountedCamera mountedBe) return false;
 
-            Block block = Api.World.BlockAccessor.GetBlock(pos);
-            if (block?.Code == CameraItemHelper.MountedCameraBlockCode)
-                Api.World.BlockAccessor.SetBlock(0, pos);
-
-            ClearMountedCameraPos(cameraStack);
+            mountedBe.SetStoredCameraStack(cameraStack, player.PlayerUID, Api.World);
+            RememberMountedCameraPos(player.PlayerUID, pos);
+            cameraSlot.Itemstack = null;
+            cameraSlot.MarkDirty();
+            return true;
         }
 
         // Server packet entry point for explicit camera load and unload requests from client input code.

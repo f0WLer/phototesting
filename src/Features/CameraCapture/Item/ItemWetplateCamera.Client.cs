@@ -24,7 +24,7 @@ namespace Phototesting.CameraCapture
 
             ItemStack? cameraStack = CameraItemHelper.GetActiveCameraStack(capi);
             if (CameraItemHelper.HasMountedTripod(cameraStack))
-                return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy);
+                return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy, ExposureStartOptions.Manual());
 
             return modSys.CameraCaptureBridge.TryToggleViewfinderExposure(byEntity, silentIfBusy, ExposureStartOptions.Manual());
         }

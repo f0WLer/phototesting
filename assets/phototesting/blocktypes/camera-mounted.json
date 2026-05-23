@@ -1,5 +1,7 @@
 {
   "code": "camera-mounted",
+  "class": "BlockMountedCamera",
+  "entityClass": "BlockEntityMountedCamera",
   "drawtype": "json",
   "shape": {
     "base": "phototesting:item/camera-mounted"
