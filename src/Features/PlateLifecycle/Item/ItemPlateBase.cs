@@ -1,3 +1,4 @@
+using Phototesting.AdminTooling;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -108,12 +109,20 @@ namespace Phototesting.PlateLifecycle
         }
 
         // Apply the plate-box storage multiplier when the stack is currently stored.
+        // Also pause drying entirely while a plate is in an active or paused exposure session.
         public override float GetTransitionRateMul(IWorldAccessor world, ItemSlot inSlot, EnumTransitionType transType)
         {
-            if (transType == EnumTransitionType.Dry
-                && inSlot?.Itemstack?.Attributes?.GetBool(PlateDryingTransition.AttrStoredInPlateBox) == true)
+            if (transType == EnumTransitionType.Dry)
             {
-                return PlateDryingTransition.ResolveStorageDryingRateMul(api);
+                PlateStage stage = PlateStateService.GetStage(inSlot?.Itemstack);
+                if ((stage == PlateStage.Exposing || stage == PlateStage.ExposurePaused)
+                    && (PhotoTestingConfigAccess.ResolveConfig(api)?.Viewfinder?.PauseDryingDuringExposure ?? true))
+                {
+                    return 0f;
+                }
+
+                if (inSlot?.Itemstack?.Attributes?.GetBool(PlateDryingTransition.AttrStoredInPlateBox) == true)
+                    return PlateDryingTransition.ResolveStorageDryingRateMul(api);
             }
             return base.GetTransitionRateMul(world, inSlot, transType);
         }

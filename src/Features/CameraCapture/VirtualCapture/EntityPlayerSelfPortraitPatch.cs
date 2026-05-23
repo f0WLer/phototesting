@@ -1,6 +1,7 @@
 #pragma warning disable IDE1006 // Harmony magic parameters require __ prefix
 using System.Reflection;
 using HarmonyLib;
+using Phototesting.CameraCapture.Exposure;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
@@ -15,6 +16,15 @@ namespace Phototesting.CameraCapture
         // Resolved once on first invocation; null means the field is absent on this engine version.
         private static FieldInfo? _modelMatField;
         private static bool _modelMatChecked;
+
+        // Skips DoRender3DOpaque (body + FP hands) for the local player during viewport exposure.
+        [HarmonyPrefix]
+        internal static bool SuppressPrefix(object __instance)
+        {
+            if (!ViewportExposureSuppressContext.SuppressLocalPlayer) return true;
+            bool isSelf = Traverse.Create(__instance).Property<bool>("IsSelf").Value;
+            return !isSelf; // false = skip original for local player
+        }
 
         [HarmonyPrefix]
         internal static void Prefix(

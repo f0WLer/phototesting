@@ -45,6 +45,11 @@ namespace Phototesting.CameraCapture
                     AccessTools.Method(playerShapeRendererType, "loadModelMatrixForPlayer"),
                     prefix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "Prefix"),
                     postfix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "Postfix"));
+
+                // Suppress the entire render (body + first-person hands) during viewport exposure.
+                _selfPortraitHarmony.Patch(
+                    AccessTools.Method(playerShapeRendererType, "DoRender3DOpaque"),
+                    prefix: new HarmonyMethod(typeof(EntityPlayerSelfPortraitPatch), "SuppressPrefix"));
             }
         }
 
@@ -165,6 +170,13 @@ namespace Phototesting.CameraCapture
         {
             if (ClientApi == null) return;
 
+            BestEffort.Try(BestEffortLogger, "dispose viewfinder exposure registry", () =>
+            {
+                ViewfinderExposureRegistry.Clear();
+                ActiveAccumulator = null;
+                ActiveExposureId = string.Empty;
+            });
+
             if (_captureRenderer != null)
             {
                 BestEffort.Try(BestEffortLogger, "unregister capture renderer", () => ClientApi.Event.UnregisterRenderer(_captureRenderer, EnumRenderStage.AfterBlit));
@@ -218,11 +230,21 @@ namespace Phototesting.CameraCapture
         // Clears camera-capture runtime references after disposal to prevent stale instance reuse.
         internal void ClearClientCameraCaptureRuntimeReferences()
         {
+            ActiveAccumulator = null;
+            ActiveExposureId = string.Empty;
             _captureRenderer = null;
             _debugPreviewRenderer = null;
             _virtualCameraPreviewRenderer = null;
             _virtualExposureRenderer = null;
             _cameraCaptureClientRuntime = null;
+        }
+
+        // Routes the accumulation preview source to the debug preview renderer when present.
+        // Accepts the interface; the renderer is only updated when the concrete type is ViewportExposureAccumulator.
+        internal void SetAccumulationPreviewSource(IGameplayExposureAccumulator? source)
+        {
+            if (_debugPreviewRenderer != null)
+                _debugPreviewRenderer.AccumulationSource = source as ViewportExposureAccumulator;
         }
     // Stateful client-side runtime for viewfinder input and shutter capture scheduling.
     // Keeps per-tick input state and capture lifecycle transitions outside the mod-system partial surface.
@@ -234,6 +256,14 @@ namespace Phototesting.CameraCapture
         internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy = false)
         {
             return CaptureClientRuntime.RequestPhotoCaptureFromViewfinder(byEntity, silentIfBusy);
+        }
+
+        // Toggles viewport accumulation: starts/resumes when idle, pauses when capturing.
+        // Seals (exports + sends PhotoTakenPacket) automatically when accumulated frames >= target.
+        // autoHaltAfterTarget controls whether a fresh exposure seals itself once target frames are reached.
+        internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy = false, bool autoHaltAfterTarget = true)
+        {
+            return CaptureClientRuntime.TryToggleViewfinderExposure(byEntity, silentIfBusy, autoHaltAfterTarget);
         }
 
         // Resolves capture effects override for the currently loaded camera plate, if present.
@@ -254,6 +284,7 @@ namespace Phototesting.CameraCapture
             private bool _captureInProgress;
             private float _rmbUpSeconds;
             private bool _lastRmbDown;
+            private bool _lastLmbDown;
             private bool _rightMouseDown;
             private MouseEventDelegate? _mouseDownHandler;
             private MouseEventDelegate? _mouseUpHandler;
@@ -296,7 +327,12 @@ namespace Phototesting.CameraCapture
 
                 ItemSlot? activeCameraSlot = CameraItemHelper.GetActiveCameraSlot(_owner.ClientApi);
                 bool holdingCamera = activeCameraSlot != null;
-                bool timedExposurePending = CameraCaptureModSystemBridge.IsTimedExposurePending(_owner.ClientApi.World.Player?.Entity);
+
+                // Track LMB edge unconditionally so the transition from RMB-held to free-running
+                // exposure does not generate a spurious LMB press on the first tick.
+                bool leftDown = _owner.ClientApi.World.Player?.Entity?.Controls?.LeftMouseDown == true;
+                bool leftPressed = leftDown && !_lastLmbDown;
+                _lastLmbDown = leftDown;
 
                 bool rightDown = GetRightMouseDown();
 
@@ -352,11 +388,18 @@ namespace Phototesting.CameraCapture
 
                 if (!rightDown)
                 {
-                    if (timedExposurePending)
+                    // While a capture is actively accumulating, keep the viewfinder alive even
+                    // without RMB held, and listen for LMB to pause.
+                    if (_owner.IsExposureCapturing)
                     {
-                        // Exposure already started: keep viewfinder active until timer completes.
                         _rmbUpSeconds = 0f;
                         if (!_owner.IsViewfinderActive) _owner.BeginViewfinderMode();
+                        if (leftPressed)
+                        {
+                            var playerEntity = _owner.ClientApi.World.Player?.Entity;
+                            if (playerEntity != null)
+                                TryToggleViewfinderExposure(playerEntity, silentIfBusy: true);
+                        }
                         return;
                     }
 
@@ -377,6 +420,143 @@ namespace Phototesting.CameraCapture
 
                 // Shutter capture is driven by ItemWetplateCamera held-interact callbacks while RMB
                 // viewfinder is active so we can use the engine's standard timed interaction meter.
+            }
+
+            // Toggle: starts/resumes accumulation when not capturing; pauses (and optionally seals) when capturing.
+            // autoHaltAfterTarget only applies when starting a fresh exposure; resume and pause paths ignore it.
+            internal bool TryToggleViewfinderExposure(EntityAgent byEntity, bool silentIfBusy, bool autoHaltAfterTarget = true)
+            {
+                var acc = _owner.ActiveAccumulator;
+
+                if (acc?.IsCapturing == true)
+                {
+                    acc.Pause();
+
+                    if (acc.FramesAccumulated >= acc.TargetFrames)
+                        ExportAndSealExposure(byEntity);
+                    else
+                        SendExposureStatePacket(isExposing: false, acc.FramesAccumulated, _owner.ActiveExposureId, acc.TargetFrames);
+
+                    // Exit viewfinder immediately when pausing if RMB is not held.
+                    if (!GetRightMouseDown() && _owner.IsViewfinderActive)
+                        _owner.EndViewfinderMode();
+
+                    return true;
+                }
+
+                // Start or resume
+                if (!CameraCaptureModSystemBridge.CaptureGateService.TryValidateCaptureRequest(_owner, silentIfBusy, isMounted: false, out ItemStack? loadedPlateStack)) return false;
+
+                var clientApi = _owner.ClientApi;
+                if (clientApi == null) return false;
+
+                // Get or create a stable ID for this exposure session.
+                string exposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+
+                // Try to resume from an existing registry entry (same session, e.g. RMB released and re-pressed).
+                if (!string.IsNullOrEmpty(exposureId) && ViewfinderExposureRegistry.TryGet(exposureId, out var existingAcc) && existingAcc != null
+                    && existingAcc.State == ExposureState.Paused)
+                {
+                    _owner.ActiveAccumulator = existingAcc;
+                    _owner.ActiveExposureId = exposureId;
+                    existingAcc.Resume();
+                    _owner.SetAccumulationPreviewSource(existingAcc);
+                    SendExposureStatePacket(isExposing: true, existingAcc.FramesAccumulated, exposureId, existingAcc.TargetFrames);
+                    return true;
+                }
+
+                // Fresh exposure: generate a new session ID and allocate a new accumulator.
+                exposureId = Guid.NewGuid().ToString("N");
+
+                string processId = PlateStateService.GetProcessId(loadedPlateStack);
+                if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
+                    profile = PlateProcessProfile.Iodide;
+
+                var newAcc = new ViewportExposureAccumulator(clientApi);
+                newAcc.OnAutoHalt = () => OnAccumulatorAutoHalt(byEntity, newAcc, exposureId);
+                newAcc.Start(profile, autoHaltAfterTarget);
+
+                ViewfinderExposureRegistry.Register(exposureId, newAcc);
+                _owner.ActiveAccumulator = newAcc;
+                _owner.ActiveExposureId = exposureId;
+                _owner.SetAccumulationPreviewSource(newAcc);
+
+                _owner.MaybeShowF4GuiLessTip();
+                SendExposureStatePacket(isExposing: true, 0, exposureId, newAcc.TargetFrames);
+
+                return true;
+            }
+
+            // Called by the accumulator's auto-halt callback once target frames are reached.
+            private void OnAccumulatorAutoHalt(EntityAgent byEntity, ViewportExposureAccumulator acc, string exposureId)
+            {
+                // Auto-halt exits the viewfinder and seals the exposure.
+                _suppressViewfinderUntilRmbReleased = true;
+                ExportAndSealExposure(byEntity, exposureId);
+                if (_owner.IsViewfinderActive) _owner.EndViewfinderMode();
+            }
+
+            // Develops and exports the current accumulation buffer, sends PhotoTakenPacket, and cleans up.
+            private void ExportAndSealExposure(EntityAgent? byEntity, string? knownExposureId = null)
+            {
+                var acc = _owner.ActiveAccumulator;
+                if (acc == null || acc.FramesAccumulated == 0)
+                {
+                    _owner.ActiveAccumulator = null;
+                    return;
+                }
+
+                try
+                {
+                    var clientApi = _owner.ClientApi;
+                    if (clientApi == null) return;
+
+                    // Resolve per-plate effects override.
+                    ItemStack? camStack = CameraItemHelper.GetActiveCameraStack(clientApi);
+                    CameraItemHelper.TryGetLoadedPlateStack(camStack, clientApi.World, out ItemStack? loadedPlate);
+                    WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlate);
+
+                    acc.Stop();
+                    string fileName = acc.Export(effectsOverride);
+
+                    // Notify server to transition plate to Exposed.
+                    _owner.ClientChannel?.SendPacket(new PhotoTakenPacket { PhotoId = fileName });
+                    ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
+
+                    // Authorize the expected photo upload.
+                    if (byEntity != null)
+                        clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
+
+                    // Evict the registry entry now that this session is sealed.
+                    string exposureId = knownExposureId
+                        ?? _owner.ActiveExposureId
+                        ?? loadedPlate?.Attributes?.GetString(PlateStateAttributes.ExposureId)
+                        ?? string.Empty;
+                    if (!string.IsNullOrEmpty(exposureId))
+                        ViewfinderExposureRegistry.Remove(exposureId);
+                }
+                catch (Exception ex)
+                {
+                    _owner.ClientApi?.Logger.Error("Phototesting: accumulation export failed — " + ex);
+                }
+                finally
+                {
+                    _owner.ActiveAccumulator = null;
+                    _owner.ActiveExposureId = string.Empty;
+                    _owner.SetAccumulationPreviewSource(null);
+                }
+            }
+
+            // Sends an ExposureStatePacket to the server to keep plate attributes in sync.
+            private void SendExposureStatePacket(bool isExposing, int exposedFrames, string exposureId, int targetFrames)
+            {
+                _owner.ClientChannel?.SendPacket(new ExposureStatePacket
+                {
+                    IsExposing = isExposing,
+                    ExposureId = exposureId,
+                    ExposedFrames = exposedFrames,
+                    TargetFrames = targetFrames
+                });
             }
 
             internal bool RequestPhotoCaptureFromViewfinder(EntityAgent byEntity, bool silentIfBusy)
@@ -468,9 +648,7 @@ namespace Phototesting.CameraCapture
                 ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
                 clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
 
-                // Keep viewfinder open while timed exposure is active so exposure completion
-                // logic in ItemWetplateCamera can run to the end.
-                if (!CameraCaptureModSystemBridge.IsTimedExposurePending(byEntity)) _owner.EndViewfinderMode();
+                _owner.EndViewfinderMode();
             }
 
             // Cancels hold-still state and exits viewfinder when the scheduled capture fails.

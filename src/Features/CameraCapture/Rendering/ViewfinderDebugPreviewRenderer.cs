@@ -2,6 +2,7 @@ using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 using Phototesting.AdminTooling;
 using Phototesting.CameraCapture;
+using Phototesting.CameraCapture.Exposure;
 
 namespace Phototesting.CameraCapture.Rendering
 {
@@ -16,6 +17,10 @@ namespace Phototesting.CameraCapture.Rendering
 
         private LoadedTexture? _previewTexture;
         private long _lastPreviewRequestMs;
+
+        // When set, this accumulator is used as the preview source while it has accumulated frames.
+        // Supersedes the capture-renderer debug source but yields to the virtual camera.
+        internal ViewportExposureAccumulator? AccumulationSource { get; set; }
 
         // Wires preview rendering to the capture renderer and current viewfinder active-state probe.
         // virtualPreviewRenderer is optional; when active it replaces the normal capture-renderer source.
@@ -43,8 +48,10 @@ namespace Phototesting.CameraCapture.Rendering
             if (cfg == null) return;
 
             bool virtualActive = _virtualPreviewRenderer?.IsActive == true;
+            bool accActive = AccumulationSource?.FramesAccumulated > 0 &&
+                             (AccumulationSource.State == ExposureState.Capturing || AccumulationSource.State == ExposureState.Paused);
 
-            if (!virtualActive)
+            if (!virtualActive && !accActive)
             {
                 if (!cfg.DebugPreviewEnabled) return;
                 if (!cfg.DebugPreviewPeak && !_isViewfinderActive()) return;
@@ -65,6 +72,12 @@ namespace Phototesting.CameraCapture.Rendering
             if (virtualActive)
             {
                 hasNewFrame = _virtualPreviewRenderer!.TryConsumeLatestFrame(out bgraPixels, out width, out height);
+            }
+            else if (accActive)
+            {
+                int refreshMs = cfg.DebugPreviewRefreshMs;
+                long nowMs = _capi.ElapsedMilliseconds;
+                hasNewFrame = AccumulationSource!.TryPeekDevelopedFrame(nowMs, refreshMs, cfg.DebugPreviewMaxDimension, out bgraPixels, out width, out height);
             }
             else
             {

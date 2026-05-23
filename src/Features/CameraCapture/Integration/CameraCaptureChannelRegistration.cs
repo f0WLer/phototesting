@@ -12,7 +12,8 @@ namespace Phototesting.CameraCapture.Integration
         {
             return channel
                 .RegisterMessageType(typeof(PhotoTakenPacket))
-                .RegisterMessageType(typeof(CameraLoadPlatePacket));
+                .RegisterMessageType(typeof(CameraLoadPlatePacket))
+                .RegisterMessageType(typeof(ExposureStatePacket));
         }
 
         // Registers CameraCapture config packet DTOs after sync packet DTOs to preserve existing wire order.
@@ -37,19 +38,19 @@ namespace Phototesting.CameraCapture.Integration
         internal static void ConfigureServerCoreHandlers(
             IServerNetworkChannel channel,
             NetworkClientMessageHandler<PhotoTakenPacket> onPhotoTakenReceived,
-            NetworkClientMessageHandler<CameraLoadPlatePacket> onCameraLoadPlateReceived)
+            NetworkClientMessageHandler<CameraLoadPlatePacket> onCameraLoadPlateReceived,
+            NetworkClientMessageHandler<ExposureStatePacket> onExposureStateReceived)
         {
             if (channel == null) return;
 
             if (onPhotoTakenReceived != null)
-            {
                 channel.SetMessageHandler<PhotoTakenPacket>(onPhotoTakenReceived);
-            }
 
             if (onCameraLoadPlateReceived != null)
-            {
                 channel.SetMessageHandler<CameraLoadPlatePacket>(onCameraLoadPlateReceived);
-            }
+
+            if (onExposureStateReceived != null)
+                channel.SetMessageHandler<ExposureStatePacket>(onExposureStateReceived);
         }
 
         // Wires server-side capture-config request handler.

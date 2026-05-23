@@ -51,6 +51,12 @@ namespace Phototesting.CameraCapture
         /// </summary>
         public bool UseGpuExposureAccumulator = true;
 
+        /// <summary>
+        /// When true, the wet-plate drying clock is paused while the plate is in the
+        /// Exposing or ExposurePaused lifecycle stage.
+        /// </summary>
+        public bool PauseDryingDuringExposure = true;
+
         // Clamps all viewfinder and preview tuning values to safe runtime ranges.
         internal void ClampInPlace()
         {

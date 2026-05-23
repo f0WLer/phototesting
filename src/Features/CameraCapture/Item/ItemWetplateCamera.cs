@@ -9,10 +9,6 @@ namespace Phototesting.CameraCapture
     {
         public const string AttrLoadedPlate = "phototestingLoadedPlate";
         public const string AttrLoadedPlateStack = "phototestingLoadedPlateStack";
-        internal const string ExposureTimedAttrKey = "phototestingCameraExposureTimed";
-        internal const string ExposureTimedStartMsKey = "startMs";
-        internal const string ExposureTimedDurationMsKey = "durationMs";
-        internal const string ExposureLmbPrevKey = "lmbPrev";
 
         // Prevents normal item use so the client tick and held-interact callbacks can own the camera's custom viewfinder flow.
         public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
@@ -27,7 +23,7 @@ namespace Phototesting.CameraCapture
         public override void GetHeldItemInfo(ItemSlot inSlot, System.Text.StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
         {
             base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
-            dsc.AppendLine("RMB + LMB to look through the viewfinder and expose a plate.");
+            dsc.AppendLine("RMB to look through the viewfinder. LMB to start/pause exposure. Exposure seals automatically when the target is reached.");
 
             string? loadedPlate = inSlot?.Itemstack?.Attributes?.GetString(AttrLoadedPlate, null);
             if (!string.IsNullOrEmpty(loadedPlate))

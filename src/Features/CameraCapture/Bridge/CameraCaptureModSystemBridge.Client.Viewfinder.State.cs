@@ -1,6 +1,6 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
-using Vintagestory.API.Datastructures;
+using Phototesting.CameraCapture.Exposure;
 using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture
@@ -36,14 +36,16 @@ namespace Phototesting.CameraCapture
             }
         }
 
-        // Detects whether the camera item still has an in-flight timed exposure that should keep viewfinder mode alive.
-        internal static bool IsTimedExposurePending(EntityAgent? byEntity)
-        {
-            ITreeAttribute? tree = byEntity?.Attributes?.GetTreeAttribute(ItemWetplateCamera.ExposureTimedAttrKey);
-            if (tree == null) return false;
+        // Active accumulator for the current viewfinder exposure session.
+        // Kept alive across RMB releases so a paused exposure can be resumed.
+        internal IGameplayExposureAccumulator? ActiveAccumulator { get; set; }
 
-            return tree.GetInt(ItemWetplateCamera.ExposureTimedDurationMsKey, 0) > 0;
-        }
+        // Stable identifier for the active or most recently paused exposure session.
+        // Used client-side so manual sealing can evict the matching registry entry deterministically.
+        internal string ActiveExposureId { get; set; } = string.Empty;
+
+        // True while accumulation frames are being gathered (Capturing state).
+        internal bool IsExposureCapturing => ActiveAccumulator?.State == ExposureState.Capturing;
 
         private float ViewfinderZoomMultiplierCfg => Config?.Viewfinder?.ZoomMultiplier ?? 0.65f;
         private float HoldStillLookWeightCfg => Config?.Viewfinder?.HoldStillLookWeight ?? 0.35f;

@@ -41,9 +41,9 @@ namespace Phototesting.CameraCapture
                         ex => Log.Debug(owner.ClientApi.Logger, "viewfinder loaded plate resolve failed: {0}", ex.Message));
 
                     // Keep capture gate permissive when only the lightweight loaded-code attribute exists.
-                    if (loadedPlateStack != null && !CameraPlateEligibility.IsPlateSensitizedForExposure(loadedPlateStack))
+                    if (loadedPlateStack != null && !CameraPlateEligibility.IsPlateExposable(loadedPlateStack))
                     {
-                        owner.CaptureClientRuntime.ShowShutterGateMessageThrottled("Wetplate: only sensitized plates can be exposed.");
+                        owner.CaptureClientRuntime.ShowShutterGateMessageThrottled("Wetplate: only fresh or paused exposure plates can be exposed.");
                         return false;
                     }
 

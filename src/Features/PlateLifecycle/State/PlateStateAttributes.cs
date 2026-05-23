@@ -45,6 +45,19 @@ namespace Phototesting.PlateLifecycle
         /// Absent when no dry wait is active.
         /// </summary>
         public const string DryFinishTotalHours = "phototestingDryFinishTotalHours";
+
+        /// <summary>
+        /// Stable identifier for the plate's in-progress accumulation session.
+        /// Set when exposure starts; cleared when the plate transitions to Exposed.
+        /// Used by the client to locate the matching accumulation buffer in the registry.
+        /// </summary>
+        public const string ExposureId = "phototestingExposureId";
+
+        /// <summary>Frames accumulated so far in the current or most recent exposure session.</summary>
+        public const string ExposedFrames = "phototestingExposedFrames";
+
+        /// <summary>Target frame count for a correct exposure (from the plate's process profile).</summary>
+        public const string ExposureTargetFrames = "phototestingExposureTargetFrames";
     }
 }
 

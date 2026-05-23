@@ -12,6 +12,10 @@ namespace Phototesting.PlateLifecycle
         Sensitizing,
         /// <summary>Coated and silver-sensitized — ready to expose.</summary>
         Sensitized,
+        /// <summary>Actively accumulating exposure frames in camera.</summary>
+        Exposing,
+        /// <summary>Exposure started but paused; can be resumed or will seal on development.</summary>
+        ExposurePaused,
         /// <summary>Exposed in camera — latent image present.</summary>
         Exposed,
         /// <summary>Partially developed — not yet enough pours.</summary>
@@ -29,8 +33,10 @@ namespace Phototesting.PlateLifecycle
             PlateStage.Rough       => "rough",
             PlateStage.Clean       => "clean",
             PlateStage.Sensitizing => "sensitizing",
-            PlateStage.Sensitized  => "sensitized",
-            PlateStage.Exposed     => "exposed",
+            PlateStage.Sensitized    => "sensitized",
+            PlateStage.Exposing      => "exposing",
+            PlateStage.ExposurePaused=> "exposurepause",
+            PlateStage.Exposed       => "exposed",
             PlateStage.Developing  => "developing",
             PlateStage.Developed   => "developed",
             PlateStage.Finished    => "finished",
@@ -42,8 +48,10 @@ namespace Phototesting.PlateLifecycle
             "rough"      => PlateStage.Rough,
             "clean"      => PlateStage.Clean,
             "sensitizing"=> PlateStage.Sensitizing,
-            "sensitized" => PlateStage.Sensitized,
-            "exposed"    => PlateStage.Exposed,
+            "sensitized"    => PlateStage.Sensitized,
+            "exposing"      => PlateStage.Exposing,
+            "exposurepause" => PlateStage.ExposurePaused,
+            "exposed"       => PlateStage.Exposed,
             "developing" => PlateStage.Developing,
             "developed"  => PlateStage.Developed,
             "finished"   => PlateStage.Finished,

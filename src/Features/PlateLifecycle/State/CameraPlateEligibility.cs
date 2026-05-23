@@ -27,7 +27,19 @@ namespace Phototesting.PlateLifecycle
             if (code != _sensitizedPlateItemCode) return false;
 
             PlateStage stage = PlateStateService.GetStage(stack);
-            return stage == PlateStage.Sensitized || stage == PlateStage.Exposed;
+            return stage == PlateStage.Sensitized || stage == PlateStage.Exposed
+                || stage == PlateStage.Exposing  || stage == PlateStage.ExposurePaused;
+        }
+
+        // Checks whether a plate can start or resume accumulation (Sensitized or ExposurePaused).
+        public static bool IsPlateExposable(ItemStack? stack)
+        {
+            AssetLocation? code = stack?.Collectible?.Code;
+            if (code == null) return false;
+            if (code != _sensitizedPlateItemCode) return false;
+
+            PlateStage stage = PlateStateService.GetStage(stack);
+            return stage == PlateStage.Sensitized || stage == PlateStage.ExposurePaused;
         }
 
         // Checks whether a plate can be exposed now (must be sensitized stage, not just loadable).
