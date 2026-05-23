@@ -3,7 +3,7 @@ using Vintagestory.API.Common;
 
 namespace Phototesting.CameraCapture
 {
-    // Client-side viewfinder: state machine, hold-still coordinator, capture gate, effects profile, and zoom harmony patch.
+    // Client-side viewfinder: state machine, capture gate, effects profile, and zoom harmony patch.
     internal sealed partial class CameraCaptureModSystemBridge
     {
 
@@ -56,12 +56,6 @@ namespace Phototesting.CameraCapture
                 catch (Exception ex)
                 {
                     if (owner.IsBestEffortDebugLoggingEnabled) Log.Warn(owner.ClientApi.Logger, "capture request validation failed: {0}", ex.Message);
-                    return false;
-                }
-
-                if (owner.IsHoldStillPending && !isMounted)
-                {
-                    if (!silentIfBusy) owner.ClientApi.ShowChatMessage("Wetplate: hold still to finish the exposure.");
                     return false;
                 }
 

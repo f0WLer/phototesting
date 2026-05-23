@@ -5,8 +5,6 @@ namespace Phototesting.PlateLifecycle.Rendering
 {
     internal static class PhotoImageProcessor
     {
-        internal const float MovementEffectMin = 0.001f;
-
         // Reads PNG width/height directly from IHDR bytes without full image decode.
         internal static bool TryGetPngDimensions(byte[] pngBytes, out int width, out int height)
         {
@@ -37,7 +35,7 @@ namespace Phototesting.PlateLifecycle.Rendering
         }
 
         // Ensures a derived photo variant exists and is up-to-date with source/effect inputs.
-        internal static bool TryEnsureDerivedPhoto(ICoreClientAPI capi, string sourcePath, string derivedPath, string seedKey, bool useDevelopedStage, int developPours, int maxDeveloperPours, float movementScore)
+        internal static bool TryEnsureDerivedPhoto(ICoreClientAPI capi, string sourcePath, string derivedPath, bool useDevelopedStage, int developPours, int maxDeveloperPours)
         {
             try
             {
@@ -63,15 +61,9 @@ namespace Phototesting.PlateLifecycle.Rendering
                 if (t < 0f) t = 0f;
                 if (t > 1f) t = 1f;
 
-                // Apply stage visuals first, then motion artifacts on the stage-adjusted image.
                 if (useDevelopedStage && t < 0.999f)
                 {
                     ApplyDevelopmentStageVisuals(src, t);
-                }
-
-                if (movementScore > MovementEffectMin)
-                {
-                    ApplyExposureMotionArtifacts(src, seedKey, movementScore);
                 }
 
                 using var image = SKImage.FromBitmap(src);
@@ -210,70 +202,6 @@ namespace Phototesting.PlateLifecycle.Rendering
                     }
                 }
             }
-        }
-
-        // Applies deterministic directional blur/ghosting based on exposure movement score.
-        private static void ApplyExposureMotionArtifacts(SKBitmap bmp, string seedKey, float movementScore)
-        {
-            if (bmp == null || bmp.Width <= 1 || bmp.Height <= 1) return;
-
-            float normalized = movementScore / 1.8f;
-            if (normalized < 0f) normalized = 0f;
-            if (normalized > 1f) normalized = 1f;
-            if (normalized <= 0.01f) return;
-
-            int hash = seedKey?.GetHashCode() ?? 0;
-            float angle = (float)((hash & 1023) / 1023.0 * Math.PI * 2.0);
-            float dirX = (float)Math.Cos(angle);
-            float dirY = (float)Math.Sin(angle);
-
-            float radius = 0.75f + normalized * 9.0f;
-            int samples = 2 + (int)Math.Round(normalized * 8f);
-            float trailAlpha = 0.08f + normalized * 0.44f;
-
-            float ghostOffsetX = -dirY * (0.5f + normalized * 4.4f);
-            float ghostOffsetY = dirX * (0.5f + normalized * 4.4f);
-            float ghostAlpha = 0.05f + normalized * 0.32f;
-
-            using var source = bmp.Copy();
-            if (source == null) return;
-
-            using var sourceImage = SKImage.FromBitmap(source);
-            using var canvas = new SKCanvas(bmp);
-            canvas.Clear(SKColors.Black);
-
-            using var basePaint = new SKPaint
-            {
-                BlendMode = SKBlendMode.Src,
-                IsAntialias = false,
-                Color = new SKColor(255, 255, 255, 255)
-            };
-            canvas.DrawImage(sourceImage, 0f, 0f, basePaint);
-
-            using var trailPaint = new SKPaint
-            {
-                BlendMode = SKBlendMode.SrcOver,
-                IsAntialias = false
-            };
-
-            for (int i = 1; i <= samples; i++)
-            {
-                float t = i / (float)samples;
-                float shift = radius * t;
-                byte alpha = (byte)(255f * (trailAlpha / (samples * 2f)));
-                trailPaint.Color = new SKColor(255, 255, 255, alpha);
-
-                canvas.DrawImage(sourceImage, dirX * shift, dirY * shift, trailPaint);
-                canvas.DrawImage(sourceImage, -dirX * shift, -dirY * shift, trailPaint);
-            }
-
-            using var ghostPaint = new SKPaint
-            {
-                BlendMode = SKBlendMode.SrcOver,
-                IsAntialias = false,
-                Color = new SKColor(255, 255, 255, (byte)(255f * ghostAlpha))
-            };
-            canvas.DrawImage(sourceImage, ghostOffsetX, ghostOffsetY, ghostPaint);
         }
 
         // Slow fallback path for color formats where direct pixel pointer edits are unsafe.

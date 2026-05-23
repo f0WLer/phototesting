@@ -40,7 +40,7 @@ namespace Phototesting.PlateLifecycle.Rendering
                 overlayFace = "south";
             }
 
-            string photoId = itemstack.Attributes?.GetString(PlateAttrs.PhotoId) ?? string.Empty;
+            string photoId = itemstack.Attributes?.GetString("photoId") ?? string.Empty;
             if (string.IsNullOrEmpty(photoId)) return false;
 
             string effectsProfile = string.Empty;
@@ -96,10 +96,6 @@ namespace Phototesting.PlateLifecycle.Rendering
                 ResolveDevelopedRenderProgress(capi, itemstack, out developPours, out maxDeveloperPours);
             }
 
-            float movementScore = GetMovementScore(itemstack);
-            bool hasMovementEffects = movementScore > PhotoImageProcessor.MovementEffectMin;
-            int movementCacheBucket = QuantizeMovementScore(movementScore);
-
             int versionSnapshot = _meshRenderCache.GetAtlasVersionSnapshot();
 
             string variant = target switch
@@ -110,7 +106,7 @@ namespace Phototesting.PlateLifecycle.Rendering
             };
 
             // Reuse existing mesh refs when the render variant key is identical.
-            string cacheKey = $"{photoFileName}|{variant}|r{((uvRotationDeg % 360) + 360) % 360}|mx{(mirrorX ? 1 : 0)}|fx{effectsProfile}|dp{developPours}|mv{movementCacheBucket}|v{versionSnapshot}";
+            string cacheKey = $"{photoFileName}|{variant}|r{((uvRotationDeg % 360) + 360) % 360}|mx{(mirrorX ? 1 : 0)}|fx{effectsProfile}|dp{developPours}|v{versionSnapshot}";
             if (_meshRenderCache.TryGetCachedRender(cacheKey, out MultiTextureMeshRef? cachedMeshRef, out int cachedTextureId) && cachedMeshRef != null)
             {
                 renderinfo.ModelRef = cachedMeshRef;
@@ -128,7 +124,7 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             // Prune stale stage variants and ensure the active derived render variant exists.
             ResolveDerivedRenderPath(capi, photoId, photoFileName, sourcePath, effectsProfile, itemstack,
-                developPours, maxDeveloperPours, hasMovementEffects, movementCacheBucket, movementScore,
+                developPours, maxDeveloperPours,
                 out string renderPath, out string renderFileName);
 
 

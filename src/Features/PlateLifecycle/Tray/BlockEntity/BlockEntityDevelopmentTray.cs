@@ -202,7 +202,7 @@ namespace Phototesting.PlateLifecycle.Tray
             if (stack?.Collectible?.Code == null) return null;
 
             string code = stack.Collectible.Code.ToString();
-            string photoId = stack.Attributes?.GetString(PlateAttrs.PhotoId) ?? string.Empty;
+            string photoId = stack.Attributes?.GetString("photoId") ?? string.Empty;
             string stage = PlateStageUtil.ToAttributeString(PlateStateService.GetStage(stack));
             int pours = PlateDevelopmentService.GetCurrentStepApplications(stack);
 

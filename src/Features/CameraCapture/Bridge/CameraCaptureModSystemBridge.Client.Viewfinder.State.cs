@@ -5,7 +5,7 @@ using Vintagestory.Client.NoObf;
 
 namespace Phototesting.CameraCapture
 {
-    // Client-side viewfinder: state machine, hold-still coordinator, capture gate, effects profile, and FOV zoom.
+    // Client-side viewfinder: state machine, capture gate, effects profile, and FOV zoom.
     internal sealed partial class CameraCaptureModSystemBridge
     {
 
@@ -13,9 +13,6 @@ namespace Phototesting.CameraCapture
     // Manages enter/exit behavior, zoom persistence, and FOV recovery via direct MainCamera.Fov mutation.
 
         private long _viewfinderTickListenerId;
-
-        private ViewfinderHoldStillCoordinator? _holdStillCoordinator;
-        private ViewfinderHoldStillCoordinator HoldStillCoordinator => _holdStillCoordinator ??= new ViewfinderHoldStillCoordinator(this);
 
         private bool _f4TipShownThisViewfinder;
         private bool _f4TipShownEver;
@@ -39,15 +36,6 @@ namespace Phototesting.CameraCapture
             }
         }
 
-        // Indicates that capture has started but the hold-still packet cannot be sent yet.
-        internal bool IsHoldStillPending => HoldStillCoordinator.IsPending;
-
-        internal void UpdateHoldStill(float dt) => HoldStillCoordinator.Update(dt);
-        internal void HoldStillNotifyPending() => HoldStillCoordinator.MaybeShowPendingMessage();
-        internal void HoldStillMarkCaptureReady(string photoId) => HoldStillCoordinator.MarkCaptureReady(photoId);
-        internal void HoldStillCancel() => HoldStillCoordinator.Cancel();
-        internal void HoldStillStartTracking(EntityAgent player, string photoId) => HoldStillCoordinator.StartTracking(player, photoId);
-
         // Detects whether the camera item still has an in-flight timed exposure that should keep viewfinder mode alive.
         internal static bool IsTimedExposurePending(EntityAgent? byEntity)
         {
@@ -58,7 +46,6 @@ namespace Phototesting.CameraCapture
         }
 
         private float ViewfinderZoomMultiplierCfg => Config?.Viewfinder?.ZoomMultiplier ?? 0.65f;
-        private float HoldStillDurationSecondsCfg => Config?.Viewfinder?.HoldStillDurationSeconds ?? 4f;
         private float HoldStillLookWeightCfg => Config?.Viewfinder?.HoldStillLookWeight ?? 0.35f;
         private float HoldStillLookContributionScaleCfg => Config?.Viewfinder?.HoldStillLookContributionScale ?? 2f;
 

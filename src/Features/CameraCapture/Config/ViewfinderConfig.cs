@@ -13,7 +13,6 @@ namespace Phototesting.CameraCapture
         public const int DefaultExposureReadbackMaxDimension = 640;
 
         public float ZoomMultiplier = 0.65f;
-        public float HoldStillDurationSeconds = 4f;
         public float HoldStillLookWeight = 0.35f;
         /// <summary>Multiplier for look-movement contribution in hold-still scoring.</summary>
         public float HoldStillLookContributionScale = 2f;
@@ -57,9 +56,6 @@ namespace Phototesting.CameraCapture
         {
             if (ZoomMultiplier < 0.2f) ZoomMultiplier = 0.2f;
             if (ZoomMultiplier > 1f) ZoomMultiplier = 1f;
-
-            if (HoldStillDurationSeconds < 0f) HoldStillDurationSeconds = 0f;
-            if (HoldStillDurationSeconds > 30f) HoldStillDurationSeconds = 30f;
 
             if (HoldStillLookWeight < 0f) HoldStillLookWeight = 0f;
             if (HoldStillLookWeight > 5f) HoldStillLookWeight = 5f;

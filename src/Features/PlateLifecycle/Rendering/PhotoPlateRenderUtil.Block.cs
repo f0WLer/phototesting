@@ -16,7 +16,7 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             if (capi == null || itemstack == null) return false;
 
-            string photoId = itemstack.Attributes?.GetString(PlateAttrs.PhotoId) ?? string.Empty;
+            string photoId = itemstack.Attributes?.GetString("photoId") ?? string.Empty;
             if (string.IsNullOrEmpty(photoId)) return false;
 
             // Keep server-side photo-seen telemetry up to date while blocks are displayed.
@@ -32,8 +32,7 @@ namespace Phototesting.PlateLifecycle.Rendering
             string effectsProfile = string.Empty;
             try
             {
-                effectsProfile = itemstack.Collectible?.Attributes?[
-                    "photoEffectsProfile"]?.AsString(string.Empty) ?? string.Empty;
+                effectsProfile = itemstack.Collectible?.Attributes?["photoEffectsProfile"]?.AsString(string.Empty) ?? string.Empty;
             }
             catch
             {
@@ -49,10 +48,6 @@ namespace Phototesting.PlateLifecycle.Rendering
             {
                 ResolveDevelopedRenderProgress(capi, itemstack, out developPours, out maxDeveloperPours);
             }
-
-            float movementScore = GetMovementScore(itemstack);
-            bool hasMovementEffects = movementScore > PhotoImageProcessor.MovementEffectMin;
-            int movementCacheBucket = QuantizeMovementScore(movementScore);
 
             int versionSnapshot = _meshRenderCache.GetAtlasVersionSnapshot();
 
@@ -74,9 +69,8 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             // Prune stale derived variants before resolving the currently active variant.
             ResolveDerivedRenderPath(capi, photoId, photoFileName, sourcePath, effectsProfile, itemstack,
-                developPours, maxDeveloperPours, hasMovementEffects, movementCacheBucket, movementScore,
+                developPours, maxDeveloperPours,
                 out string renderPath, out string renderFileName);
-
 
             try
             {
@@ -110,7 +104,7 @@ namespace Phototesting.PlateLifecycle.Rendering
                 }
 
                 string photoKey = Path.GetFileNameWithoutExtension(renderFileName);
-                AssetLocation texLoc = new AssetLocation("phototesting", $"photo-block-{photoKey}-mv{movementCacheBucket}-v{versionSnapshot}");
+                AssetLocation texLoc = new AssetLocation("phototesting", $"photo-block-{photoKey}-v{versionSnapshot}");
 
                 // Lazily create atlas bitmap payload only when cache lookup misses.
                 capi.BlockTextureAtlas.GetOrInsertTexture(
@@ -131,4 +125,3 @@ namespace Phototesting.PlateLifecycle.Rendering
         }
     }
 }
-

@@ -294,8 +294,6 @@ namespace Phototesting.CameraCapture
             {
                 if (_owner.ClientApi == null) return;
 
-                _owner.UpdateHoldStill(dt);
-
                 ItemSlot? activeCameraSlot = CameraItemHelper.GetActiveCameraSlot(_owner.ClientApi);
                 bool holdingCamera = activeCameraSlot != null;
                 bool timedExposurePending = CameraCaptureModSystemBridge.IsTimedExposurePending(_owner.ClientApi.World.Player?.Entity);
@@ -334,13 +332,6 @@ namespace Phototesting.CameraCapture
 
                     // Unload: only when offhand is empty.
                     if (offhand == null || !offhand.Empty) return;
-
-                    if (_owner.IsHoldStillPending)
-                    {
-                        _owner.HoldStillNotifyPending();
-
-                        return;
-                    }
 
                     _owner.ClientChannel.SendPacket(new CameraLoadPlatePacket { Load = false });
 
@@ -425,7 +416,6 @@ namespace Phototesting.CameraCapture
                 }
 
                 _captureInProgress = true;
-                _owner.HoldStillStartTracking(byEntity, fileName);
 
                 return true;
             }
@@ -471,11 +461,12 @@ namespace Phototesting.CameraCapture
             {
                 _captureInProgress = false;
 
+                // Notify server to transition the loaded plate to Exposed state.
+                _owner.ClientChannel?.SendPacket(new CameraCapture.Contracts.PhotoTakenPacket { PhotoId = fileName });
+
                 // Send to server + play sound after capture completes.
                 ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
                 clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
-
-                _owner.HoldStillMarkCaptureReady(fileName);
 
                 // Keep viewfinder open while timed exposure is active so exposure completion
                 // logic in ItemWetplateCamera can run to the end.
@@ -486,7 +477,6 @@ namespace Phototesting.CameraCapture
             private void OnCaptureFailure(ICoreClientAPI clientApi, Exception ex)
             {
                 _captureInProgress = false;
-                _owner.HoldStillCancel();
                 clientApi.Logger.Error("Wetplate HUD-less capture failed: " + ex);
                 clientApi.ShowChatMessage("Wetplate: capture failed (see log). Falling back may be needed.");
 

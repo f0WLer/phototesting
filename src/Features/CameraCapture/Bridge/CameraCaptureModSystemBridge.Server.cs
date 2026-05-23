@@ -91,15 +91,8 @@ namespace Phototesting.CameraCapture
             if (!CameraPlateEligibility.IsPlateSensitizedForExposure(loadedPlate)) return;
             if (PlateDryingTransition.IsDry(Api.World, loadedPlate)) return;
 
-            float maxHoldStillSeconds = Config?.Viewfinder?.HoldStillDurationSeconds ?? 30f;
-            if (maxHoldStillSeconds < 0f) maxHoldStillSeconds = 0f;
-            float holdStillSeconds = ClampFiniteRange(packet.HoldStillSeconds, 0f, maxHoldStillSeconds);
-            float holdStillMovement = ClampFiniteRange(packet.HoldStillMovement, 0f, 1000f);
-
             PlateStateService.SetStage(loadedPlate, PlateStage.Exposed);
-            loadedPlate.Attributes.SetString(PlateAttrs.PhotoId, photoId);
-            loadedPlate.Attributes.SetDouble(PlateAttrs.HoldStillSeconds, holdStillSeconds);
-            loadedPlate.Attributes.SetDouble(PlateAttrs.HoldStillMovement, holdStillMovement);
+            loadedPlate.Attributes.SetString("photoId", photoId);
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
             SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));

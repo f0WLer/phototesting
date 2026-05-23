@@ -115,35 +115,8 @@ namespace Phototesting.PlateLifecycle.Rendering
             }
         }
 
-        // Reads persisted exposure movement value from an item stack with clamping.
-        private static float GetMovementScore(ItemStack? itemstack)
-        {
-            if (itemstack?.Attributes == null) return 0f;
-
-            try
-            {
-                double movement = itemstack.Attributes.GetDouble(PlateAttrs.HoldStillMovement, 0);
-                if (movement <= 0) return 0f;
-                if (movement > 1000) movement = 1000;
-                return (float)movement;
-            }
-            catch
-            {
-                return 0f;
-            }
-        }
-
-        // Quantizes movement score to a stable integer key segment for cache/variant identity.
-        private static int QuantizeMovementScore(float movementScore)
-        {
-            float clamped = movementScore;
-            if (clamped < 0f) clamped = 0f;
-            if (clamped > 1000f) clamped = 1000f;
-            return (int)Math.Round(clamped * 100f);
-        }
-
-        // Resolves the effective render path and filename for a photo, applying derived-stage
-        // and motion-artifact variants when needed.  Prunes obsolete derived files before resolving.
+        // Resolves the effective render path and filename for a photo, applying developed-stage
+        // variants when needed.  Prunes obsolete derived files before resolving.
         // When no derived variant applies, renderPath == sourcePath and renderFileName == photoFileName.
         private static void ResolveDerivedRenderPath(
             ICoreClientAPI capi,
@@ -154,9 +127,6 @@ namespace Phototesting.PlateLifecycle.Rendering
             ItemStack? itemstack,
             int developPours,
             int maxDeveloperPours,
-            bool hasMovementEffects,
-            int movementCacheBucket,
-            float movementScore,
             out string renderPath,
             out string renderFileName)
         {
@@ -168,18 +138,14 @@ namespace Phototesting.PlateLifecycle.Rendering
 
             MaybePruneObsoleteDevelopedDerived(capi, photoFileName, itemstack, developPours, maxDeveloperPours, useDevelopedStage);
 
-            if (!useDevelopedStage && !hasMovementEffects) return;
+            if (!useDevelopedStage) return;
 
-            string profileTag = useDevelopedStage ? $"developed{developPours}" : "base";
-            if (hasMovementEffects)
-            {
-                profileTag = $"{profileTag}-mv{movementCacheBucket}";
-            }
+            string profileTag = $"developed{developPours}";
 
             string derivedFileName = GetDerivedPhotoFileName(photoFileName, profileTag);
             string derivedPath = GetDerivedPhotoPath(photoFileName, profileTag);
 
-            if (PhotoImageProcessor.TryEnsureDerivedPhoto(capi, sourcePath, derivedPath, $"{photoId}|{profileTag}", useDevelopedStage, developPours, maxDeveloperPours, movementScore))
+            if (PhotoImageProcessor.TryEnsureDerivedPhoto(capi, sourcePath, derivedPath, useDevelopedStage, developPours, maxDeveloperPours))
             {
                 renderPath = derivedPath;
                 renderFileName = derivedFileName;
@@ -187,4 +153,3 @@ namespace Phototesting.PlateLifecycle.Rendering
         }
     }
 }
-
