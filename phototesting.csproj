@@ -16,7 +16,7 @@
   <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)\.env')">
     <_EnvText>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\.env'))</_EnvText>
     <VINTAGE_STORY_PATH Condition=" '$(VINTAGE_STORY_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^VINTAGE_STORY_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</VINTAGE_STORY_PATH>
-    <MODS_PATH Condition=" '$(MODS_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^MODS_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</MODS_PATH>
+    <MODS_PATH Condition=" '$(MODS_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^MODS_PATH_122\s*=\s*(.+)$').Groups[1].Value.Trim())</MODS_PATH>
     <MODS_PATH Condition=" '$(MODS_PATH)' == '' ">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvText)', '(?m)^VINTAGE_STORY_MODS_PATH\s*=\s*(.+)$').Groups[1].Value.Trim())</MODS_PATH>
   </PropertyGroup>
 
