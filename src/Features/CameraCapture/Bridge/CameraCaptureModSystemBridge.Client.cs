@@ -667,11 +667,17 @@ namespace Phototesting.CameraCapture
                     selfPortrait: true);
                 _pendingMountedStartOptions = startOptions;
 
-                if (renderer.State != ExposureState.Paused)
+                string newPlateExposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+                bool resumingSamePlate = renderer.State == ExposureState.Paused
+                    && !string.IsNullOrEmpty(_mountedExposureId)
+                    && string.Equals(newPlateExposureId, _mountedExposureId, StringComparison.Ordinal);
+
+                if (!resumingSamePlate)
                 {
-                    _mountedExposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
-                    if (string.IsNullOrEmpty(_mountedExposureId))
-                        _mountedExposureId = Guid.NewGuid().ToString("N");
+                    // Different plate — persist any paused partial so it can be resumed when that plate is reloaded.
+                    if (renderer.State == ExposureState.Paused)
+                        PersistPartialMountedExposure();
+                    _mountedExposureId = !string.IsNullOrEmpty(newPlateExposureId) ? newPlateExposureId : Guid.NewGuid().ToString("N");
                 }
 
                 // Ask the server to spawn the camera-mounted block and move the camera item into it.

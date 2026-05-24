@@ -1,3 +1,4 @@
+using SkiaSharp;
 using Vintagestory.API.Config;
 
 namespace Phototesting.PhotoSync.Storage
@@ -27,6 +28,21 @@ namespace Phototesting.PhotoSync.Storage
         {
             string normalized = NormalizePhotoId(photoId);
             return Path.Combine(GamePaths.DataPath, "ModData", "phototesting", "photos", normalized);
+        }
+
+        // Generates a timestamped unique filename, encodes bitmap as PNG, writes it to the photo store, and returns the file name.
+        internal static string SaveExposurePng(SKBitmap bitmap)
+        {
+            string now = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            string rnd = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
+            string fileName = $"exposure_{now}_{rnd}.png";
+            string fullPath = GetPhotoPath(fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            using var finalImage = SKImage.FromBitmap(bitmap);
+            using var pngData = finalImage.Encode(SKEncodedImageFormat.Png, 90);
+            using var output = File.Open(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            pngData.SaveTo(output);
+            return fileName;
         }
     }
 }

@@ -123,18 +123,7 @@ namespace Phototesting.CameraCapture.Exposure
                 WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
                 ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "viewport-exposure", profile);
 
-                string now = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                string rnd = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
-                string fileName = $"exposure_{now}_{rnd}.png";
-                string fullPath = PhotoAssetStoragePaths.GetPhotoPath(fileName);
-
-                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-                using var finalImage = SKImage.FromBitmap(cropped);
-                using var pngData = finalImage.Encode(SKEncodedImageFormat.Png, 90);
-                using var output = File.Open(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                pngData.SaveTo(output);
-
-                return fileName;
+                return PhotoAssetStoragePaths.SaveExposurePng(cropped);
             }
             finally
             {
