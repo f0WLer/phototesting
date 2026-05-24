@@ -1,4 +1,6 @@
 using SkiaSharp;
+using Vintagestory.API.Client;
+using Phototesting.ImageEffects;
 
 namespace Phototesting.CameraCapture.Exposure
 {
@@ -64,5 +66,78 @@ namespace Phototesting.CameraCapture.Exposure
         /// Returns <see langword="false"/> when the blob is incompatible (wrong magic bytes, dimension mismatch, or corrupt).
         /// </summary>
         bool DeserializeAccumulation(byte[] data, out int frameCount);
+    }
+
+    /// <summary>
+    /// Accumulator variant that ingests frames already read back to CPU memory.
+    /// Used with the async PBO readback path in <see cref="ExposureReadbackPipeline"/>.
+    /// </summary>
+    internal interface ICpuExposureAccumulator : IExposureAccumulator
+    {
+        /// <summary>
+        /// Adds one BGRA8888 frame to the running exposure sum.
+        /// Frames whose dimensions differ from <see cref="IExposureAccumulator.Width"/> × <see cref="IExposureAccumulator.Height"/> are silently ignored.
+        /// </summary>
+        void Accumulate(byte[] bgra, int width, int height);
+    }
+
+    /// <summary>
+    /// Accumulator variant that ingests frames directly from a GPU framebuffer, with no per-sample CPU readback.
+    /// GPU accumulation and downsampling happen in-place; a CPU readback is only performed when
+    /// <see cref="IExposureAccumulator.Develop"/> or a full export is requested.
+    /// </summary>
+    internal interface IGpuExposureAccumulator : IExposureAccumulator
+    {
+        /// <summary>
+        /// Downsamples <paramref name="sourceFbo"/> into the GPU accumulation texture and adds it to the running exposure sum.
+        /// <paramref name="sourceFbo"/> must remain valid for the duration of this call.
+        /// </summary>
+        void Accumulate(FrameBufferRef sourceFbo);
+    }
+
+    /// <summary>
+    /// Shared interface for the two gameplay-level accumulation-based exposure paths:
+    /// the handheld viewport accumulator and the mounted virtual-camera renderer.
+    /// Implementations collect rendered frames over time and export a developed PNG when sealed.
+    /// </summary>
+    internal interface IGameplayExposureAccumulator : IDisposable
+    {
+        /// <summary>Current lifecycle state of this exposure session.</summary>
+        ExposureState State { get; }
+        /// <summary><see langword="true"/> while the accumulator is actively collecting frames.</summary>
+        bool IsCapturing { get; }
+        /// <summary>Number of frames accumulated so far in the current session.</summary>
+        int FramesAccumulated { get; }
+        /// <summary>Total number of samples required for a fully-exposed plate at the active chemistry.</summary>
+        int TargetFrames { get; }
+
+        /// <summary>Suspends frame accumulation without discarding the buffer.</summary>
+        void Pause();
+        /// <summary>Resumes frame accumulation from a previously paused state.</summary>
+        void Resume();
+
+        /// <summary>Finalizes the session without exporting. Unregisters any renderer and transitions to <see cref="ExposureState.Done"/>.</summary>
+        void Stop();
+
+        /// <summary>
+        /// Develops the buffer, applies wetplate finishing effects, and writes a PNG to the photo store.
+        /// Returns the saved file name, suitable for use as <c>PhotoTakenPacket.PhotoId</c>.
+        /// Throws when no frames have been accumulated.
+        /// </summary>
+        string Export(WetplateEffectsConfig? effectsOverride = null);
+    }
+
+    /// <summary>
+    /// Minimal sink contract for routing developed exposure preview frames to a display surface.
+    /// Decouples <see cref="VirtualExposureRenderer"/> from any specific preview renderer implementation.
+    /// </summary>
+    internal interface IExposurePreviewSink
+    {
+        /// <summary>Called when the exposure renderer begins accumulating, so the preview surface can enter passthrough mode.</summary>
+        void BeginExposurePassthrough();
+        /// <summary>Called when accumulation ends, reverting the preview surface out of passthrough mode.</summary>
+        void EndExposurePassthrough();
+        /// <summary>Delivers a developed mid-exposure preview frame to the sink for display.</summary>
+        void StoreExposureFrame(SKBitmap bitmap);
     }
 }
