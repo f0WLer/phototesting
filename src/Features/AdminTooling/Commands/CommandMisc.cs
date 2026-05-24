@@ -2,8 +2,6 @@ using System;
 using System.Globalization;
 using Phototesting.CameraCapture;
 using Phototesting.PlateLifecycle.Rendering;
-using Vintagestory.API.MathTools;
-using Vintagestory.Client.NoObf;
 
 namespace Phototesting.AdminTooling
 {
@@ -89,54 +87,6 @@ namespace Phototesting.AdminTooling
                     }
                     break;
 
-                case "finishing":
-                case "effects":
-                    string finishingAction = args.PopWord()?.ToLowerInvariant() ?? "show";
-                    switch (finishingAction)
-                    {
-                        case "show":
-                            break;
-
-                        case "on":
-                        case "enable":
-                            cfg.Viewfinder.DebugPreviewApplyFinishing = true;
-                            changed = true;
-                            break;
-
-                        case "off":
-                        case "disable":
-                            cfg.Viewfinder.DebugPreviewApplyFinishing = false;
-                            changed = true;
-                            break;
-
-                        case "toggle":
-                            cfg.Viewfinder.DebugPreviewApplyFinishing = !cfg.Viewfinder.DebugPreviewApplyFinishing;
-                            changed = true;
-                            break;
-
-                        default:
-                            _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview finishing [show|on|off|toggle]");
-                            return;
-                    }
-                    break;
-
-                case "on":
-                case "enable":
-                    cfg.Viewfinder.DebugPreviewEnabled = true;
-                    changed = true;
-                    break;
-
-                case "off":
-                case "disable":
-                    cfg.Viewfinder.DebugPreviewEnabled = false;
-                    changed = true;
-                    break;
-
-                case "toggle":
-                    cfg.Viewfinder.DebugPreviewEnabled = !cfg.Viewfinder.DebugPreviewEnabled;
-                    changed = true;
-                    break;
-
                 case "size":
                     {
                         string wStr = args.PopWord();
@@ -196,52 +146,8 @@ namespace Phototesting.AdminTooling
                         break;
                     }
 
-                case "virtualcamera":
-                case "vcam":
-                    {
-                        string vcamAction = args.PopWord()?.ToLowerInvariant() ?? "start";
-
-                        VirtualCameraPreviewRenderer? vcamRenderer = _owner.CameraCaptureBridge._virtualCameraPreviewRenderer;
-
-                        if (vcamAction == "stop")
-                        {
-                            vcamRenderer?.Stop();
-                            _owner.ClientApi.ShowChatMessage("Wetplate: virtual camera preview stopped.");
-                            return;
-                        }
-
-                        if (vcamRenderer == null)
-                        {
-                            _owner.ClientApi.ShowChatMessage("Wetplate: virtual camera preview renderer is not available.");
-                            return;
-                        }
-
-                        var player = _owner.ClientApi.World.Player;
-                        var pos = player.Entity.Pos;
-                        Vec3d eyePos = pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0);
-                        float yaw = pos.Yaw;
-                        float pitch = pos.Pitch;
-                        float fov = ((ClientMain)_owner.ClientApi.World).MainCamera.Fov;
-
-                        // Enable self-portrait so the local player's body appears in the preview.
-                        // Pass "nobody" as the second arg to disable: .phototesting preview virtualcamera nobody
-                        bool selfPortrait = !string.Equals(vcamAction, "nobody", StringComparison.OrdinalIgnoreCase);
-                        vcamRenderer.Start(eyePos, yaw, pitch, fov, cfg.Viewfinder.DebugPreviewMaxDimension, selfPortrait: selfPortrait);
-
-                        if (!cfg.Viewfinder.DebugPreviewEnabled)
-                        {
-                            cfg.Viewfinder.DebugPreviewEnabled = true;
-                            cfg.Viewfinder.ClampInPlace();
-                            _owner.SaveClientConfig(_owner.ClientApi);
-                        }
-
-                        _owner.ClientApi.ShowChatMessage(
-                            $"Wetplate: virtual camera preview started (fov={fov:F2} rad, quality={cfg.Viewfinder.DebugPreviewMaxDimension}px, refresh={cfg.Viewfinder.DebugPreviewRefreshMs}ms)");
-                        return;
-                    }
-
                 default:
-                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|on|off|toggle|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|finishing [show|on|off|toggle]|quality <pixels>|virtualcamera [stop]|vcam [stop]>");
+                    _owner.ClientApi.ShowChatMessage("Wetplate: usage: .phototesting preview <show|size <w> <h>|refresh <ms>|anchor <pos>|peak [show|on|off|toggle]|quality <pixels>>");
                     return;
             }
 
@@ -253,11 +159,9 @@ namespace Phototesting.AdminTooling
             }
 
             _owner.ClientApi!.ShowChatMessage(
-                $"Wetplate: preview {(cfg.Viewfinder.DebugPreviewEnabled ? "on" : "off")}, "
+                $"Wetplate: preview peak={(cfg.Viewfinder.DebugPreviewPeak ? "on" : "off")}, "
                 + $"{cfg.Viewfinder.DebugPreviewWidth}x{cfg.Viewfinder.DebugPreviewHeight}, "
                 + $"refresh={cfg.Viewfinder.DebugPreviewRefreshMs}ms, anchor={cfg.Viewfinder.DebugPreviewAnchor}, "
-                + $"peak={(cfg.Viewfinder.DebugPreviewPeak ? "on" : "off")}, "
-                + $"finishing={(cfg.Viewfinder.DebugPreviewApplyFinishing ? "on" : "off")}, "
                 + $"quality={cfg.Viewfinder.DebugPreviewMaxDimension}px (plate={cfg.Viewfinder.PhotoCaptureMaxDimension}px)");
         }
     }

@@ -11,7 +11,6 @@ using Phototesting.ImageEffects;
 namespace Phototesting.CameraCapture.Rendering
 {
     // Framebuffer capture, wetplate post-processing, and png write pipeline.
-    // Also serves optional debug preview frame generation for tuning.
     public class PhotoCaptureRenderer : IRenderer
     {
         private readonly ICoreClientAPI _capi;
@@ -21,7 +20,6 @@ namespace Phototesting.CameraCapture.Rendering
 
         private PendingCapture? _pending;
         private readonly object _pendingLock = new object();
-        private readonly ViewfinderPreviewFrameBuffer _previewFrameBuffer = new ViewfinderPreviewFrameBuffer();
 
         private class PendingCapture
         {
@@ -64,20 +62,6 @@ namespace Phototesting.CameraCapture.Rendering
             _captureMaxDimension = maxDimension;
         }
 
-        // Queues a debug preview capture.
-        public void RequestDebugPreviewFrame(int maxDimension, WetplateEffectsConfig? effectsOverride = null)
-        {
-            if (maxDimension < ViewfinderConfig.MinPhotoCaptureMaxDimension) maxDimension = ViewfinderConfig.MinPhotoCaptureMaxDimension;
-            if (maxDimension > ViewfinderConfig.MaxPhotoCaptureMaxDimension) maxDimension = ViewfinderConfig.MaxPhotoCaptureMaxDimension;
-            _previewFrameBuffer.RequestCapture(maxDimension, effectsOverride);
-        }
-
-        // Returns and clears the latest prepared debug preview frame if one is available.
-        public bool TryConsumeDebugPreviewFrame(out int[] bgraPixels, out int width, out int height)
-        {
-            return _previewFrameBuffer.TryConsumeLatestFrame(out bgraPixels, out width, out height);
-        }
-
         // Queues one capture for the next render frame.
         public bool TryScheduleCapture(out string fileName, Action<string> onSuccess, Action<Exception> onError, WetplateEffectsConfig? effectsOverride = null)
         {
@@ -114,8 +98,7 @@ namespace Phototesting.CameraCapture.Rendering
                 if (toProcess != null) _pending = null;
             }
 
-            var previewRequest = _previewFrameBuffer.TakePendingCaptureRequest();
-
+            // Processes one pending capture per frame.
             if (toProcess != null)
             {
                 try
@@ -138,32 +121,15 @@ namespace Phototesting.CameraCapture.Rendering
                     toProcess.OnError(ex);
                 }
             }
-
-            if (previewRequest.HasValue)
-            {
-                try
-                {
-                    int previewMaxDimension = previewRequest.Value.MaxDimension;
-                    WetplateEffectsConfig? previewEffectsOverride = previewRequest.Value.EffectsOverride;
-                    using SKBitmap previewBitmap = BuildProcessedCaptureBitmap(previewMaxDimension, "phototesting-debug-preview", previewEffectsOverride);
-                    _previewFrameBuffer.StoreFrame(previewBitmap);
-                }
-                catch (Exception ex)
-                {
-                    _capi.Logger.Warning($"Phototesting: debug preview capture failed: {ex.Message}");
-                }
-            }
         }
 
-        // Clears queued capture and preview state.
+        // Clears queued capture state.
         public void Dispose()
         {
             lock (_pendingLock)
             {
                 _pending = null;
             }
-
-            _previewFrameBuffer.Clear();
         }
 
         private PhotoCapturePipelineConfig? PipelineCfg => PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.PhotoCapturePipeline;
@@ -173,68 +139,6 @@ namespace Phototesting.CameraCapture.Rendering
 
         // Gets PNG compression quality.
         private int PngCompressionQuality => PipelineCfg?.PngCompressionQuality ?? 90;
-
-        // Center-crops a capture to plate aspect.
-        internal static SKBitmap CenterCropToPlateAspect(SKBitmap source)
-        {
-            if (source.Width <= 0 || source.Height <= 0) return source;
-
-            const float plateTargetAspect = 10f / 11f;
-            float sourceAspect = source.Width / (float)source.Height;
-
-            PhotoCropMath.ComputeCenterCrop(sourceAspect, plateTargetAspect, out float keepU, out float keepV);
-
-            if (keepU >= 0.9999f && keepV >= 0.9999f)
-            {
-                return source;
-            }
-
-            int cropW = Math.Max(1, (int)Math.Round(source.Width * keepU));
-            int cropH = Math.Max(1, (int)Math.Round(source.Height * keepV));
-
-            int cropX = Math.Max(0, (source.Width - cropW) / 2);
-            int cropY = Math.Max(0, (source.Height - cropH) / 2);
-
-            if (cropX + cropW > source.Width) cropW = source.Width - cropX;
-            if (cropY + cropH > source.Height) cropH = source.Height - cropY;
-
-            var dstInfo = new SKImageInfo(cropW, cropH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            var cropped = new SKBitmap(dstInfo);
-
-            using (var canvas = new SKCanvas(cropped))
-            {
-                canvas.Clear(SKColors.Black);
-                canvas.DrawBitmap(
-                    source,
-                    new SKRectI(cropX, cropY, cropX + cropW, cropY + cropH),
-                    new SKRect(0, 0, cropW, cropH));
-            }
-
-            return cropped;
-        }
-
-        internal static SKBitmap ScaleDownAndCenterCropToPlateAspect(SKBitmap source, int maxDimension)
-        {
-            float scale = Math.Min(1f, maxDimension / (float)Math.Max(source.Width, source.Height));
-            int outW = Math.Max(1, (int)(source.Width * scale));
-            int outH = Math.Max(1, (int)(source.Height * scale));
-
-            var dstInfo = new SKImageInfo(outW, outH, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            SKBitmap scaled = new SKBitmap(dstInfo);
-            using (var canvas = new SKCanvas(scaled))
-            {
-                canvas.Clear(SKColors.Black);
-                canvas.DrawBitmap(source, new SKRect(0, 0, outW, outH));
-            }
-
-            SKBitmap cropped = CenterCropToPlateAspect(scaled);
-            if (!ReferenceEquals(cropped, scaled))
-            {
-                scaled.Dispose();
-            }
-
-            return cropped;
-        }
 
         // Captures, flips, crops, and effects the framebuffer.
         private SKBitmap BuildProcessedCaptureBitmap(int maxDimension, string seedKey, WetplateEffectsConfig? effectsOverride = null)
@@ -275,7 +179,7 @@ namespace Phototesting.CameraCapture.Rendering
                     canvas.DrawImage(srcImage, new SKRect(0, 0, outW, outH));
                 }
 
-                SKBitmap croppedBitmap = CenterCropToPlateAspect(dstBitmap);
+                SKBitmap croppedBitmap = PhotoCropMath.CenterCropToPlateAspect(dstBitmap);
                 if (!ReferenceEquals(croppedBitmap, dstBitmap))
                 {
                     dstBitmap.Dispose();

@@ -1,7 +1,7 @@
+using System.Runtime.InteropServices;
 using OpenTK.Graphics.OpenGL;
 using SkiaSharp;
 using Vintagestory.API.Client;
-using Vintagestory.API.MathTools;
 using Vintagestory.Client.NoObf;
 using Phototesting.AdminTooling;
 using Phototesting.CameraCapture.Exposure;
@@ -10,34 +10,41 @@ using Phototesting.ImageEffects;
 
 namespace Phototesting.CameraCapture
 {
-    // Persistent virtual camera renderer for the debug preview overlay.
-    // Holds a fixed-position off-screen VirtualCamera and re-renders it on a timed interval,
-    // storing processed frames in a ViewfinderPreviewFrameBuffer for ViewfinderDebugPreviewRenderer to display.
+    // Persistent virtual-camera preview renderer.
+    // In idle mode it borrows the prepared VirtualCamera from VirtualExposureRenderer (via
+    // TryGetIdleCameraForPreview) and renders timed frames when DebugPreviewPeak is on.
+    // In exposure mode (BeginExposurePassthrough / StoreExposureFrame / EndExposurePassthrough)
+    // it passively buffers frames developed by VirtualExposureRenderer instead.
     // Registered at EnumRenderStage.Before so it can call TriggerRenderStage(Opaque) safely.
     internal sealed class VirtualCameraPreviewRenderer : IRenderer, IDisposable, IExposurePreviewSink
     {
         private readonly ICoreClientAPI _capi;
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
-        private readonly WetplateEffectsConfig _baselineEffects;
-        private readonly ViewfinderPreviewFrameBuffer _previewBuffer = new();
+        private int[]? _latestPreviewPixels;
+        private int _latestPreviewWidth;
+        private int _latestPreviewHeight;
 
-        private VirtualCamera? _camera;
-        private int _maxDimension;
-        private WetplateEffectsConfig? _effectsOverride;
         private long _lastRenderMs;
         private bool _disposed;
 
-        // The emulsion process used when applying EmulsionDevelop to standalone preview frames.
-        // Defaults to Iodide; updated to match the active exposure session when one is started
-        // so the standalone preview reflects the correct spectral response.
+        // The emulsion process used when developing idle-preview frames.
+        // Updated to match the chosen process when an exposure session is started.
         internal PlateProcessProfile EmulsionProcess { get; set; } = PlateProcessProfile.Iodide;
+
+        // Set by the bridge after both renderers are constructed.
+        internal VirtualExposureRenderer? ExposureRenderer { get; set; }
 
         public double RenderOrder => 0.4;
         public int RenderRange => 0;
 
-        // True when this overlay has either its own virtual camera or exposure frames to display.
-        internal bool IsActive => _camera != null || _exposurePassthrough;
+        // True when there is content to display: either exposure passthrough frames are active,
+        // or the exposure renderer has a prepared idle camera available for preview.
+        internal bool IsActive => _exposurePassthrough || (ExposureRenderer?.HasIdleCameraForPreview == true);
+
+        // True while an exposure session is actively pushing accumulation frames.
+        // Used by the overlay to bypass the DebugPreviewPeak gate during a live exposure.
+        internal bool IsExposureActive => _exposurePassthrough;
 
         // Exposure mode reuses this overlay surface but supplies already-developed frames.
         private bool _exposurePassthrough;
@@ -54,15 +61,20 @@ namespace Phototesting.CameraCapture
         public void EndExposurePassthrough()
         {
             _exposurePassthrough = false;
-            _previewBuffer.Clear();
+            _latestPreviewPixels = null;
         }
 
         // Stores an already-developed exposure bitmap into the preview buffer.
         // Ignored unless BeginExposurePassthrough() was called.
         public void StoreExposureFrame(SKBitmap bmp)
         {
-            if (_exposurePassthrough)
-                _previewBuffer.StoreFrame(bmp);
+            if (!_exposurePassthrough) return;
+            int count = bmp.Width * bmp.Height;
+            int[] pixels = new int[count];
+            Marshal.Copy(bmp.GetPixels(), pixels, 0, count);
+            _latestPreviewPixels = pixels;
+            _latestPreviewWidth = bmp.Width;
+            _latestPreviewHeight = bmp.Height;
         }
 
         internal VirtualCameraPreviewRenderer(ICoreClientAPI capi)
@@ -70,100 +82,70 @@ namespace Phototesting.CameraCapture
             _capi = capi;
             _main = (ClientMain)capi.World;
             _platform = (ClientPlatformWindows)_main.Platform;
-            _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
         }
 
-        internal void Start(Vec3d eyePos, float yaw, float pitch, float fov, int maxDimension, WetplateEffectsConfig? effectsOverride = null, bool selfPortrait = false)
-        {
-            EndExposurePassthrough();
-            StopCamera();
-            _maxDimension = maxDimension;
-            _effectsOverride = effectsOverride;
-
-            VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
-            cam.ApplyState(new VirtualCameraState(
-                eyePos,
-                yaw,
-                pitch,
-                fov,
-                _capi.World.Player.Entity.Pos.Dimension,
-                selfPortrait));
-            cam.InitBuffer();
-
-            _camera = cam;
-            _lastRenderMs = 0; // Trigger render on the very next eligible tick.
-        }
-
-        // Stops the virtual camera preview and clears buffered frames.
-        internal void Stop()
-        {
-            EndExposurePassthrough();
-            StopCamera();
-        }
-
-        private void StopCamera()
-        {
-            if (_camera == null) return;
-            BestEffort.Try(null, "destroy virtual camera preview", () => _camera.Destroy());
-            _camera = null;
-        }
-
-        // Forwards to the internal preview frame buffer. Returns true when a new frame is available.
+        // Returns and clears the most recently buffered preview frame, or false if none is available.
         internal bool TryConsumeLatestFrame(out int[] bgraPixels, out int width, out int height)
-            => _previewBuffer.TryConsumeLatestFrame(out bgraPixels, out width, out height);
-
-        // Returns the current vcam state if one has been started via 'preview vcam'.
-        // Returns true even during exposure passthrough so subsequent exposures reuse the same view.
-        internal bool TryGetActiveCameraState(out VirtualCameraState state)
         {
-            if (_camera != null)
+            if (_latestPreviewPixels == null)
             {
-                state = _camera.GetState();
-                return true;
+                bgraPixels = Array.Empty<int>();
+                width = 0;
+                height = 0;
+                return false;
             }
-            state = default;
-            return false;
+            bgraPixels = _latestPreviewPixels;
+            width = _latestPreviewWidth;
+            height = _latestPreviewHeight;
+            _latestPreviewPixels = null;
+            return true;
         }
 
-        // Re-renders the virtual scene and stores the result when the refresh interval has elapsed.
+        // Re-renders the virtual scene using the exposure renderer's idle camera and stores the
+        // result when the refresh interval has elapsed. Gated on DebugPreviewPeak so idle preview
+        // only runs when the user has explicitly turned on peak mode.
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
-            // Exposure renderer is the frame source; nothing for us to render.
+            // Exposure renderer is the frame source during an active exposure; nothing to render.
             if (_exposurePassthrough) return;
-            if (_camera == null) return;
+            if (ExposureRenderer == null) return;
 
             ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
-            int refreshMs = cfg?.DebugPreviewRefreshMs ?? 500;
+            if (!(cfg?.DebugPreviewPeak ?? false)) return;
+
+            if (!ExposureRenderer.TryGetIdleCameraForPreview(out VirtualCamera camera)) return;
+
+            int refreshMs = cfg!.DebugPreviewRefreshMs;
             long nowMs = _capi.ElapsedMilliseconds;
             if (nowMs - _lastRenderMs < refreshMs) return;
             _lastRenderMs = nowMs;
 
             // Reinitialize the FBO if the window was resized since last render.
-            if (_capi.Render.FrameWidth != _camera.fbo.Width || _capi.Render.FrameHeight != _camera.fbo.Height)
+            if (_capi.Render.FrameWidth != camera.fbo.Width || _capi.Render.FrameHeight != camera.fbo.Height)
             {
-                _camera.Destroy();
-                _camera.InitBuffer();
+                camera.Destroy();
+                camera.InitBuffer();
             }
 
             try
             {
-                _camera.RenderCameraInStoredDimension(deltaTime);
+                camera.RenderCameraInStoredDimension(deltaTime);
 
                 // Clear the primary FBO that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-                using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, _camera.fbo);
-                using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, _maxDimension);
+                int maxDimension = cfg.DebugPreviewMaxDimension;
+                using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, camera.fbo);
+                using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
 
                 EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
 
-                if (cfg?.DebugPreviewApplyFinishing ?? true)
-                {
-                    WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, _effectsOverride);
-                    ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, "virtualpreview", profile);
-                }
-
-                _previewBuffer.StoreFrame(croppedBitmap);
+                int count = croppedBitmap.Width * croppedBitmap.Height;
+                int[] pixels = new int[count];
+                Marshal.Copy(croppedBitmap.GetPixels(), pixels, 0, count);
+                _latestPreviewPixels = pixels;
+                _latestPreviewWidth = croppedBitmap.Width;
+                _latestPreviewHeight = croppedBitmap.Height;
             }
             catch (Exception ex)
             {
@@ -175,7 +157,7 @@ namespace Phototesting.CameraCapture
         {
             if (_disposed) return;
             _disposed = true;
-            Stop();
+            EndExposurePassthrough();
         }
     }
 }

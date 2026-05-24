@@ -25,12 +25,8 @@ namespace Phototesting.CameraCapture
         /// Lower values reduce per-sample readback cost at the expense of slight softness in exported plates.</summary>
         public int ExposureReadbackMaxDimension = DefaultExposureReadbackMaxDimension;
 
-        /// <summary>If true, shows a live viewfinder debug preview window with final wetplate effects applied (client-only).</summary>
-        public bool DebugPreviewEnabled = false;
-        /// <summary>If true, keeps the debug preview visible even when the viewfinder is not active (dev-only).</summary>
+        /// <summary>If true, keeps the debug preview visible when DebugPreviewPeak mode is active (dev-only).</summary>
         public bool DebugPreviewPeak = false;
-        /// <summary>If true, applies the post-development finishing pass to the live debug preview.</summary>
-        public bool DebugPreviewApplyFinishing = false;
         /// <summary>Refresh interval in milliseconds for the live viewfinder debug preview (lower = more CPU/GPU use).</summary>
         public int DebugPreviewRefreshMs = 500;
         /// <summary>Max pixel size of the source capture used for the debug preview (higher = sharper but slower).</summary>

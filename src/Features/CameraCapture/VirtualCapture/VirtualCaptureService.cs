@@ -73,7 +73,7 @@ namespace Phototesting.CameraCapture
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
                     using SKBitmap raw = ReadFramebuffer(_capi, cam.fbo);
-                    using SKBitmap croppedBitmap = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
+                    using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
 
                     EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
 

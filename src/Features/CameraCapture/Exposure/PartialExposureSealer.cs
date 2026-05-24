@@ -56,7 +56,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (!buffer.DeserializeAccumulation(data, out _)) return null;
 
             using SKBitmap developed = buffer.Develop();
-            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(developed, ViewfinderConfig.DefaultPhotoCaptureMaxDimension);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, ViewfinderConfig.DefaultPhotoCaptureMaxDimension);
             try
             {
                 WetplateEffectsConfig effects = ImageEffectsPipelineBridge.ResolveCaptureProfile(new WetplateEffectsConfig(), effectsOverride);

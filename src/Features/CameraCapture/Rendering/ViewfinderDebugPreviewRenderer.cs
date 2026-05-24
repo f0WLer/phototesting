@@ -2,33 +2,23 @@ using Vintagestory.API.Client;
 using Vintagestory.API.MathTools;
 using Phototesting.AdminTooling;
 using Phototesting.CameraCapture;
-using Phototesting.CameraCapture.Exposure;
 
 namespace Phototesting.CameraCapture.Rendering
 {
-    // Optional on-screen debug preview for processed capture output.
-    // Pulls preview frames from PhotoCaptureRenderer and draws anchored overlays.
+    // On-screen debug preview overlay.
+    // Displays live frames from VirtualCameraPreviewRenderer — either idle vcam renders
+    // (when DebugPreviewPeak is on and no exposure is active) or exposure-accumulation
+    // frames pushed via IExposurePreviewSink during an active exposure session.
     internal sealed class ViewfinderDebugPreviewRenderer : IRenderer
     {
         private readonly ICoreClientAPI _capi;
-        private readonly PhotoCaptureRenderer _captureRenderer;
-        private readonly Func<bool> _isViewfinderActive;
         private readonly VirtualCameraPreviewRenderer? _virtualPreviewRenderer;
 
         private LoadedTexture? _previewTexture;
-        private long _lastPreviewRequestMs;
 
-        // When set, this accumulator is used as the preview source while it has accumulated frames.
-        // Supersedes the capture-renderer debug source but yields to the virtual camera.
-        internal ViewportExposureAccumulator? AccumulationSource { get; set; }
-
-        // Wires preview rendering to the capture renderer and current viewfinder active-state probe.
-        // virtualPreviewRenderer is optional; when active it replaces the normal capture-renderer source.
-        public ViewfinderDebugPreviewRenderer(ICoreClientAPI capi, PhotoCaptureRenderer captureRenderer, Func<bool> isViewfinderActive, VirtualCameraPreviewRenderer? virtualPreviewRenderer = null)
+        public ViewfinderDebugPreviewRenderer(ICoreClientAPI capi, VirtualCameraPreviewRenderer? virtualPreviewRenderer = null)
         {
             this._capi = capi;
-            this._captureRenderer = captureRenderer;
-            this._isViewfinderActive = isViewfinderActive;
             this._virtualPreviewRenderer = virtualPreviewRenderer;
         }
 
@@ -37,9 +27,8 @@ namespace Phototesting.CameraCapture.Rendering
         public double RenderOrder => 0.97;
         public int RenderRange => 0;
 
-        // Periodically requests and draws the optional processed preview overlay used for tuning capture effects.
-        // When a VirtualCameraPreviewRenderer is active it is the exclusive frame source; the normal
-        // capture-renderer request path is bypassed and DebugPreviewEnabled is not required.
+        // Periodically draws the preview overlay when DebugPreviewPeak is on and the
+        // virtual preview renderer has content available (idle vcam or active exposure frames).
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (stage != EnumRenderStage.Ortho) return;
@@ -47,42 +36,13 @@ namespace Phototesting.CameraCapture.Rendering
             ViewfinderConfig? cfg = ViewfinderCfg;
             if (cfg == null) return;
 
-            bool virtualActive = _virtualPreviewRenderer?.IsActive == true;
-            bool accActive = AccumulationSource?.FramesAccumulated > 0 &&
-                             (AccumulationSource.State == ExposureState.Capturing || AccumulationSource.State == ExposureState.Paused);
+            bool exposureActive = _virtualPreviewRenderer?.IsExposureActive == true;
 
-            if (!virtualActive && !accActive)
-            {
-                if (!cfg.DebugPreviewEnabled) return;
-                if (!cfg.DebugPreviewPeak && !_isViewfinderActive()) return;
+            // Idle vcam preview requires peak mode; exposure accumulation always shows.
+            if (!exposureActive && !cfg.DebugPreviewPeak) return;
+            if (_virtualPreviewRenderer?.IsActive != true) return;
 
-                int refreshMs = cfg.DebugPreviewRefreshMs;
-                long nowMs = _capi.ElapsedMilliseconds;
-                if (nowMs - _lastPreviewRequestMs >= refreshMs)
-                {
-                    _lastPreviewRequestMs = nowMs;
-                    _captureRenderer.RequestDebugPreviewFrame(cfg.DebugPreviewMaxDimension, PhotoTestingConfigAccess.ResolveModSystem(_capi)?.CameraCaptureBridge.ResolveCaptureEffectsOverrideForLoadedCameraPlate());
-                }
-            }
-
-            bool hasNewFrame;
-            int[] bgraPixels;
-            int width, height;
-
-            if (virtualActive)
-            {
-                hasNewFrame = _virtualPreviewRenderer!.TryConsumeLatestFrame(out bgraPixels, out width, out height);
-            }
-            else if (accActive)
-            {
-                int refreshMs = cfg.DebugPreviewRefreshMs;
-                long nowMs = _capi.ElapsedMilliseconds;
-                hasNewFrame = AccumulationSource!.TryPeekDevelopedFrame(nowMs, refreshMs, cfg.DebugPreviewMaxDimension, out bgraPixels, out width, out height);
-            }
-            else
-            {
-                hasNewFrame = _captureRenderer.TryConsumeDebugPreviewFrame(out bgraPixels, out width, out height);
-            }
+            bool hasNewFrame = _virtualPreviewRenderer!.TryConsumeLatestFrame(out int[] bgraPixels, out int width, out int height);
 
             if (hasNewFrame)
             {

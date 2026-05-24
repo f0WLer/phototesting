@@ -78,9 +78,10 @@ namespace Phototesting.CameraCapture
 
             _virtualExposureRenderer = new VirtualExposureRenderer(api);
             _virtualExposureRenderer.PreviewSink = _virtualCameraPreviewRenderer;
+            _virtualCameraPreviewRenderer.ExposureRenderer = _virtualExposureRenderer;
             api.Event.RegisterRenderer(_virtualExposureRenderer, EnumRenderStage.Before, "phototesting-virtualexposure");
 
-            _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _captureRenderer, () => IsViewfinderActive, _virtualCameraPreviewRenderer);
+            _debugPreviewRenderer = new ViewfinderDebugPreviewRenderer(api, _virtualCameraPreviewRenderer);
             api.Event.RegisterRenderer(_debugPreviewRenderer, EnumRenderStage.Ortho, "phototesting-viewfinder-preview");
 
             _virtualCaptureService = new VirtualCaptureService(api);
@@ -245,14 +246,6 @@ namespace Phototesting.CameraCapture
             _virtualCameraPreviewRenderer = null;
             _virtualExposureRenderer = null;
             _cameraCaptureClientRuntime = null;
-        }
-
-        // Routes the accumulation preview source to the debug preview renderer when present.
-        // Accepts the interface; the renderer is only updated when the concrete type is ViewportExposureAccumulator.
-        internal void SetAccumulationPreviewSource(IGameplayExposureAccumulator? source)
-        {
-            if (_debugPreviewRenderer != null)
-                _debugPreviewRenderer.AccumulationSource = source as ViewportExposureAccumulator;
         }
 
         // Seals the partial exposure for the given ExposurePaused plate client-side and sends a combined
@@ -517,7 +510,6 @@ namespace Phototesting.CameraCapture
                     _owner.ActiveAccumulator = existingAcc;
                     _owner.ActiveExposureId = exposureId;
                     existingAcc.Resume();
-                    _owner.SetAccumulationPreviewSource(existingAcc);
                     SendExposureStatePacket(isExposing: true, existingAcc.FramesAccumulated, exposureId, existingAcc.TargetFrames);
                     return true;
                 }
@@ -536,7 +528,6 @@ namespace Phototesting.CameraCapture
                 ViewfinderExposureRegistry.Register(exposureId, newAcc);
                 _owner.ActiveAccumulator = newAcc;
                 _owner.ActiveExposureId = exposureId;
-                _owner.SetAccumulationPreviewSource(newAcc);
 
                 _owner.MaybeShowF4GuiLessTip();
                 SendExposureStatePacket(isExposing: true, 0, exposureId, newAcc.TargetFrames);
@@ -600,7 +591,6 @@ namespace Phototesting.CameraCapture
                 {
                     _owner.ActiveAccumulator = null;
                     _owner.ActiveExposureId = string.Empty;
-                    _owner.SetAccumulationPreviewSource(null);
                 }
             }
 

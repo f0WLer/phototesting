@@ -146,10 +146,54 @@ namespace Phototesting.CameraCapture.Exposure
                 $"Use '.phototesting exposure export' to save.");
         }
 
+        /// <summary>
+        /// Prepares the virtual camera for preview before an exposure begins.
+        /// Only valid when <see cref="State"/> is <see cref="ExposureState.Idle"/>; no-op otherwise.
+        /// Replaces any previously prepared camera.
+        /// </summary>
+        internal void PrepareCamera(VirtualCameraState cameraState)
+        {
+            if (State != ExposureState.Idle) return;
+            DestroyCamera();
+            VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
+            cam.ApplyState(cameraState);
+            cam.InitBuffer();
+            _camera = cam;
+        }
+
+        /// <summary>
+        /// Returns the prepared virtual camera when idle (no active or completed exposure),
+        /// allowing the preview renderer to render idle viewfinder frames.
+        /// Returns <see langword="false"/> during any active, paused, done, or faulted session.
+        /// </summary>
+        internal bool TryGetIdleCameraForPreview(out VirtualCamera camera)
+        {
+            if (State == ExposureState.Idle && _camera != null)
+            {
+                camera = _camera;
+                return true;
+            }
+            camera = null!;
+            return false;
+        }
+
+        /// <summary>
+        /// Returns <see langword="true"/> when a virtual camera is prepared and no exposure session is active.
+        /// Use this for boolean checks; use <see cref="TryGetIdleCameraForPreview"/> when you also need the camera instance.
+        /// </summary>
+        internal bool HasIdleCameraForPreview => State == ExposureState.Idle && _camera != null;
+
+        /// <summary>
+        /// Destroys the prepared virtual camera and returns it to an uninitialized state.
+        /// Call when the owning mounted-camera block is removed.
+        /// No-op when no camera is prepared.
+        /// </summary>
+        internal void ClearCamera() => DestroyCamera();
+
         /// <summary>Starts a new exposure session with the given camera state, chemistry, and stop policy. Any previous session is discarded.</summary>
         internal void Start(VirtualCameraState cameraState, PlateProcessProfile process, ExposureStartOptions startOptions = default)
         {
-            Discard();
+            Discard(); // Clears buffer/state but preserves any prepared _camera.
             _process = process;
             _startOptions = startOptions;
             LastFaultMessage = null;
@@ -162,10 +206,14 @@ namespace Phototesting.CameraCapture.Exposure
             _pauseStartedMs = 0;
             _shutterFrozenMs = 0;
 
-            VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
-            cam.ApplyState(cameraState);
-            cam.InitBuffer();
-            _camera = cam;
+            if (_camera == null)
+            {
+                // No camera prepared by PrepareCamera() — create one from the supplied state (legacy/admin path).
+                VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
+                cam.ApplyState(cameraState);
+                cam.InitBuffer();
+                _camera = cam;
+            }
 
             AllocateBufferAndReadback();
             PreviewSink?.BeginExposurePassthrough();
@@ -199,15 +247,16 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         /// <summary>
-        /// Closes the shutter, tears down the virtual camera, and transitions to <see cref="ExposureState.Done"/>.
+        /// Closes the shutter and transitions to <see cref="ExposureState.Done"/>.
         /// Drains any in-flight readback PBOs first so no samples are lost.
-        /// The accumulated buffer is preserved; call <see cref="Discard"/> to also clear it.
+        /// The accumulated buffer and the prepared virtual camera are both preserved;
+        /// call <see cref="Discard"/> to clear the buffer and return to <see cref="ExposureState.Idle"/>.
         /// </summary>
         internal void Stop()
         {
             DrainReadbackPipeline();
             _shutterFrozenMs = _capi.ElapsedMilliseconds;
-            StopCamera();
+            // The virtual camera is kept alive so the preview can continue after shutter close.
             State = ExposureState.Done;
 
             int frames = _buffer?.FramesAccumulated ?? 0;
@@ -219,10 +268,13 @@ namespace Phototesting.CameraCapture.Exposure
                 $"Use '.phototesting exposure export' to save.");
         }
 
-        /// <summary>Tears down the camera and buffer and returns to <see cref="ExposureState.Idle"/>. Call after export or to abandon a session.</summary>
+        /// <summary>
+        /// Clears the accumulated buffer and returns to <see cref="ExposureState.Idle"/>.
+        /// The prepared virtual camera is preserved so idle preview rendering continues uninterrupted.
+        /// Call <see cref="ClearCamera"/> separately when the mounted-camera block is removed.
+        /// </summary>
         internal void Discard()
         {
-            StopCamera();
             _readback?.Dispose();
             _readback = null;
             _readbackScratch = null;
@@ -267,7 +319,7 @@ namespace Phototesting.CameraCapture.Exposure
             int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.PhotoCaptureMaxDimension
                 ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 
-            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(averaged, maxDimension);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(averaged, maxDimension);
 
             try
             {
@@ -324,15 +376,9 @@ namespace Phototesting.CameraCapture.Exposure
 
             using SKBitmap developed = _buffer.Develop();
 
-            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
             try
             {
-                if (ApplyFinishing && (cfg?.DebugPreviewApplyFinishing ?? true))
-                {
-                    WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, null);
-                    ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "exposure-preview", profile);
-                }
-
                 PreviewSink.StoreExposureFrame(cropped);
             }
             finally
@@ -437,7 +483,7 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        private void StopCamera()
+        private void DestroyCamera()
         {
             if (_camera == null) return;
             BestEffort.Try(null, "destroy virtual exposure camera", () => _camera.Destroy());
@@ -513,7 +559,7 @@ namespace Phototesting.CameraCapture.Exposure
             DrainReadbackPipeline();
             _readback?.ResetRing();
 
-            _camera.Destroy();
+            _camera.Destroy(); // Destroys the FBO; _camera object is reused (not nulled).
             _camera.InitBuffer();
             AllocateBufferAndReadback();
         }
@@ -523,6 +569,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (_disposed) return;
             _disposed = true;
             Discard();
+            DestroyCamera();
         }
     }
 }

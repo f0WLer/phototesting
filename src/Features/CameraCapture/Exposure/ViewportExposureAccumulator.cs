@@ -117,7 +117,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             using SKBitmap developed = _buffer.Develop();
             using SKBitmap flipped = FlipVertical(developed);
-            SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(flipped, maxDim);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(flipped, maxDim);
 
             try
             {
@@ -149,7 +149,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             using SKBitmap developed = _buffer.Develop();
             using SKBitmap flipped = FlipVertical(developed);
-            using SKBitmap cropped = PhotoCaptureRenderer.ScaleDownAndCenterCropToPlateAspect(flipped, maxDimension);
+            using SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(flipped, maxDimension);
             w = cropped.Width;
             h = cropped.Height;
             bgra = new int[w * h];

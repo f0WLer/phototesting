@@ -39,20 +39,19 @@ namespace Phototesting.AdminTooling
 
                     // Prefer the active virtual-camera preview so test exposures capture that exact view.
                     VirtualCameraPreviewRenderer? previewRenderer = _owner.CameraCaptureBridge._virtualCameraPreviewRenderer;
-                    if (previewRenderer == null || !previewRenderer.TryGetActiveCameraState(out VirtualCameraState cameraState))
-                    {
-                        var player = _owner.ClientApi.World.Player;
-                        var pos = player.Entity.Pos;
-                        cameraState = new VirtualCameraState(
-                            pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
-                            pos.Yaw,
-                            pos.Pitch,
-                            ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
-                            pos.Dimension,
-                            selfPortrait: true);
-                    }
+
+                    var player = _owner.ClientApi.World.Player;
+                    var pos = player.Entity.Pos;
+                    VirtualCameraState cameraState = new VirtualCameraState(
+                        pos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
+                        pos.Yaw,
+                        pos.Pitch,
+                        ((ClientMain)_owner.ClientApi.World).MainCamera.Fov,
+                        pos.Dimension,
+                        selfPortrait: true);
 
                     renderer.Start(cameraState, process);
+                    // EmulsionProcess keeps the idle preview in sync with the chosen chemistry.
                     if (previewRenderer != null) previewRenderer.EmulsionProcess = process;
                     string portraitMsg = cameraState.SelfPortrait ? ", self-portrait" : "";
                     _owner.ClientApi.ShowChatMessage(
