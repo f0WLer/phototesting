@@ -3,6 +3,7 @@ using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
+using Phototesting.AdminTooling;
 
 namespace Phototesting.PlateLifecycle.Tray
 {
@@ -259,7 +260,14 @@ namespace Phototesting.PlateLifecycle.Tray
             if (secondsUsed < actionContext.DurationSeconds) return true;
 
             // Latch until RMB release to prevent auto-starting the next action.
-            if (world.Side == EnumAppSide.Client) TrayTimedInteractionState.SetNeedsRelease(byPlayer);
+            if (world.Side == EnumAppSide.Client)
+            {
+                TrayTimedInteractionState.SetNeedsRelease(byPlayer);
+                // ExposurePaused plate: seal now that the developer pour completed successfully.
+                if (actionKind == TrayActionKind.Developer && PlateStateService.GetStage(plate) == PlateStage.ExposurePaused)
+                    if (world.Api is ICoreClientAPI capiSeal)
+                        PhotoTestingConfigAccess.ResolveModSystem(capiSeal)?.CameraCaptureBridge.TrySendSealForTray(capiSeal, pos, plate);
+            }
 
             if (world.Side == EnumAppSide.Server)
             {
@@ -459,9 +467,11 @@ namespace Phototesting.PlateLifecycle.Tray
 
             plate = plateStack;
 
-            isExposed = PlateStateService.GetStage(plate) == PlateStage.Exposed;
-            isDeveloped = PlateStateService.GetStage(plate) == PlateStage.Developed;
-            bool isDeveloping = PlateStateService.GetStage(plate) == PlateStage.Developing;
+            PlateStage plateStage = PlateStateService.GetStage(plate);
+            // ExposurePaused is treated as exposed: the seal packet will stamp it before the pour fires.
+            isExposed = plateStage == PlateStage.Exposed || plateStage == PlateStage.ExposurePaused;
+            isDeveloped = plateStage == PlateStage.Developed;
+            bool isDeveloping = plateStage == PlateStage.Developing;
             if (!isExposed && !isDeveloped && !isDeveloping)
             {
                 currentPours = 0;
@@ -510,12 +520,14 @@ namespace Phototesting.PlateLifecycle.Tray
             return true;
         }
 
-        // Allows exposed, developing, and developed plates to enter the tray workflow.
+        // Allows exposed, paused-exposure, developing, and developed plates to enter the tray workflow.
         private static bool IsInsertablePlate(ItemStack? stack)
         {
             if (stack == null) return false;
 
-            return PlateStateService.GetStage(stack) == PlateStage.Exposed
+            PlateStage stage = PlateStateService.GetStage(stack);
+            return stage == PlateStage.Exposed
+                || stage == PlateStage.ExposurePaused
                 || PlateStateTransitions.IsDevelopingFamily(stack);
         }
 

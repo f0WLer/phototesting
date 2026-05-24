@@ -254,6 +254,37 @@ namespace Phototesting.CameraCapture
             if (_debugPreviewRenderer != null)
                 _debugPreviewRenderer.AccumulationSource = source as ViewportExposureAccumulator;
         }
+
+        // Seals the partial exposure for the given ExposurePaused plate client-side and sends a combined
+        // seal+insert packet to the server. Returns true when the packet was sent successfully.
+        internal bool TrySendSealForTray(ICoreClientAPI capi, BlockPos trayPos, ItemStack trayPlate)
+        {
+            if (ClientChannel == null || trayPlate == null) return false;
+
+            string exposureId = trayPlate.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+            if (string.IsNullOrEmpty(exposureId)) return false;
+
+            string processId = PlateStateService.GetProcessId(trayPlate);
+            if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
+                profile = PlateProcessProfile.Iodide;
+
+            string? photoId = PartialExposureSealer.SealToPng(exposureId, profile);
+            if (string.IsNullOrEmpty(photoId)) return false;
+
+            ClientPhotoSyncIntegration.NotifyPhotoCreated(capi, photoId);
+
+            ClientChannel.SendPacket(new SealAndInsertIntoTrayPacket
+            {
+                ExposureId = exposureId,
+                PhotoId    = photoId,
+                TrayPosX   = trayPos.X,
+                TrayPosY   = trayPos.Y,
+                TrayPosZ   = trayPos.Z,
+                TrayPosDim = trayPos.dimension,
+            });
+            return true;
+        }
+
     // Stateful client-side runtime for viewfinder input and shutter capture scheduling.
     // Keeps per-tick input state and capture lifecycle transitions outside the mod-system partial surface.
 

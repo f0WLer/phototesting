@@ -3,7 +3,9 @@ using Phototesting.CameraCapture.Contracts;
 using Phototesting.CameraCapture.Integration;
 using Phototesting.PhotoSync.Storage;
 using Phototesting.PlateLifecycle;
+using Phototesting.PlateLifecycle.Tray;
 using Vintagestory.API.Common;
+using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
 namespace Phototesting.CameraCapture
@@ -38,6 +40,8 @@ namespace Phototesting.CameraCapture
             CameraCaptureChannelRegistration.ConfigureServerSyncHandlers(
                 ServerChannel,
                 (player, p) => OnPhotoCaptureConfigRequested(player));
+
+            ServerChannel.SetMessageHandler<SealAndInsertIntoTrayPacket>(OnSealAndInsertTrayReceived);
         }
     // Server-authoritative camera capture config broadcast and request handling.
 
@@ -157,6 +161,42 @@ namespace Phototesting.CameraCapture
                 mountedBe.MarkCameraDirty();
             else
                 cameraSlot?.MarkDirty();
+        }
+
+        // Stamps the ExposurePaused plate already sitting in the tray with the sealed photo id,
+        // transitioning it to Exposed so the pending developer pour sees the correct stage.
+        private void OnSealAndInsertTrayReceived(IServerPlayer player, SealAndInsertIntoTrayPacket packet)
+        {
+            if (Api?.Side != EnumAppSide.Server || Api.World == null) return;
+            if (player == null || packet == null) return;
+
+            string photoId = PhotoAssetStoragePaths.NormalizePhotoId(packet.PhotoId);
+            if (string.IsNullOrWhiteSpace(photoId)) return;
+
+            BlockPos trayPos = new BlockPos(packet.TrayPosX, packet.TrayPosY, packet.TrayPosZ, packet.TrayPosDim);
+            if (Api.World.BlockAccessor.GetBlockEntity(trayPos) is not BlockEntityDevelopmentTray be) return;
+
+            ItemStack? trayPlate = be.PlateStack;
+            if (trayPlate == null) return;
+
+            PlateStage trayStage = PlateStateService.GetStage(trayPlate);
+            if (trayStage != PlateStage.ExposurePaused && trayStage != PlateStage.Developing && trayStage != PlateStage.Developed) return;
+
+            string exposureId = trayPlate.Attributes.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+            if (!string.Equals(exposureId, packet.ExposureId, StringComparison.OrdinalIgnoreCase)) return;
+
+            trayPlate.Attributes.SetString("photoId", photoId);
+            trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureId);
+            trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposedFrames);
+            trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureTargetFrames);
+            // Only change stage for ExposurePaused; if the pour already advanced the plate to Developing/Developed,
+            // just set the photoId and clean up exposure attrs without rewinding the stage.
+            if (trayStage == PlateStage.ExposurePaused)
+                PlateStateService.SetStage(trayPlate, PlateStage.Exposed);
+            be.TrySetPlate(trayPlate);
+
+            _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);
+            _owner.PhotoSyncBridge.Runtime?.RegisterExpectedUpload(player.PlayerUID, photoId);
         }
 
         // Clamps packet-provided floats to a safe range, treating NaN/Infinity as the lower bound.

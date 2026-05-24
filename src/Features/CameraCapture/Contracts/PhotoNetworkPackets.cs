@@ -83,4 +83,16 @@ namespace Phototesting.CameraCapture.Contracts
         /// <summary>Target sample count for a correct exposure (sent on start/resume).</summary>
         [ProtoMember(4)] public int TargetFrames { get; set; }
     }
+
+    /// <summary>Tells the server to stamp the partial-exposure plate in the active slot with the given photo id and insert it into the development tray at the given position.</summary>
+    [ProtoContract]
+    internal class SealAndInsertIntoTrayPacket
+    {
+        [ProtoMember(1)] public string ExposureId { get; set; } = string.Empty;
+        [ProtoMember(2)] public string PhotoId    { get; set; } = string.Empty;
+        [ProtoMember(3)] public int TrayPosX      { get; set; }
+        [ProtoMember(4)] public int TrayPosY      { get; set; }
+        [ProtoMember(5)] public int TrayPosZ      { get; set; }
+        [ProtoMember(6)] public int TrayPosDim    { get; set; }
+    }
 }
