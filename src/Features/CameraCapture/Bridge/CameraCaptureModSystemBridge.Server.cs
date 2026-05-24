@@ -23,7 +23,7 @@ namespace Phototesting.CameraCapture
         private void ConfigureServerCameraCaptureCore(ICoreServerAPI api)
         {
             ServerChannel = api.Network.GetChannel("phototesting");
-            CameraCaptureChannelRegistration.ConfigureServerCoreHandlers(ServerChannel, OnPhotoTakenReceived, OnCameraLoadPlateReceived, OnCameraTripodReceived, OnExposureStateReceived);
+            CameraCaptureChannelRegistration.ConfigureServerCoreHandlers(ServerChannel, OnPhotoTakenReceived, OnCameraLoadPlateReceived, OnCameraTripodReceived, OnExposureStateReceived, OnCameraMountRequestReceived);
 
             _owner.PhotoSyncBridge.ConfigureServerPhotoSyncRuntime(api);
         }
@@ -126,12 +126,6 @@ namespace Phototesting.CameraCapture
 
             if (!TryResolveCameraStorage(player, out ItemSlot? cameraSlot, out ItemStack? cameraStack, out BlockEntityMountedCamera? mountedBe)) return;
             if (cameraStack == null || !CameraHasLoadedPlate(cameraStack)) return;
-
-            if (packet.IsExposing && cameraSlot != null && CameraItemHelper.HasMountedTripod(cameraStack))
-            {
-                if (!EnsureMountedCameraBlock(cameraSlot, cameraStack, player)) return;
-                if (!TryResolveCameraStorage(player, out cameraSlot, out cameraStack, out mountedBe) || cameraStack == null) return;
-            }
 
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null) return;
 

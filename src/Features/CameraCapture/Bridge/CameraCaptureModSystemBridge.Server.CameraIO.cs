@@ -147,9 +147,9 @@ namespace Phototesting.CameraCapture
             return true;
         }
 
-        private void SendMountedCameraControl(IServerPlayer player, bool isExposing, bool isBlockRemoved = false)
+        private void SendMountedCameraControl(IServerPlayer player, bool isExposing)
         {
-            ServerChannel?.SendPacket(new MountedCameraControlPacket { IsExposing = isExposing, IsBlockRemoved = isBlockRemoved }, player);
+            ServerChannel?.SendPacket(new MountedCameraControlPacket { IsExposing = isExposing }, player);
         }
 
         private static void TryGiveOrSpawnMountedCamera(IWorldAccessor world, IServerPlayer player, BlockPos pos, ItemStack cameraStack)
@@ -171,7 +171,7 @@ namespace Phototesting.CameraCapture
             if (recoverToPlayer)
             {
                 PauseMountedCameraStorage(cameraStack);
-                SendMountedCameraControl(serverPlayer, false, isBlockRemoved: true);
+                SendMountedCameraControl(serverPlayer, false);
 
                 ItemStack? recovered = mountedBe.TakeStoredCameraStack(Api.World);
                 if (recovered == null) return false;
@@ -226,7 +226,7 @@ namespace Phototesting.CameraCapture
             ForgetMountedCameraPos(ownerPlayerUid);
 
             if (Api.World.PlayerByUid(ownerPlayerUid) is IServerPlayer ownerPlayer)
-                SendMountedCameraControl(ownerPlayer, false, isBlockRemoved: true);
+                SendMountedCameraControl(ownerPlayer, false);
 
             world.SpawnItemEntity(droppedCamera, pos.ToVec3d().Add(0.5, 0.5, 0.5));
         }
@@ -396,6 +396,20 @@ namespace Phototesting.CameraCapture
             cameraSlot.Itemstack = null;
             cameraSlot.MarkDirty();
             return true;
+        }
+
+        // Server packet entry point for LMB camera-mount requests: spawns the camera-mounted block and moves the camera item into it.
+        // The exposure itself begins only when the player subsequently right-clicks the spawned block.
+        private void OnCameraMountRequestReceived(IServerPlayer player, CameraMountRequestPacket packet)
+        {
+            if (Api?.Side != EnumAppSide.Server || player == null || packet == null) return;
+
+            ItemSlot? cameraSlot = player.InventoryManager.ActiveHotbarSlot;
+            ItemStack? cameraStack = cameraSlot?.Itemstack;
+            if (cameraSlot == null || cameraStack == null || !IsWetplateCameraStack(cameraStack)) return;
+            if (!CameraItemHelper.HasMountedTripod(cameraStack)) return;
+
+            EnsureMountedCameraBlock(cameraSlot, cameraStack, player);
         }
 
         // Server packet entry point for explicit camera load and unload requests from client input code.

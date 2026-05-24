@@ -28,15 +28,15 @@ namespace Phototesting.CameraCapture.Contracts
     [ProtoContract]
     public class PhotoCaptureConfigRequestPacket { }
 
+    /// <summary>Requests that the server spawns a camera-mounted block at the player's position and moves the camera item into it. The exposure itself begins only when the player right-clicks the spawned block.</summary>
+    [ProtoContract]
+    public class CameraMountRequestPacket { }
+
     [ProtoContract]
     public class MountedCameraControlPacket
     {
         [ProtoMember(1)]
         public bool IsExposing { get; set; }
-
-        /// <summary>True when the mounted camera block has been removed from the world; client should discard the renderer session.</summary>
-        [ProtoMember(2)]
-        public bool IsBlockRemoved { get; set; }
     }
 
     [ProtoContract]

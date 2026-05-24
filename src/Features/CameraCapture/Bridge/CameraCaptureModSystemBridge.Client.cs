@@ -119,7 +119,7 @@ namespace Phototesting.CameraCapture
         private void OnMountedCameraControlReceived(MountedCameraControlPacket packet)
         {
             if (packet == null) return;
-            CaptureClientRuntime.ApplyMountedExposureControl(packet.IsExposing, packet.IsBlockRemoved);
+            CaptureClientRuntime.ApplyMountedExposureControl(packet.IsExposing);
         }
 
         // Sends the capture-config request immediately when connected or defers it until the client channel comes up.
@@ -288,6 +288,8 @@ namespace Phototesting.CameraCapture
 
             private string _mountedExposureId = string.Empty;
             private ItemStack? _mountedCameraStackSnapshot;
+            private VirtualCameraState? _pendingMountedCameraState;
+            private ExposureStartOptions _pendingMountedStartOptions;
 
             private bool _suppressViewfinderUntilRmbReleased;
             private bool _captureInProgress;
@@ -628,27 +630,16 @@ namespace Phototesting.CameraCapture
                 return _rightMouseDown;
             }
 
-            // Starts, pauses, or resumes a fixed-position virtual exposure for a mounted (tripod) camera.
-            // On start, snapshots the player's current eye position and orientation as the capture origin;
-            // the exposure then accumulates from that frozen pose regardless of where the player moves.
+            // Spawns the camera-mounted block at the player's current position and moves the camera item into it.
+            // Snapshots the player's eye pose so the renderer uses it when the exposure later begins.
+            // The exposure itself does not start here — the player must right-click the spawned block to begin accumulation.
             internal bool TryToggleMountedExposure(bool silentIfBusy, ExposureStartOptions startOptions = default)
             {
                 var renderer = _owner._virtualExposureRenderer;
                 if (renderer == null) return false;
 
-                if (renderer.State == ExposureState.Capturing)
-                {
-                    renderer.Pause();
-                    SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
-                    return true;
-                }
-
-                if (renderer.State == ExposureState.Paused)
-                {
-                    renderer.Resume();
-                    SendExposureStatePacket(true, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
-                    return true;
-                }
+                // While actively capturing the camera is in the block entity, not in the player's hand.
+                if (renderer.State == ExposureState.Capturing) return true;
 
                 // Guard: don't overwrite a completed but not-yet-exported session.
                 if (renderer.State == ExposureState.Done) return true;
@@ -659,53 +650,64 @@ namespace Phototesting.CameraCapture
                 var clientApi = _owner.ClientApi;
                 if (clientApi == null) return false;
 
+                // Refresh snapshot so export always uses the current plate data.
                 _mountedCameraStackSnapshot = CameraItemHelper.GetActiveCameraStack(clientApi)?.Clone();
 
-                // Snapshot the player's eye position and orientation at the moment the shutter opens.
-                var player = clientApi.World.Player;
-                var sidedPos = player.Entity.Pos;
-                var cameraState = new VirtualCameraState(
-                    sidedPos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
-                    sidedPos.Yaw,
-                    sidedPos.Pitch,
-                    ((ClientMain)clientApi.World).MainCamera.Fov,
-                    sidedPos.Dimension,
-                    selfPortrait: true);
+                if (renderer.State != ExposureState.Paused)
+                {
+                    // Fresh start: snapshot the player's eye position now so the renderer uses it when the exposure begins.
+                    var player = clientApi.World.Player;
+                    var sidedPos = player.Entity.Pos;
+                    _pendingMountedCameraState = new VirtualCameraState(
+                        sidedPos.XYZ.AddCopy(0, player.Entity.LocalEyePos.Y, 0),
+                        sidedPos.Yaw,
+                        sidedPos.Pitch,
+                        ((ClientMain)clientApi.World).MainCamera.Fov,
+                        sidedPos.Dimension,
+                        selfPortrait: true);
+                    _pendingMountedStartOptions = startOptions;
+                    _mountedExposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
+                    if (string.IsNullOrEmpty(_mountedExposureId))
+                        _mountedExposureId = Guid.NewGuid().ToString("N");
+                }
 
-                string processId = PlateStateService.GetProcessId(loadedPlateStack);
-                if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
-                    profile = PlateProcessProfile.Iodide;
-
-                _mountedExposureId = loadedPlateStack?.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
-                if (string.IsNullOrEmpty(_mountedExposureId))
-                    _mountedExposureId = Guid.NewGuid().ToString("N");
-
-                renderer.ApplyFinishing = true;
-                renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
-                renderer.Start(cameraState, profile, startOptions);
-                SendExposureStatePacket(true, 0, _mountedExposureId, renderer.CapFrameCount);
+                // Ask the server to spawn the camera-mounted block and move the camera item into it.
+                // The exposure will not begin until the player right-clicks the spawned block.
+                _owner.ClientChannel?.SendPacket(new CameraMountRequestPacket());
                 return true;
             }
 
-            internal void ApplyMountedExposureControl(bool isExposing, bool isBlockRemoved = false)
+            internal void ApplyMountedExposureControl(bool isExposing)
             {
                 var renderer = _owner._virtualExposureRenderer;
                 if (renderer == null || string.IsNullOrEmpty(_mountedExposureId)) return;
 
-                if (isBlockRemoved)
-                {
-                    renderer.Discard();
-                    _mountedCameraStackSnapshot = null;
-                    _mountedExposureId = string.Empty;
-                    return;
-                }
-
                 if (isExposing)
                 {
-                    if (renderer.State != ExposureState.Paused) return;
+                    if (renderer.State == ExposureState.Paused)
+                    {
+                        renderer.Resume();
+                        SendExposureStatePacket(true, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+                        return;
+                    }
 
-                    renderer.Resume();
-                    SendExposureStatePacket(true, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+                    // Fresh start: use the positional snapshot taken when the camera was mounted via LMB.
+                    if (_pendingMountedCameraState is VirtualCameraState cameraState)
+                    {
+                        _pendingMountedCameraState = null;
+                        var clientApi = _owner.ClientApi;
+                        if (clientApi == null) return;
+
+                        CameraItemHelper.TryGetLoadedPlateStack(_mountedCameraStackSnapshot, clientApi.World, out ItemStack? loadedPlate);
+                        string processId = PlateStateService.GetProcessId(loadedPlate);
+                        if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
+                            profile = PlateProcessProfile.Iodide;
+
+                        renderer.ApplyFinishing = true;
+                        renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
+                        renderer.Start(cameraState, profile, _pendingMountedStartOptions);
+                        SendExposureStatePacket(true, 0, _mountedExposureId, renderer.CapFrameCount);
+                    }
                     return;
                 }
 
