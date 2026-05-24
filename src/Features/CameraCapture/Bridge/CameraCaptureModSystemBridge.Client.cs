@@ -669,7 +669,8 @@ namespace Phototesting.CameraCapture
                     sidedPos.Yaw,
                     sidedPos.Pitch,
                     ((ClientMain)clientApi.World).MainCamera.Fov,
-                    sidedPos.Dimension);
+                    sidedPos.Dimension,
+                    selfPortrait: true);
 
                 string processId = PlateStateService.GetProcessId(loadedPlateStack);
                 if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
