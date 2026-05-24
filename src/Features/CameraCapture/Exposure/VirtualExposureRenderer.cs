@@ -9,21 +9,20 @@ using Phototesting.PhotoSync.Storage;
 
 namespace Phototesting.CameraCapture.Exposure
 {
+    /// <summary>Lifecycle state of an exposure session on either the viewport or virtual-camera renderer path.</summary>
     internal enum ExposureState { Idle, Capturing, Paused, Faulted, Done }
 
-    // Persistent renderer that drives a VirtualCamera across consecutive game frames,
-    // accumulating pixel data via an IExposureAccumulator (currently ExposureAccumulationBuffer).
-    //
-    // Lifecycle:
-    //   Start() -> Capturing -> (Pause/Resume) -> Done (when stopped or cap reached)
-    //   Export() produces a PNG at any point once frames have been accumulated.
-    //   Reset() clears the buffer and returns to Capturing from the same position.
-    //   Stop() tears down the camera and preserves the accumulated buffer for export.
-    //
-    // _buffer is typed as IExposureAccumulator so the GPU accumulator can be swapped in later.
-    // Sample ingestion branches on ICpuExposureAccumulator / IGpuExposureAccumulator at the call site.
-    // Registered at EnumRenderStage.Before (RenderOrder 0.4) so VirtualCamera.RenderCamera
-    // can call TriggerRenderStage(Opaque) safely. Controlled entirely via admin commands.
+    /// <summary>
+    /// Persistent renderer that drives a <see cref="VirtualCamera"/> across consecutive game frames,
+    /// accumulating pixel data via an <see cref="IExposureAccumulator"/>.
+    /// Registered at <c>EnumRenderStage.Before</c> while a session is active.
+    /// <para>Lifecycle: <see cref="Start"/> → Capturing → optional <see cref="Pause"/>/<see cref="Resume"/> →
+    /// <see cref="Stop"/> (preserves buffer) or <see cref="Discard"/> (clears buffer).  <see cref="Export"/>
+    /// can be called any time frames exist; <see cref="ExportPartial"/> serializes the raw buffer for
+    /// cross-session persistence.</para>
+    /// <para><see cref="ApplyFinishing"/> defaults to <see langword="false"/>; finishing is applied
+    /// by <see cref="PartialExposureSealer"/> at development time, not here.</para>
+    /// </summary>
     internal sealed class VirtualExposureRenderer : IRenderer, IDisposable
     {
         private readonly ICoreClientAPI _capi;
@@ -147,6 +146,7 @@ namespace Phototesting.CameraCapture.Exposure
                 $"Use '.phototesting exposure export' to save.");
         }
 
+        /// <summary>Starts a new exposure session with the given camera state, chemistry, and stop policy. Any previous session is discarded.</summary>
         internal void Start(VirtualCameraState cameraState, PlateProcessProfile process, ExposureStartOptions startOptions = default)
         {
             Discard();
@@ -172,7 +172,7 @@ namespace Phototesting.CameraCapture.Exposure
             State = ExposureState.Capturing;
         }
 
-        // Pauses frame accumulation. Only valid in Capturing state.
+        /// <summary>Pauses frame accumulation and freezes the shutter timer. Only valid in <see cref="ExposureState.Capturing"/> state.</summary>
         internal void Pause()
         {
             if (State == ExposureState.Capturing)
@@ -183,7 +183,7 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Resumes frame accumulation. Only valid in Paused state.
+        /// <summary>Resumes frame accumulation and extends the shutter window by the pause duration. Only valid in <see cref="ExposureState.Paused"/> state.</summary>
         internal void Resume()
         {
             if (State == ExposureState.Paused)
@@ -198,9 +198,11 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Closes the shutter, stops the camera, and leaves the buffer ready for export.
-        // Drains any in-flight PBOs first so no accumulated samples are lost.
-        // The accumulated image is preserved. Call Discard() to also clear the buffer.
+        /// <summary>
+        /// Closes the shutter, tears down the virtual camera, and transitions to <see cref="ExposureState.Done"/>.
+        /// Drains any in-flight readback PBOs first so no samples are lost.
+        /// The accumulated buffer is preserved; call <see cref="Discard"/> to also clear it.
+        /// </summary>
         internal void Stop()
         {
             DrainReadbackPipeline();
@@ -217,7 +219,7 @@ namespace Phototesting.CameraCapture.Exposure
                 $"Use '.phototesting exposure export' to save.");
         }
 
-        // Destroys the accumulated buffer and returns to Idle. Use after export or to abandon a session.
+        /// <summary>Tears down the camera and buffer and returns to <see cref="ExposureState.Idle"/>. Call after export or to abandon a session.</summary>
         internal void Discard()
         {
             StopCamera();
@@ -234,8 +236,7 @@ namespace Phototesting.CameraCapture.Exposure
             State = ExposureState.Idle;
         }
 
-        // Clears accumulated frames and resumes capturing from the same camera position.
-        // No-op when Idle or when no camera is alive.
+        /// <summary>Clears accumulated frames and restarts capture from the same camera position. No-op when no camera is alive.</summary>
         internal void Reset()
         {
             if (_buffer == null || _camera == null) return;
@@ -284,17 +285,21 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Serializes the raw float accumulation sums to a binary blob for cross-session persistence.
-        // Returns null when no frames have been accumulated or the buffer is not allocated.
-        // The blob is self-describing and can be passed to PrimeFromPartial on a future Start().
+        /// <summary>
+        /// Serializes the raw float accumulation sums to a binary blob for cross-session persistence.
+        /// Returns <see langword="null"/> when no frames have been accumulated or the buffer is not allocated.
+        /// The blob is self-describing and can be passed to <see cref="PrimeFromPartial"/> after a future <see cref="Start"/>.
+        /// </summary>
         internal byte[]? ExportPartial()
         {
             return _buffer?.SerializeAccumulation();
         }
 
-        // Restores a previously serialized accumulation blob into the buffer after Start() is called.
-        // When the blob's dimensions do not match the current buffer (e.g. screen was resized since
-        // the session was paused), the call is a no-op and the exposure continues from zero frames.
+        /// <summary>
+        /// Restores a previously serialized accumulation blob into the live buffer after <see cref="Start"/> is called.
+        /// When the blob's dimensions do not match the current buffer (e.g. the screen was resized since the session was paused),
+        /// the call is a no-op and the exposure continues from zero frames.
+        /// </summary>
         internal void PrimeFromPartial(byte[] data)
         {
             if (_buffer == null || data == null) return;

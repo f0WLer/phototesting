@@ -4,31 +4,26 @@ using SkiaSharp;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // Single-pass emulsion physics for non-accumulation capture paths.
-    //
-    // Applies the same three physics stages that ExposureAccumulationBuffer uses
-    // during frame accumulation and development, but collapses them into one in-place
-    // pass over a single BGRA8888 bitmap:
-    //
-    //   1. sRGB linearization        — same LUT as ExposureAccumulationBuffer
-    //   2. Spectral sensitivity       — per-channel weights from PlateProcessProfile collapse to silver density
-    //   3. H&D response curve         — log10-based characteristic curve, same math as Develop()
-    //
-    // Used by single-frame capture paths (PhotoCaptureRenderer, VirtualCaptureService,
-    // VirtualCameraPreviewRenderer) so all capture paths produce a consistently developed
-    // greyscale plate before the effects pipeline runs.
-    //
-    // The exposure accumulator paths (VirtualExposureRenderer) are unaffected;
-    // they continue to do this work inside the accumulator's Develop() method.
+    /// <summary>
+    /// Single-pass emulsion physics for non-accumulation capture paths.
+    /// Applies the same three physics stages used by <see cref="ExposureAccumulationBuffer"/> — sRGB linearization,
+    /// spectral sensitivity collapse, and H&amp;D characteristic curve — but as a single in-place pass
+    /// over a BGRA8888 bitmap rather than across many accumulated frames.
+    /// Used by single-frame capture paths (PhotoCaptureRenderer, VirtualCaptureService,
+    /// VirtualCameraPreviewRenderer) so all capture paths produce a consistently developed
+    /// greyscale plate before the effects pipeline runs.
+    /// </summary>
     internal static class EmulsionDevelop
     {
         // Precomputed sRGB-to-linear LUT (index = 0-255 sRGB byte value).
         // Identical to the table in ExposureAccumulationBuffer — shared math, separate instance.
         private static readonly float[] SRgbToLinear = BuildLinearTable();
 
-        // Applies emulsion physics to a BGRA8888 bitmap in-place, producing a greyscale developed plate.
-        // The three physics stages are individually gated; pass false to skip a stage.
-        // All three default to on — matching the accumulator's default physics settings.
+        /// <summary>
+        /// Applies emulsion physics to <paramref name="bmp"/> in-place, producing a greyscale developed plate.
+        /// The three physics stages are individually gated by <paramref name="linearize"/>, <paramref name="spectral"/>,
+        /// and <paramref name="hdCurve"/>; all three default to <see langword="true"/>, matching the accumulator defaults.
+        /// </summary>
         internal static void ApplyInPlace(
             SKBitmap bmp,
             PlateProcessProfile process,

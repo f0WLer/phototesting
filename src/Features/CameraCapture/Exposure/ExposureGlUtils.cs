@@ -3,11 +3,14 @@ using Vintagestory.API.Client;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // Shared GL helpers used by both the CPU readback pipeline and the GPU accumulator.
+    /// <summary>Shared OpenGL helpers used by both <see cref="ExposureReadbackPipeline"/> and <see cref="GpuExposureAccumulator"/>.</summary>
     internal static class ExposureGlUtils
     {
-        // Blits fromFbo → toFbo with a Y-flip, converting GL's bottom-left origin to top-left.
-        // Sets read/draw framebuffer bindings; caller must save/restore them if needed.
+        /// <summary>
+        /// Blits <paramref name="fromFbo"/> into <paramref name="toFbo"/> with a vertical flip,
+        /// converting OpenGL's bottom-left origin to a top-left coordinate system.
+        /// Modifies the current read/draw framebuffer bindings; the caller must save and restore them if needed.
+        /// </summary>
         internal static void BlitYFlipped(FrameBufferRef fromFbo, FrameBufferRef toFbo)
         {
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fromFbo.FboId);

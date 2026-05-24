@@ -4,19 +4,13 @@ using SkiaSharp;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // HDR floating-point accumulation buffer for multi-frame virtual camera exposure.
-    //
-    // Accumulate() converts input pixels and adds them to per-channel float sums.
-    // Develop() maps those sums to a BGRA8888 bitmap through up to three physics stages,
-    // each independently togglable:
-    //
-    //   LinearizeInput       - sRGB-to-linear conversion before accumulating
-    //   ApplySpectralWeights - collapse RGB to a single silver-density value using
-    //                          historical emulsion sensitivity (produces grayscale)
-    //   ApplyHDCurve         - Hurter-Driffield response curve instead of linear mapping
-    //                          (shadows lift, highlights compress, strong photographic shoulder)
-    //
-    // All three default to true. Set any flag to false to isolate the effect of the others.
+    /// <summary>
+    /// HDR floating-point accumulation buffer for multi-frame virtual camera exposure.
+    /// Frames are ingested via <see cref="Accumulate"/> and developed into a BGRA8888 bitmap via <see cref="Develop"/>.
+    /// Three physics stages are independently togglable on both paths:
+    /// sRGB linearization (<see cref="LinearizeInput"/>), spectral sensitivity collapse (<see cref="ApplySpectralWeights"/>),
+    /// and Hurter-Driffield characteristic curve (<see cref="ApplyHDCurve"/>).
+    /// </summary>
     internal sealed class ExposureAccumulationBuffer : ICpuExposureAccumulator
     {
         private readonly int _width;
@@ -77,7 +71,7 @@ namespace Phototesting.CameraCapture.Exposure
             _sumR = new float[count];
         }
 
-        // Resets the buffer to zero accumulated frames.
+        /// <summary>Resets all per-channel float sums and the frame counter to zero.</summary>
         public void Reset()
         {
             Array.Clear(_sumB, 0, _sumB.Length);
@@ -86,8 +80,11 @@ namespace Phototesting.CameraCapture.Exposure
             _frameCount = 0;
         }
 
-        // Accumulates a BGRA8888 byte array that is already top-left-origin (e.g. from the GPU
-        // downsample blit path). Dimensions must match Width x Height or the call is ignored.
+        /// <summary>
+        /// Accumulates a BGRA8888 byte array that has already been read back from the GPU.
+        /// The array must be top-left-origin (produced by the GPU downsample blit path).
+        /// Calls with dimensions that do not match <see cref="Width"/> × <see cref="Height"/> are silently ignored.
+        /// </summary>
         public void Accumulate(byte[] bgra, int width, int height)
         {
             if (width != _width || height != _height) return;
@@ -120,17 +117,13 @@ namespace Phototesting.CameraCapture.Exposure
             _frameCount++;
         }
 
-        // Develops accumulated frames into a new BGRA8888 SKBitmap.
-        //
-        // Exposure level is always relative to referenceFrameCount:
-        //   frames < reference: underexposed (dark)
-        //   frames = reference: normally exposed
-        //   frames > reference: overexposed (bright, highlights roll off via H&D or hard-clip)
-        //
-        // With ApplySpectralWeights: output is grayscale (silver density image).
-        // With ApplyHDCurve: output can exceed 1.0 for overexposed pixels; ToByte clamps to 255.
-        // Returns a black image when no frames have been accumulated.
-        // Caller owns and is responsible for disposing the returned bitmap.
+        /// <summary>
+        /// Develops all accumulated frames into a new BGRA8888 <see cref="SKBitmap"/>.
+        /// Exposure level is relative to the reference frame count: fewer frames produces underexposure,
+        /// more produces overexposure (highlights roll off via the H&amp;D curve or hard-clip without it).
+        /// Returns a black image when no frames have been accumulated.
+        /// The caller owns and must dispose the returned bitmap.
+        /// </summary>
         public SKBitmap Develop()
         {
             var info   = new SKImageInfo(_width, _height, SKColorType.Bgra8888, SKAlphaType.Opaque);

@@ -4,22 +4,14 @@ using Vintagestory.API.Client;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // GPU-side downsample + async PBO readback pipeline for the virtual exposure renderer.
-    //
-    // Each exposure sample goes through three stages:
-    //   1. GPU blit-downsample: source (window-sized) FBO → small internal FBO (Y-flipped to
-    //      fix OpenGL's bottom-left origin, eliminating the Skia rotate/mirror pass).
-    //   2. Async ReadPixels into a PBO (no CPU stall; GPU DMA in background).
-    //   3. Map + copy from the PBO written two kicks ago (guaranteed ready, no wait).
-    //
-    // The 3-PBO ring ensures that at kick N we only map the PBO from kick N-2, which
-    // the GPU has had two full frames to finish writing. The first two kicks prime the
-    // pipeline and produce no output; wall-clock duration (Fix A) handles total shutter time.
-    //
-    // Call EnsureAllocated() before each kick (no-ops when dimensions are unchanged).
-    // Call KickAndCollect() once per sample; it returns true when outBytes is filled.
-    // Call DrainPending() on shutter close to flush in-flight PBOs.
-    // Call Dispose() when the session ends (called from VirtualExposureRenderer.Discard).
+    /// <summary>
+    /// GPU-side downsample and async PBO readback pipeline used by <see cref="VirtualExposureRenderer"/>.
+    /// Each sample passes through three stages: a GPU blit-downsample into a small internal FBO
+    /// (Y-flipped to fix OpenGL's bottom-left origin), an async <c>ReadPixels</c> into a PBO, and a
+    /// map-and-copy from the PBO issued two kicks prior (guaranteed ready, no CPU stall).
+    /// The three-slot ring means the first two kicks prime the pipeline and produce no output;
+    /// total shutter wall-clock time is tracked separately in <see cref="VirtualExposureRenderer"/>.
+    /// </summary>
     internal sealed class ExposureReadbackPipeline : IDisposable
     {
         private readonly ICoreClientAPI _capi;
@@ -56,9 +48,11 @@ namespace Phototesting.CameraCapture.Exposure
             height = Math.Max(1, (int)(sourceH * scale));
         }
 
-        // Ensures the downsample FBO and PBO ring are sized for the given source and max-dim.
-        // Returns true when the target dimensions changed (caller should reset the accumulation buffer).
-        // Safe to call every sample — is a no-op when all three inputs are unchanged.
+        /// <summary>
+        /// Ensures the downsample FBO and PBO ring are sized for the given source dimensions and max target size.
+        /// Returns <see langword="true"/> when the target dimensions changed (caller should reset the accumulation buffer).
+        /// Safe to call every sample — is a no-op when all three inputs are unchanged.
+        /// </summary>
         internal bool EnsureAllocated(int sourceW, int sourceH, int maxDim)
         {
             if (_allocatedSourceW == sourceW &&
@@ -110,10 +104,12 @@ namespace Phototesting.CameraCapture.Exposure
             return true;
         }
 
-        // Blits fromFbo → downsample FBO (Y-flipped), issues an async ReadPixels into the write
-        // PBO, and maps the PBO from two kicks ago to fill outBytes.
-        // Returns true when outBytes has been filled with a complete frame.
-        // outBytes must be at least Width * Height * 4 bytes.
+        /// <summary>
+        /// Blits <paramref name="fromFbo"/> into the downsample FBO, issues an async <c>ReadPixels</c> into the
+        /// write PBO, and maps the PBO from two kicks ago into <paramref name="outBytes"/>.
+        /// Returns <see langword="true"/> when <paramref name="outBytes"/> has been filled with a complete BGRA frame.
+        /// <paramref name="outBytes"/> must be at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes.
+        /// </summary>
         internal bool KickAndCollect(FrameBufferRef fromFbo, byte[] outBytes)
         {
             if (_downsampleFbo == null || !_pbosAllocated) return false;
@@ -168,10 +164,12 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Maps and copies all still-pending PBOs in ring order, invoking onFrame for each.
-        // Call on shutter close before transitioning to Done to avoid losing the last 1–2 samples.
-        // MapBuffer may briefly stall if a PBO hasn't finished yet — that's acceptable at shutter close.
-        // scratch must be at least Width * Height * 4 bytes.
+        /// <summary>
+        /// Maps and copies all still-pending PBOs, invoking <paramref name="onFrame"/> for each.
+        /// Call on shutter close before transitioning to <see cref="ExposureState.Done"/> to avoid losing the last 1–2 samples.
+        /// May briefly stall if a PBO has not finished yet — acceptable at shutter close.
+        /// <paramref name="scratch"/> must be at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes.
+        /// </summary>
         internal void DrainPending(byte[] scratch, Action<byte[]> onFrame)
         {
             if (!_pbosAllocated) return;
@@ -202,8 +200,7 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Discards any in-flight ring state so the next EnsureAllocated/KickAndCollect starts clean.
-        // Called when the accumulation buffer is reset mid-session.
+        /// <summary>Discards in-flight ring state so the next kick starts clean. Called when the accumulation buffer is reset mid-session.</summary>
         internal void ResetRing()
         {
             for (int i = 0; i < RingSize; i++) _pboPending[i] = false;

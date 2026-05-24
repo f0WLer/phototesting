@@ -4,21 +4,15 @@ using Vintagestory.API.Client;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // GPU-side floating-point exposure accumulator.
-    //
-    // Replaces the CPU float-array pipeline with a pair of RGBA32F ping-pong framebuffers
-    // that accumulate directly on the GPU.  Each sample goes through two passes:
-    //
-    //   Blit pass:   sourceFbo → _sampleFbo  (Y-flipped downsample, same as CPU path)
-    //   Accumulate:  _sampleFbo + accum[read] → accum[write]  (custom GLSL, fullscreen triangle)
-    //
-    // Develop() renders the current accumulation through the H&D / spectral-weights GLSL
-    // shader into an RGBA8 FBO and reads it back synchronously — this is a one-shot path
-    // that is only triggered by preview cadence or shutter-close, not per sample.
-    //
-    // All GL state that is disturbed (FBO bindings, program, viewport, textures, depth
-    // test, blending, VAO) is saved before and restored after each public method so that
-    // VS's own rendering pipeline is unaffected.
+    /// <summary>
+    /// GPU-side floating-point exposure accumulator that replaces the CPU float-array pipeline.
+    /// Each sample is blitted Y-flipped into a staging FBO, then accumulated on the GPU via
+    /// a GLSL shader into a pair of RGBA32F ping-pong framebuffers.
+    /// <see cref="Develop"/> renders the accumulated sums through the spectral-weights and H&amp;D
+    /// GLSL shader into an RGBA8 FBO and reads it back synchronously — triggered only by
+    /// preview cadence or shutter close, not per sample.
+    /// All OpenGL state disturbed by public methods is saved and restored so VS's render pipeline is unaffected.
+    /// </summary>
     internal sealed class GpuExposureAccumulator : IGpuExposureAccumulator
     {
         // ── IExposureAccumulator properties ──────────────────────────────────────────────

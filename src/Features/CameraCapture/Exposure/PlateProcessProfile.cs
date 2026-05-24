@@ -1,16 +1,13 @@
 namespace Phototesting.CameraCapture.Exposure
 {
+    /// <summary>The three supported wet-plate chemistry variants, each with distinct film speed and spectral response.</summary>
     internal enum PlateProcess { Chloride, Iodide, Bromide }
 
-    // Per-process emulsion parameters. Defines both the exposure timing (duration + sample count)
-    // and the spectral/H&D response that shapes the developed image.
-    //
-    // DurationSeconds: target wall-clock shutter duration for a correct exposure.
-    // SampleCount: virtual renders accumulated to reach normal exposure (referenceFrameCount in the buffer).
-    // SampleInterval: wall-clock seconds between renders; derived as DurationSeconds / SampleCount.
-    //
-    // Spectral weights reflect historical emulsion sensitivity (orthochromatic → panchromatic).
-    // H&D curve parameters tune contrast and highlight roll-off independently per process.
+    /// <summary>
+    /// Immutable emulsion parameters for a single wet-plate chemistry variant.
+    /// Defines shutter timing (<see cref="DurationSeconds"/>, <see cref="SampleCount"/>) and the
+    /// spectral sensitivity and H&amp;D curve values that shape how the accumulation buffer develops.
+    /// </summary>
     internal readonly struct PlateProcessProfile
     {
         internal readonly string Name;
@@ -22,13 +19,14 @@ namespace Phototesting.CameraCapture.Exposure
         internal readonly float DevelopmentStrength;
         internal readonly float HDGamma;
 
-        // Wall-clock seconds between consecutive virtual renders.
+        /// <summary>Wall-clock seconds between consecutive virtual renders at normal cadence.</summary>
         internal float SampleInterval => DurationSeconds / SampleCount;
 
-        // Reciprocal of DurationSeconds — a process that needs X seconds for a correct exposure
-        // in standard noon daylight has ISO = 1/X.  Faster (higher ISO) processes have shorter
-        // DurationSeconds; all processes produce the same output density at full exposure because
-        // DevelopmentStrength is kept consistent across presets.
+        /// <summary>
+        /// ISO-equivalent film speed: reciprocal of <see cref="DurationSeconds"/>.
+        /// Faster (higher ISO) processes have shorter durations; all produce the same output density at full exposure
+        /// because <see cref="DevelopmentStrength"/> is consistent across presets.
+        /// </summary>
         internal float IsoEquivalent => 1f / DurationSeconds;
 
         internal PlateProcessProfile(
@@ -46,27 +44,25 @@ namespace Phototesting.CameraCapture.Exposure
             HDGamma = hdGamma;
         }
 
-        // Early wet-plate collodion: strongly blue-shifted, very slow.
-        // Almost always requires a tripod. ~90 s for normal exposure.
+        /// <summary>Early wet-plate collodion: strongly blue-shifted, very slow (~90 s for correct exposure). Tripod almost always required.</summary>
         internal static readonly PlateProcessProfile Chloride = new PlateProcessProfile(
             "Chloride", durationSeconds: 90f, sampleCount: 128,
             redSensitivity: 0.04f, greenSensitivity: 0.35f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.15f);
 
-        // Mid-tier: expanded spectral response, moderate speed. ~20 s for normal exposure.
-        // Tripod recommended for moving subjects.
+        /// <summary>Mid-tier silver iodide: expanded spectral response, moderate speed (~20 s for correct exposure). Tripod recommended for moving subjects.</summary>
         internal static readonly PlateProcessProfile Iodide = new PlateProcessProfile(
             "Iodide", durationSeconds: 20f, sampleCount: 64,
             redSensitivity: 0.12f, greenSensitivity: 0.45f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.10f);
 
-        // Advanced silver-bromide gelatin: panchromatic, fast. ~3 s for normal exposure.
-        // Handheld shots viable; tripod for best results but not required.
+        /// <summary>Advanced silver-bromide gelatin: panchromatic, fast (~3 s for correct exposure). Handheld shots viable; tripod still improves results.</summary>
         internal static readonly PlateProcessProfile Bromide = new PlateProcessProfile(
             "Bromide", durationSeconds: 3f, sampleCount: 32,
             redSensitivity: 0.30f, greenSensitivity: 0.59f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.05f);
 
+        /// <summary>Returns the preset <see cref="PlateProcessProfile"/> for the given <see cref="PlateProcess"/> enum value.</summary>
         internal static PlateProcessProfile ForProcess(PlateProcess process) => process switch
         {
             PlateProcess.Chloride => Chloride,
@@ -75,6 +71,7 @@ namespace Phototesting.CameraCapture.Exposure
             _                     => Iodide
         };
 
+        /// <summary>Parses a chemistry name (case-insensitive) into a <see cref="PlateProcessProfile"/>. Returns <see langword="false"/> when the name is unrecognised.</summary>
         internal static bool TryParse(string name, out PlateProcessProfile profile)
         {
             switch (name.ToLowerInvariant())

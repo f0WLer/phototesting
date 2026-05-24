@@ -1,11 +1,15 @@
 namespace Phototesting.CameraCapture.Exposure
 {
-    // Accumulator that ingests already-readback CPU byte frames.
-    // Used with the async PBO readback path in ExposureReadbackPipeline.
+    /// <summary>
+    /// Accumulator variant that ingests frames already read back to CPU memory.
+    /// Used with the async PBO readback path in <see cref="ExposureReadbackPipeline"/>.
+    /// </summary>
     internal interface ICpuExposureAccumulator : IExposureAccumulator
     {
-        // Accumulates one BGRA8888 frame that has already been read back from the GPU.
-        // Frames whose dimensions do not match Width x Height are silently ignored.
+        /// <summary>
+        /// Adds one BGRA8888 frame to the running exposure sum.
+        /// Frames whose dimensions differ from <see cref="IExposureAccumulator.Width"/> × <see cref="IExposureAccumulator.Height"/> are silently ignored.
+        /// </summary>
         void Accumulate(byte[] bgra, int width, int height);
     }
 }

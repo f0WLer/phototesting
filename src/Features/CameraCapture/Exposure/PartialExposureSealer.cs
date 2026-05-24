@@ -6,16 +6,20 @@ using Phototesting.PhotoSync.Storage;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // Develops a saved partial accumulation (.pex) into a finalised PNG on disk.
-    // Used when an ExposurePaused plate is committed to a development tray rather
-    // than being resumed in the camera.
-    // The .pex is always deleted after the call, regardless of rendering success,
-    // because the plate is being irrevocably committed to the development workflow.
+    /// <summary>
+    /// Develops a saved partial accumulation blob (<c>.pex</c> file) into a finalised PNG on disk.
+    /// Called when an <c>ExposurePaused</c> plate is committed to a development tray rather than
+    /// being resumed in the camera. The <c>.pex</c> file is always deleted after the call regardless
+    /// of rendering success, because the plate is being irrevocably committed to the development workflow.
+    /// Finishing effects are applied here — accumulator paths must have <c>ApplyFinishing = false</c>.
+    /// </summary>
     internal static class PartialExposureSealer
     {
-        // Loads the .pex for exposureId, renders it with the given chemistry profile,
-        // deletes the .pex file, and returns the saved PNG file name.
-        // Returns null when no partial exists, the blob is corrupt, or rendering fails.
+        /// <summary>
+        /// Loads the <c>.pex</c> for <paramref name="exposureId"/>, renders it with the given chemistry profile
+        /// and optional effects override, deletes the file, and returns the saved PNG file name.
+        /// Returns <see langword="null"/> when no partial exists, the blob is corrupt, or rendering fails.
+        /// </summary>
         internal static string? SealToPng(string exposureId, PlateProcessProfile profile, WetplateEffectsConfig? effectsOverride = null)
         {
             if (string.IsNullOrEmpty(exposureId)) return null;

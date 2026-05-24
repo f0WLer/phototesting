@@ -9,18 +9,15 @@ using Phototesting.PhotoSync.Storage;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    // Accumulates frames from the player's live viewport into a CPU exposure buffer.
-    // Registered as an IRenderer at EnumRenderStage.AfterBlit while actively capturing.
-    //
-    // Lifecycle:
-    //   Start()  — allocate buffer, register renderer, begin accumulating
-    //   Pause()  — suspend accumulation without discarding the buffer
-    //   Resume() — re-activate from Paused state
-    //   Stop()   — unregister renderer, finalize without export (sets State = Done)
-    //   Export() — develop buffer, apply effects, write PNG, return file name
-    //
-    // Auto-stop: timer- or sample-based stop policies can transition the accumulator to Done,
-    // defer renderer unregistration, and fire OnAutoHalt.
+    /// <summary>
+    /// Accumulates frames from the player's live viewport into an <see cref="ExposureAccumulationBuffer"/>.
+    /// Registered as an <c>IRenderer</c> at <c>EnumRenderStage.AfterBlit</c> while actively capturing;
+    /// reads back the back buffer via <c>GL.ReadPixels</c> each sample interval and feeds the bytes
+    /// to the CPU accumulator.
+    /// <para>Lifecycle: <see cref="Start"/> → <see cref="ExposureState.Capturing"/> → optional
+    /// <see cref="Pause"/>/<see cref="Resume"/> → <see cref="Stop"/> or <see cref="Export"/>.
+    /// <see cref="OnAutoHalt"/> fires when a timer or sample-count stop policy is satisfied.</para>
+    /// </summary>
     internal sealed class ViewportExposureAccumulator : IGameplayExposureAccumulator, IRenderer
     {
         private readonly ICoreClientAPI _capi;
@@ -34,7 +31,7 @@ namespace Phototesting.CameraCapture.Exposure
         private bool _disposed;
         private long _lastPreviewMs;
 
-        // Fired when auto-halt transitions the accumulator from Capturing to Done.
+        /// <summary>Fired when an auto-halt policy transitions the accumulator from <see cref="ExposureState.Capturing"/> to <see cref="ExposureState.Done"/>.</summary>
         internal Action? OnAutoHalt { get; set; }
 
         public ExposureState State { get; private set; } = ExposureState.Idle;
@@ -51,8 +48,10 @@ namespace Phototesting.CameraCapture.Exposure
             _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
         }
 
-        // Starts a fresh accumulation session. If already Paused, resumes instead.
-        // If already Capturing, this is a no-op.
+        /// <summary>
+        /// Starts a fresh accumulation session with the given chemistry and stop policy.
+        /// If already <see cref="ExposureState.Paused"/>, resumes instead. No-op when already capturing.
+        /// </summary>
         internal void Start(PlateProcessProfile process, ExposureStartOptions startOptions)
         {
             if (_disposed) return;
@@ -104,8 +103,10 @@ namespace Phototesting.CameraCapture.Exposure
             State = ExposureState.Done;
         }
 
-        // Develops the buffer and saves a PNG. Returns the file name.
-        // Throws when no frames have been accumulated.
+        /// <summary>
+        /// Develops the buffer, applies wetplate finishing effects, and saves a PNG.
+        /// Returns the saved file name. Throws when no frames have been accumulated.
+        /// </summary>
         public string Export(WetplateEffectsConfig? effectsOverride = null)
         {
             if (_buffer == null || _buffer.FramesAccumulated == 0)
@@ -131,10 +132,11 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        // Develops a snapshot of the current accumulation for the preview overlay.
-        // Throttled: at most one develop per refreshMs milliseconds.
-        // Flips and crops to plate aspect to match the virtual camera preview layout.
-        // Returns false when no frames are accumulated or state is not Capturing/Paused.
+        /// <summary>
+        /// Develops a snapshot of the current accumulation for the preview overlay, throttled to at most
+        /// one develop per <paramref name="refreshMs"/> milliseconds.
+        /// Returns <see langword="false"/> when no frames are accumulated, state is not active, or the throttle has not elapsed.
+        /// </summary>
         internal bool TryPeekDevelopedFrame(long nowMs, int refreshMs, int maxDimension, out int[] bgra, out int w, out int h)
         {
             bgra = Array.Empty<int>();
