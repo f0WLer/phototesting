@@ -295,6 +295,30 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
+        // Serializes the raw float accumulation sums to a binary blob for cross-session persistence.
+        // Returns null when no frames have been accumulated or the buffer is not allocated.
+        // The blob is self-describing and can be passed to PrimeFromPartial on a future Start().
+        internal byte[]? ExportPartial()
+        {
+            return _buffer?.SerializeAccumulation();
+        }
+
+        // Restores a previously serialized accumulation blob into the buffer after Start() is called.
+        // When the blob's dimensions do not match the current buffer (e.g. screen was resized since
+        // the session was paused), the call is a no-op and the exposure continues from zero frames.
+        internal void PrimeFromPartial(byte[] data)
+        {
+            if (_buffer == null || data == null) return;
+
+            if (!_buffer.DeserializeAccumulation(data, out int restoredFrames))
+            {
+                _capi.Logger.Warning("Phototesting: partial exposure blob is incompatible with the current buffer dimensions — starting fresh.");
+                return;
+            }
+
+            _capi.Logger.Notification($"Phototesting: restored {restoredFrames} accumulated frames from saved partial exposure.");
+        }
+
         // Develops and shapes one debug-preview frame using the same crop/scale/finishing policy
         // as the normal virtual camera preview path.
         private void PushPreviewFrame()

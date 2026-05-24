@@ -223,6 +223,42 @@ namespace Phototesting.CameraCapture.Exposure
             return (byte)(v * 255f + 0.5f);
         }
 
+        public byte[]? SerializeAccumulation()
+        {
+            if (_frameCount <= 0) return null;
+
+            int pixelCount  = _width * _height;
+            int dataBytes   = 3 * pixelCount * sizeof(float);
+            byte[] blob = new byte[ExposureAccumulationBlobFormat.HeaderSize + dataBytes];
+
+            int pos = ExposureAccumulationBlobFormat.HeaderSize;
+            ExposureAccumulationBlobFormat.WriteHeader(blob, _width, _height, 3, _frameCount);
+
+            System.Buffer.BlockCopy(_sumR, 0, blob, pos, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
+            System.Buffer.BlockCopy(_sumG, 0, blob, pos, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
+            System.Buffer.BlockCopy(_sumB, 0, blob, pos, pixelCount * sizeof(float));
+            return blob;
+        }
+
+        public bool DeserializeAccumulation(byte[] data, out int frameCount)
+        {
+            frameCount = 0;
+            if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out ExposureAccumulationBlobHeader header)) return false;
+            if (header.Width != _width || header.Height != _height || header.ChannelCount != 3) return false;
+
+            int pixelCount = header.Width * header.Height;
+            int expected   = ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, header.ChannelCount);
+            if (data.Length < expected) return false;
+
+            int pos = ExposureAccumulationBlobFormat.HeaderSize;
+            System.Buffer.BlockCopy(data, pos, _sumR, 0, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
+            System.Buffer.BlockCopy(data, pos, _sumG, 0, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
+            System.Buffer.BlockCopy(data, pos, _sumB, 0, pixelCount * sizeof(float));
+            _frameCount = header.FrameCount;
+            frameCount  = header.FrameCount;
+            return true;
+        }
+
         public void Dispose() { } // No unmanaged resources; satisfies IDisposable via IExposureAccumulator.
     }
 }

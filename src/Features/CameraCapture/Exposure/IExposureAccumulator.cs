@@ -35,5 +35,14 @@ namespace Phototesting.CameraCapture.Exposure
         // Returns a black image when no frames have been accumulated.
         // Caller owns and is responsible for disposing the returned bitmap.
         SKBitmap Develop();
+
+        // Serializes the raw float accumulation sums and frame count into a compact binary blob
+        // for cross-session persistence. Returns null when no frames have been accumulated.
+        // The blob contains its own dimension/channel header and is self-describing.
+        byte[]? SerializeAccumulation();
+
+        // Restores float accumulation sums from a blob previously produced by SerializeAccumulation.
+        // Returns false when the blob is incompatible (wrong magic, dimensions mismatch, or corrupt).
+        bool DeserializeAccumulation(byte[] data, out int frameCount);
     }
 }

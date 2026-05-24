@@ -15,5 +15,9 @@ namespace Phototesting.CameraCapture.Exposure
             => new(ExposureStopMode.Timer, Math.Max(0f, stopAfterSeconds));
 
         internal static ExposureStartOptions TargetSamples() => new(ExposureStopMode.TargetSamples);
+
+        internal static ExposureStartOptions FromStopModeInt(int stopMode, float stopAfterSeconds = 0f) =>
+            new(stopMode switch { 1 => ExposureStopMode.Timer, 2 => ExposureStopMode.TargetSamples, _ => ExposureStopMode.Manual },
+                Math.Max(0f, stopAfterSeconds));
     }
 }

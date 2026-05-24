@@ -98,6 +98,7 @@ namespace Phototesting.CameraCapture
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureId);
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposedFrames);
             loadedPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureTargetFrames);
+            CameraItemHelper.ClearMountedCaptureState(cameraStack);
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
             if (mountedBe != null)

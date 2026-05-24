@@ -30,13 +30,37 @@ namespace Phototesting.CameraCapture.Contracts
 
     /// <summary>Requests that the server spawns a camera-mounted block at the player's position and moves the camera item into it. The exposure itself begins only when the player right-clicks the spawned block.</summary>
     [ProtoContract]
-    public class CameraMountRequestPacket { }
+    public class CameraMountRequestPacket
+    {
+        [ProtoMember(1)] public double CameraPosX { get; set; }
+        [ProtoMember(2)] public double CameraPosY { get; set; }
+        [ProtoMember(3)] public double CameraPosZ { get; set; }
+        [ProtoMember(4)] public float CameraYaw { get; set; }
+        [ProtoMember(5)] public float CameraPitch { get; set; }
+        [ProtoMember(6)] public float CameraFov { get; set; }
+        [ProtoMember(7)] public int CameraDimension { get; set; }
+        [ProtoMember(9)] public int StopMode { get; set; }
+        [ProtoMember(10)] public float StopAfterSeconds { get; set; }
+    }
 
     [ProtoContract]
     public class MountedCameraControlPacket
     {
         [ProtoMember(1)]
         public bool IsExposing { get; set; }
+
+        [ProtoMember(2)] public string ExposureId { get; set; } = string.Empty;
+        [ProtoMember(3)] public string ProcessId { get; set; } = string.Empty;
+        [ProtoMember(4)] public bool HasCameraState { get; set; }
+        [ProtoMember(5)] public double CameraPosX { get; set; }
+        [ProtoMember(6)] public double CameraPosY { get; set; }
+        [ProtoMember(7)] public double CameraPosZ { get; set; }
+        [ProtoMember(8)] public float CameraYaw { get; set; }
+        [ProtoMember(9)] public float CameraPitch { get; set; }
+        [ProtoMember(10)] public float CameraFov { get; set; }
+        [ProtoMember(11)] public int CameraDimension { get; set; }
+        [ProtoMember(13)] public int StopMode { get; set; }
+        [ProtoMember(14)] public float StopAfterSeconds { get; set; }
     }
 
     [ProtoContract]

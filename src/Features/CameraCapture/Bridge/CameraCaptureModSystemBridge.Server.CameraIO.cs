@@ -1,4 +1,5 @@
 using Phototesting.CameraCapture.Contracts;
+using Phototesting.CameraCapture.Exposure;
 using Phototesting.PlateLifecycle;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -147,9 +148,38 @@ namespace Phototesting.CameraCapture
             return true;
         }
 
-        private void SendMountedCameraControl(IServerPlayer player, bool isExposing)
+        private void SendMountedCameraControl(IServerPlayer player, bool isExposing, ItemStack? cameraStackOverride = null)
         {
-            ServerChannel?.SendPacket(new MountedCameraControlPacket { IsExposing = isExposing }, player);
+            var packet = new MountedCameraControlPacket { IsExposing = isExposing };
+            ItemStack? cameraStack = cameraStackOverride;
+
+            if (cameraStack == null)
+                TryResolveCameraStorage(player, out _, out cameraStack, out _);
+
+            if (Api?.World != null && cameraStack != null)
+            {
+                if (CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) && loadedPlate != null)
+                {
+                    packet.ExposureId = loadedPlate.Attributes.GetString(PlateStateAttributes.ExposureId, string.Empty);
+                    packet.ProcessId = PlateStateService.GetProcessId(loadedPlate);
+                }
+
+                if (CameraItemHelper.TryGetMountedCaptureState(cameraStack, out VirtualCameraState cameraState, out ExposureStartOptions startOptions))
+                {
+                    packet.HasCameraState = true;
+                    packet.CameraPosX = cameraState.Position.X;
+                    packet.CameraPosY = cameraState.Position.Y;
+                    packet.CameraPosZ = cameraState.Position.Z;
+                    packet.CameraYaw = cameraState.Yaw;
+                    packet.CameraPitch = cameraState.Pitch;
+                    packet.CameraFov = cameraState.Fov;
+                    packet.CameraDimension = cameraState.Dimension;
+                    packet.StopMode = (int)startOptions.StopMode;
+                    packet.StopAfterSeconds = startOptions.StopAfterSeconds;
+                }
+            }
+
+            ServerChannel?.SendPacket(packet, player);
         }
 
         private static void TryGiveOrSpawnMountedCamera(IWorldAccessor world, IServerPlayer player, BlockPos pos, ItemStack cameraStack)
@@ -226,7 +256,7 @@ namespace Phototesting.CameraCapture
             ForgetMountedCameraPos(ownerPlayerUid);
 
             if (Api.World.PlayerByUid(ownerPlayerUid) is IServerPlayer ownerPlayer)
-                SendMountedCameraControl(ownerPlayer, false);
+                SendMountedCameraControl(ownerPlayer, false, droppedCamera);
 
             world.SpawnItemEntity(droppedCamera, pos.ToVec3d().Add(0.5, 0.5, 0.5));
         }
@@ -408,6 +438,19 @@ namespace Phototesting.CameraCapture
             ItemStack? cameraStack = cameraSlot?.Itemstack;
             if (cameraSlot == null || cameraStack == null || !IsWetplateCameraStack(cameraStack)) return;
             if (!CameraItemHelper.HasMountedTripod(cameraStack)) return;
+
+            var cameraState = new VirtualCameraState(
+                new Vec3d(
+                    double.IsFinite(packet.CameraPosX) ? packet.CameraPosX : player.Entity.Pos.X,
+                    double.IsFinite(packet.CameraPosY) ? packet.CameraPosY : player.Entity.Pos.Y,
+                    double.IsFinite(packet.CameraPosZ) ? packet.CameraPosZ : player.Entity.Pos.Z),
+                ClampFiniteRange(packet.CameraYaw, -360f, 360f),
+                ClampFiniteRange(packet.CameraPitch, -180f, 180f),
+                ClampFiniteRange(packet.CameraFov, 1f, 179f),
+                packet.CameraDimension,
+                selfPortrait: true);
+            var startOptions = ExposureStartOptions.FromStopModeInt(packet.StopMode, packet.StopAfterSeconds);
+            CameraItemHelper.SetMountedCaptureState(cameraStack, cameraState, startOptions);
 
             EnsureMountedCameraBlock(cameraSlot, cameraStack, player);
         }

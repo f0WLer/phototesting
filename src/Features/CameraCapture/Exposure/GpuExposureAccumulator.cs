@@ -492,6 +492,69 @@ void main() {
             GL.Disable(EnableCap.Blend);
         }
 
+        public byte[]? SerializeAccumulation()
+        {
+            if (_frameCount <= 0 || _disposed) return null;
+
+            int pixelCount  = Width * Height;
+            int floatCount  = pixelCount * 4;
+            byte[] blob = new byte[ExposureAccumulationBlobFormat.GetTotalByteCount(Width, Height, 4)];
+
+            int pos = ExposureAccumulationBlobFormat.HeaderSize;
+            ExposureAccumulationBlobFormat.WriteHeader(blob, Width, Height, 4, _frameCount);
+
+            SaveGlState(out GlState state);
+            try
+            {
+                float[] floats = new float[floatCount];
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _accumFboIds[_readIdx]);
+                GL.ReadPixels(0, 0, Width, Height, PixelFormat.Rgba, PixelType.Float, floats);
+                System.Buffer.BlockCopy(floats, 0, blob, pos, floatCount * sizeof(float));
+            }
+            finally
+            {
+                RestoreGlState(in state);
+            }
+
+            return blob;
+        }
+
+        public bool DeserializeAccumulation(byte[] data, out int frameCount)
+        {
+            frameCount = 0;
+            if (_disposed) return false;
+            if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out ExposureAccumulationBlobHeader header)) return false;
+            if (header.Width != Width || header.Height != Height || header.ChannelCount != 4) return false;
+
+            int floatCount = header.Width * header.Height * 4;
+            int expected   = ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, header.ChannelCount);
+            if (data.Length < expected) return false;
+
+            float[] floats = new float[floatCount];
+            System.Buffer.BlockCopy(data, ExposureAccumulationBlobFormat.HeaderSize, floats, 0, floatCount * sizeof(float));
+
+            SaveGlState(out GlState state);
+            try
+            {
+                // Upload float data into the read accumulation texture and clear the write texture.
+                GL.BindTexture(TextureTarget.Texture2D, _accumTexIds[_readIdx]);
+                GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, Width, Height,
+                    PixelFormat.Rgba, PixelType.Float, floats);
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
+                GL.ClearColor(0f, 0f, 0f, 0f);
+                GL.Clear(ClearBufferMask.ColorBufferBit);
+            }
+            finally
+            {
+                RestoreGlState(in state);
+            }
+
+            _frameCount = header.FrameCount;
+            frameCount  = header.FrameCount;
+            return true;
+        }
+
         // ── Shader compilation ────────────────────────────────────────────────────────────
 
         private static int CompileProgram(string vertSrc, string fragSrc)
