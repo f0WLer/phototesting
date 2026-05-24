@@ -261,7 +261,20 @@ namespace Phototesting.CameraCapture
             if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
                 profile = PlateProcessProfile.Iodide;
 
-            string? photoId = PartialExposureSealer.SealToPng(exposureId, profile);
+            // Tray development must match normal export policy: same target exposure, output size, and effects resolution.
+            int targetFrames = Math.Max(1, trayPlate.Attributes?.GetInt(PlateStateAttributes.ExposureTargetFrames) ?? profile.SampleCount);
+            int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(capi)?.Viewfinder?.PhotoCaptureMaxDimension
+                ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
+            WetplateEffectsConfig baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
+            WetplateEffectsConfig? effectsOverride = CaptureEffectsProfileLookup.ResolveForLoadedPlate(this, trayPlate);
+
+            string? photoId = PartialExposureSealer.SealToPng(
+                exposureId,
+                profile,
+                targetFrames,
+                maxDimension,
+                baselineEffects,
+                effectsOverride);
             if (string.IsNullOrEmpty(photoId)) return false;
 
             ClientPhotoSyncIntegration.NotifyPhotoCreated(capi, photoId);

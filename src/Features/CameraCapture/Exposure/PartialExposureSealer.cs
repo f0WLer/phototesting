@@ -17,16 +17,23 @@ namespace Phototesting.CameraCapture.Exposure
     internal static class PartialExposureSealer
     {
         /// <summary>
-        /// Loads the <c>.pex</c> for <paramref name="exposureId"/>, renders it with the given chemistry profile
-        /// and optional effects override, deletes the file on success, and returns the saved PNG file name.
+        /// Loads the <c>.pex</c> for <paramref name="exposureId"/>, renders it with the given chemistry profile,
+        /// target-frame normalization, output size, and effects settings, deletes the file on success, and
+        /// returns the saved PNG file name.
         /// Returns <see langword="null"/> when no partial exists, the blob is corrupt, or rendering fails.
         /// </summary>
-        internal static string? SealToPng(string exposureId, PlateProcessProfile profile, WetplateEffectsConfig? effectsOverride = null)
+        internal static string? SealToPng(
+            string exposureId,
+            PlateProcessProfile profile,
+            int targetFrameCount,
+            int maxDimension,
+            WetplateEffectsConfig baselineEffects,
+            WetplateEffectsConfig? effectsOverride = null)
         {
             if (string.IsNullOrEmpty(exposureId)) return null;
             if (!ExposureAccumulationStore.TryLoad(exposureId, out byte[]? data) || data == null) return null;
 
-            string? fileName = RenderBlobToPng(data, profile, effectsOverride);
+            string? fileName = RenderBlobToPng(data, profile, targetFrameCount, maxDimension, baselineEffects, effectsOverride);
             if (!string.IsNullOrEmpty(fileName))
             {
                 ExposureAccumulationStore.Delete(exposureId);
@@ -35,13 +42,21 @@ namespace Phototesting.CameraCapture.Exposure
             return fileName;
         }
 
-        private static string? RenderBlobToPng(byte[] data, PlateProcessProfile profile, WetplateEffectsConfig? effectsOverride)
+        private static string? RenderBlobToPng(
+            byte[] data,
+            PlateProcessProfile profile,
+            int targetFrameCount,
+            int maxDimension,
+            WetplateEffectsConfig baselineEffects,
+            WetplateEffectsConfig? effectsOverride)
         {
             if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out var header)) return null;
             if (header.FrameCount <= 0) return null;
             if (!TryGetCpuCompatibleBlob(data, header, out byte[] cpuCompatibleData)) return null;
 
-            var buffer = new ExposureAccumulationBuffer(header.Width, header.Height, header.FrameCount);
+            int referenceFrameCount = Math.Max(1, targetFrameCount);
+
+            var buffer = new ExposureAccumulationBuffer(header.Width, header.Height, referenceFrameCount);
             buffer.LinearizeInput       = true;
             buffer.ApplySpectralWeights = true;
             buffer.ApplyHDCurve         = true;
@@ -54,10 +69,10 @@ namespace Phototesting.CameraCapture.Exposure
             if (!buffer.DeserializeAccumulation(cpuCompatibleData, out _)) return null;
 
             using SKBitmap developed = buffer.Develop();
-            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, ViewfinderConfig.DefaultPhotoCaptureMaxDimension);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
             try
             {
-                WetplateEffectsConfig effects = ImageEffectsPipelineBridge.ResolveCaptureProfile(new WetplateEffectsConfig(), effectsOverride);
+                WetplateEffectsConfig effects = ImageEffectsPipelineBridge.ResolveCaptureProfile(baselineEffects, effectsOverride);
                 ImageEffectsPipelineBridge.ApplyCaptureEffects(cropped, "plate-tray-development", effects);
                 return PhotoAssetStoragePaths.SaveExposurePng(cropped);
             }
