@@ -324,7 +324,6 @@ namespace Phototesting.CameraCapture
             private ExposureStartOptions _pendingMountedStartOptions;
 
             private bool _suppressViewfinderUntilRmbReleased;
-            private bool _captureInProgress;
             private float _rmbUpSeconds;
             private bool _lastRmbDown;
             private bool _lastLmbDown;
@@ -438,8 +437,6 @@ namespace Phototesting.CameraCapture
 
                 if (!holdingCamera)
                 {
-                    if (_captureInProgress) return;
-
                     _suppressViewfinderUntilRmbReleased = false;
                     _rmbUpSeconds = 0f;
                     if (_owner.IsViewfinderActive) _owner.EndViewfinderMode();
@@ -464,7 +461,7 @@ namespace Phototesting.CameraCapture
                     }
 
                     _rmbUpSeconds += dt;
-                    if (!_captureInProgress && _rmbUpSeconds > RmbReleaseGraceSeconds)
+                    if (_rmbUpSeconds > RmbReleaseGraceSeconds)
                     {
                         _suppressViewfinderUntilRmbReleased = false;
                         if (_owner.IsViewfinderActive) _owner.EndViewfinderMode();
@@ -619,33 +616,6 @@ namespace Phototesting.CameraCapture
                 });
             }
 
-
-            // Completes local post-capture flow once the renderer finishes writing the screenshot.
-            private void OnCaptureSuccess(ICoreClientAPI clientApi, EntityAgent byEntity, string fileName)
-            {
-                _captureInProgress = false;
-
-                // Notify server to transition the loaded plate to Exposed state.
-                _owner.ClientChannel?.SendPacket(new CameraCapture.Contracts.PhotoTakenPacket { PhotoId = fileName });
-
-                // Send to server + play sound after capture completes.
-                ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
-                clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), byEntity, null, true, 32, 1f);
-
-                _owner.EndViewfinderMode();
-            }
-
-            // Cancels hold-still state and exits viewfinder when the scheduled capture fails.
-            private void OnCaptureFailure(ICoreClientAPI clientApi, Exception ex)
-            {
-                _captureInProgress = false;
-                clientApi.Logger.Error("Wetplate HUD-less capture failed: " + ex);
-                clientApi.ShowChatMessage("Wetplate: capture failed (see log). Falling back may be needed.");
-
-                // Still exit viewfinder (error means no screenshot was taken).
-                _owner.EndViewfinderMode();
-            }
-
             internal void ShowShutterGateMessageThrottled(string message)
             {
                 if (_owner.ClientApi == null) return;
@@ -761,7 +731,7 @@ namespace Phototesting.CameraCapture
                         if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
                             profile = PlateProcessProfile.Iodide;
 
-                        renderer.ApplyFinishing = true;
+                        renderer.ApplyFinishing = false;
                         renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
                         renderer.Start(cameraState, profile, _pendingMountedStartOptions);
 
@@ -803,8 +773,6 @@ namespace Phototesting.CameraCapture
                 // Tell the server to set the plate to ExposurePaused with the current frame count.
                 SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
 
-                if (_owner._virtualExposureRenderer != null)
-                    _owner._virtualExposureRenderer.ApplyFinishing = false;
                 renderer.Discard();
                 // Intentionally keep _mountedExposureId, _mountedCameraStackSnapshot, and
                 // _pendingMountedCameraState so the player can right-click the block to resume
@@ -827,51 +795,5 @@ namespace Phototesting.CameraCapture
                 };
             }
 
-            // Exports the completed virtual exposure buffer, notifies the server, and cleans up.
-            private void ExportAndSealMountedExposure()
-            {
-                var renderer = _owner._virtualExposureRenderer;
-                if (renderer == null || renderer.FramesAccumulated == 0)
-                {
-                    renderer?.Discard();
-                    _mountedCameraStackSnapshot = null;
-                    _mountedExposureId = string.Empty;
-                    _pendingMountedCameraState = null;
-                    _pendingMountedStartOptions = default;
-                    return;
-                }
-
-                try
-                {
-                    var clientApi = _owner.ClientApi;
-                    if (clientApi == null) return;
-
-                    ItemStack? camStack = _mountedCameraStackSnapshot ?? CameraItemHelper.GetActiveCameraStack(clientApi);
-                    CameraItemHelper.TryGetLoadedPlateStack(camStack, clientApi.World, out ItemStack? loadedPlate);
-                    WetplateEffectsConfig? effectsOverride = CameraCaptureModSystemBridge.CaptureEffectsProfileLookup.ResolveForLoadedPlate(_owner, loadedPlate);
-
-                    string fileName = renderer.Export(effectsOverride);
-                    _owner.ClientChannel?.SendPacket(new PhotoTakenPacket { PhotoId = fileName });
-                    ClientPhotoSyncIntegration.NotifyPhotoCreated(clientApi, fileName);
-
-                    var entity = clientApi.World.Player?.Entity;
-                    if (entity != null)
-                        clientApi.World.PlaySoundAt(new AssetLocation("game:sounds/effect/woodclick"), entity, null, true, 32, 1f);
-                }
-                catch (Exception ex)
-                {
-                    _owner.ClientApi?.Logger.Error("Phototesting: mounted exposure export failed — " + ex);
-                }
-                finally
-                {
-                    if (_owner._virtualExposureRenderer != null)
-                        _owner._virtualExposureRenderer.ApplyFinishing = false;
-                    _owner._virtualExposureRenderer?.Discard();
-                    _mountedCameraStackSnapshot = null;
-                    _mountedExposureId = string.Empty;
-                    _pendingMountedCameraState = null;
-                    _pendingMountedStartOptions = default;
-                }
-            }
         }
 }
