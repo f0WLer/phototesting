@@ -162,7 +162,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (State != ExposureState.Capturing || _buffer == null) return;
 
             _elapsedCaptureSeconds += deltaTime;
-            if (_startOptions.StopMode == ExposureStopMode.Timer && _elapsedCaptureSeconds >= _startOptions.StopAfterSeconds)
+            if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.Timer && _elapsedCaptureSeconds >= _startOptions.StopAfterSeconds)
             {
                 CompleteAutoStop();
                 return;
@@ -208,7 +208,7 @@ namespace Phototesting.CameraCapture.Exposure
             // Do NOT call Stop() here — UnregisterRenderer() must not be called from within
             // a renderer iteration loop (causes ArgumentOutOfRangeException). Instead, set
             // Done immediately to stop accumulating and defer the unregister to the next frame.
-            if (_startOptions.StopMode == ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
+            if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
                 CompleteAutoStop();
         }
 

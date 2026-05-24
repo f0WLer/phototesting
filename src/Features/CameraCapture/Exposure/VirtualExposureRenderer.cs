@@ -129,7 +129,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         private long ResolveShutterEndMs(long startMs)
         {
-            return _startOptions.StopMode == ExposureStopMode.Timer
+            return _startOptions.StopMode == ExposureStartOptions.ExposureStopMode.Timer
                 ? startMs + (long)(_startOptions.StopAfterSeconds * 1000f)
                 : 0;
         }
@@ -366,7 +366,7 @@ namespace Phototesting.CameraCapture.Exposure
             // Wall-clock shutter close: shutter has been open long enough.
             // Drain in-flight PBOs first so no samples from the last two kicks are lost.
             long nowMs = _capi.ElapsedMilliseconds;
-            if (_startOptions.StopMode == ExposureStopMode.Timer && _shutterEndMs != 0 && nowMs >= _shutterEndMs)
+            if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.Timer && _shutterEndMs != 0 && nowMs >= _shutterEndMs)
             {
                 CompleteAutoStop(nowMs);
                 return;
@@ -421,7 +421,7 @@ namespace Phototesting.CameraCapture.Exposure
                 return;
             }
 
-            if (_startOptions.StopMode == ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
+            if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
             {
                 CompleteAutoStop(_capi.ElapsedMilliseconds);
                 return;

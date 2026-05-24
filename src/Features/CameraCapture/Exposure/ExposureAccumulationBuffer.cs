@@ -225,7 +225,7 @@ namespace Phototesting.CameraCapture.Exposure
             byte[] blob = new byte[ExposureAccumulationBlobFormat.HeaderSize + dataBytes];
 
             int pos = ExposureAccumulationBlobFormat.HeaderSize;
-            ExposureAccumulationBlobFormat.WriteHeader(blob, _width, _height, 3, _frameCount);
+            ExposureAccumulationBlobFormat.WriteHeader(blob, _width, _height, 3, _frameCount, ExposureAccumulationBlobFormat.CpuBackend);
 
             System.Buffer.BlockCopy(_sumR, 0, blob, pos, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
             System.Buffer.BlockCopy(_sumG, 0, blob, pos, pixelCount * sizeof(float)); pos += pixelCount * sizeof(float);
@@ -237,7 +237,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             frameCount = 0;
             if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out ExposureAccumulationBlobHeader header)) return false;
-            if (header.Width != _width || header.Height != _height || header.ChannelCount != 3) return false;
+            if (header.Width != _width || header.Height != _height || header.ChannelCount != 3 || header.BackendTag != ExposureAccumulationBlobFormat.CpuBackend) return false;
 
             int pixelCount = header.Width * header.Height;
             int expected   = ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, header.ChannelCount);

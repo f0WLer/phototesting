@@ -172,7 +172,7 @@ void main() {
                 DisableRenderStateForFullscreenPass();
 
                 // 1. Blit source → sample FBO (Y-flipped downsample, same as CPU path).
-                ExposureGlUtils.BlitYFlipped(sourceFbo, _sampleFbo);
+                ExposureReadbackPipeline.BlitYFlipped(sourceFbo, _sampleFbo);
 
                 // 2. Accumulate: sample + current accum → next accum.
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
@@ -495,7 +495,7 @@ void main() {
             byte[] blob = new byte[ExposureAccumulationBlobFormat.GetTotalByteCount(Width, Height, 4)];
 
             int pos = ExposureAccumulationBlobFormat.HeaderSize;
-            ExposureAccumulationBlobFormat.WriteHeader(blob, Width, Height, 4, _frameCount);
+            ExposureAccumulationBlobFormat.WriteHeader(blob, Width, Height, 4, _frameCount, ExposureAccumulationBlobFormat.GpuBackend);
 
             SaveGlState(out GlState state);
             try
@@ -518,7 +518,7 @@ void main() {
             frameCount = 0;
             if (_disposed) return false;
             if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out ExposureAccumulationBlobHeader header)) return false;
-            if (header.Width != Width || header.Height != Height || header.ChannelCount != 4) return false;
+            if (header.Width != Width || header.Height != Height || header.ChannelCount != 4 || header.BackendTag != ExposureAccumulationBlobFormat.GpuBackend) return false;
 
             int floatCount = header.Width * header.Height * 4;
             int expected   = ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, header.ChannelCount);

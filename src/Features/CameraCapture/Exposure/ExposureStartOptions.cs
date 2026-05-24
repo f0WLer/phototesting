@@ -1,22 +1,22 @@
 namespace Phototesting.CameraCapture.Exposure
 {
-    /// <summary>Determines what condition closes the shutter on an in-progress exposure.</summary>
-    internal enum ExposureStopMode
-    {
-        /// <summary>Shutter stays open until the player manually pauses or stops the exposure.</summary>
-        Manual = 0,
-        /// <summary>Shutter closes automatically after <see cref="ExposureStartOptions.StopAfterSeconds"/> wall-clock seconds.</summary>
-        Timer = 1,
-        /// <summary>Shutter closes automatically once the plate chemistry's target sample count is reached.</summary>
-        TargetSamples = 2
-    }
-
     /// <summary>
     /// Immutable options that determine how and when an exposure session terminates.
     /// Passed to <c>Start()</c> on both the viewport accumulator and virtual-camera renderer paths.
     /// </summary>
-    internal readonly record struct ExposureStartOptions(ExposureStopMode StopMode, float StopAfterSeconds = 0f)
+    internal readonly record struct ExposureStartOptions(ExposureStartOptions.ExposureStopMode StopMode, float StopAfterSeconds = 0f)
     {
+        /// <summary>Determines what condition closes the shutter on an in-progress exposure.</summary>
+        internal enum ExposureStopMode
+        {
+            /// <summary>Shutter stays open until the player manually pauses or stops the exposure.</summary>
+            Manual = 0,
+            /// <summary>Shutter closes automatically after <see cref="ExposureStartOptions.StopAfterSeconds"/> wall-clock seconds.</summary>
+            Timer = 1,
+            /// <summary>Shutter closes automatically once the plate chemistry's target sample count is reached.</summary>
+            TargetSamples = 2
+        }
+
         /// <summary>Open-ended exposure; the player controls when the shutter closes.</summary>
         internal static ExposureStartOptions Manual() => new(ExposureStopMode.Manual);
 
