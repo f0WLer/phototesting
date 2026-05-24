@@ -710,6 +710,16 @@ namespace Phototesting.CameraCapture
                         packet.CameraDimension,
                         selfPortrait: true);
                     _pendingMountedStartOptions = ExposureStartOptions.FromStopModeInt(packet.StopMode, packet.StopAfterSeconds);
+
+                    var clientApi = _owner.ClientApi;
+                    if (clientApi != null)
+                    {
+                        PlateProcessProfile previewProcess = ResolveMountedPlateProcessProfile(clientApi, packet.ProcessId);
+
+                        // Keep idle and live mounted preview chemistry aligned with the active plate.
+                        if (_owner._virtualCameraPreviewRenderer != null)
+                            _owner._virtualCameraPreviewRenderer.EmulsionProcess = previewProcess;
+                    }
                 }
 
                 if (packet.IsExposing)
@@ -727,12 +737,7 @@ namespace Phototesting.CameraCapture
                         var clientApi = _owner.ClientApi;
                         if (clientApi == null) return;
 
-                        CameraItemHelper.TryGetLoadedPlateStack(_mountedCameraStackSnapshot, clientApi.World, out ItemStack? loadedPlate);
-                        string processId = !string.IsNullOrEmpty(packet.ProcessId)
-                            ? packet.ProcessId
-                            : PlateStateService.GetProcessId(loadedPlate);
-                        if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
-                            profile = PlateProcessProfile.Iodide;
+                        PlateProcessProfile profile = ResolveMountedPlateProcessProfile(clientApi, packet.ProcessId);
 
                         renderer.ApplyFinishing = false;
                         renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
@@ -755,6 +760,22 @@ namespace Phototesting.CameraCapture
 
                 renderer.Pause();
                 SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
+            }
+
+            // Resolves the active wet-plate chemistry for mounted preview/exposure from the packet when present,
+            // otherwise from the currently loaded plate snapshot in the mounted camera item.
+            private PlateProcessProfile ResolveMountedPlateProcessProfile(ICoreClientAPI clientApi, string? packetProcessId)
+            {
+                CameraItemHelper.TryGetLoadedPlateStack(_mountedCameraStackSnapshot, clientApi.World, out ItemStack? loadedPlate);
+
+                string processId = !string.IsNullOrEmpty(packetProcessId)
+                    ? packetProcessId
+                    : PlateStateService.GetProcessId(loadedPlate);
+
+                if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
+                    profile = PlateProcessProfile.Iodide;
+
+                return profile;
             }
 
             // Persists the accumulated exposure buffer to disk and sets the plate to ExposurePaused.
