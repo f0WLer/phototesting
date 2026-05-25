@@ -29,7 +29,6 @@ namespace Phototesting.CameraCapture.Exposure
         private float _elapsedCaptureSeconds;
         private bool _rendererRegistered;
         private bool _disposed;
-        private long _lastPreviewMs;
 
         /// <summary>Fired when an auto-halt policy transitions the accumulator from <see cref="ExposureState.Capturing"/> to <see cref="ExposureState.Done"/>.</summary>
         internal Action? OnAutoHalt { get; set; }
@@ -130,31 +129,6 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 cropped.Dispose();
             }
-        }
-
-        /// <summary>
-        /// Develops a snapshot of the current accumulation for the preview overlay, throttled to at most
-        /// one develop per <paramref name="refreshMs"/> milliseconds.
-        /// Returns <see langword="false"/> when no frames are accumulated, state is not active, or the throttle has not elapsed.
-        /// </summary>
-        internal bool TryPeekDevelopedFrame(long nowMs, int refreshMs, int maxDimension, out int[] bgra, out int w, out int h)
-        {
-            bgra = Array.Empty<int>();
-            w = 0;
-            h = 0;
-            if (_buffer == null || _buffer.FramesAccumulated == 0) return false;
-            if (State != ExposureState.Capturing && State != ExposureState.Paused) return false;
-            if (nowMs - _lastPreviewMs < refreshMs) return false;
-            _lastPreviewMs = nowMs;
-
-            using SKBitmap developed = _buffer.Develop();
-            using SKBitmap flipped = FlipVertical(developed);
-            using SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(flipped, maxDimension);
-            w = cropped.Width;
-            h = cropped.Height;
-            bgra = new int[w * h];
-            System.Runtime.InteropServices.Marshal.Copy(cropped.GetPixels(), bgra, 0, w * h);
-            return true;
         }
 
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
