@@ -61,6 +61,7 @@ namespace Phototesting.CameraCapture.Contracts
         [ProtoMember(11)] public int CameraDimension { get; set; }
         [ProtoMember(13)] public int StopMode { get; set; }
         [ProtoMember(14)] public float StopAfterSeconds { get; set; }
+        [ProtoMember(15)] public bool PrepareIdlePreview { get; set; }
     }
 
     [ProtoContract]

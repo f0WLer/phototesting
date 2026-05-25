@@ -722,6 +722,16 @@ namespace Phototesting.CameraCapture
                     }
                 }
 
+                if (packet.PrepareIdlePreview)
+                {
+                    if (_pendingMountedCameraState is VirtualCameraState idleCameraState)
+                        renderer.PrepareCamera(idleCameraState);
+                }
+                else if (!packet.IsExposing)
+                {
+                    renderer.ClearCamera();
+                }
+
                 if (packet.IsExposing)
                 {
                     if (renderer.State == ExposureState.Paused)

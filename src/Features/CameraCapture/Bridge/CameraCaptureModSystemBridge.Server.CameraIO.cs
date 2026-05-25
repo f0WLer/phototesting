@@ -148,9 +148,13 @@ namespace Phototesting.CameraCapture
             return true;
         }
 
-        private void SendMountedCameraControl(IServerPlayer player, bool isExposing, ItemStack? cameraStackOverride = null)
+        private void SendMountedCameraControl(IServerPlayer player, bool isExposing, bool prepareIdlePreview, ItemStack? cameraStackOverride = null)
         {
-            var packet = new MountedCameraControlPacket { IsExposing = isExposing };
+            var packet = new MountedCameraControlPacket
+            {
+                IsExposing = isExposing,
+                PrepareIdlePreview = prepareIdlePreview,
+            };
             ItemStack? cameraStack = cameraStackOverride;
 
             if (cameraStack == null)
@@ -201,7 +205,7 @@ namespace Phototesting.CameraCapture
             if (recoverToPlayer)
             {
                 PauseMountedCameraStorage(cameraStack);
-                SendMountedCameraControl(serverPlayer, false);
+                SendMountedCameraControl(serverPlayer, false, false);
 
                 ItemStack? recovered = mountedBe.TakeStoredCameraStack(Api.World);
                 if (recovered == null) return false;
@@ -217,14 +221,14 @@ namespace Phototesting.CameraCapture
             if (PauseMountedCameraStorage(cameraStack))
             {
                 mountedBe.MarkCameraDirty();
-                SendMountedCameraControl(serverPlayer, false);
+                SendMountedCameraControl(serverPlayer, false, true);
                 return true;
             }
 
             if (ResumeMountedCameraStorage(cameraStack))
             {
                 mountedBe.MarkCameraDirty();
-                SendMountedCameraControl(serverPlayer, true);
+                SendMountedCameraControl(serverPlayer, true, true);
                 return true;
             }
 
@@ -256,7 +260,7 @@ namespace Phototesting.CameraCapture
             ForgetMountedCameraPos(ownerPlayerUid);
 
             if (Api.World.PlayerByUid(ownerPlayerUid) is IServerPlayer ownerPlayer)
-                SendMountedCameraControl(ownerPlayer, false, droppedCamera);
+                SendMountedCameraControl(ownerPlayer, false, false, droppedCamera);
 
             world.SpawnItemEntity(droppedCamera, pos.ToVec3d().Add(0.5, 0.5, 0.5));
         }
@@ -452,7 +456,10 @@ namespace Phototesting.CameraCapture
             var startOptions = ExposureStartOptions.FromStopModeInt(packet.StopMode, packet.StopAfterSeconds);
             CameraItemHelper.SetMountedCaptureState(cameraStack, cameraState, startOptions);
 
-            EnsureMountedCameraBlock(cameraSlot, cameraStack, player);
+            if (!EnsureMountedCameraBlock(cameraSlot, cameraStack, player)) return;
+
+            // Fresh mount should immediately prepare idle preview before the first exposure begins.
+            SendMountedCameraControl(player, false, true, cameraStack);
         }
 
         // Server packet entry point for explicit camera load and unload requests from client input code.
