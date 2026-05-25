@@ -48,7 +48,9 @@ namespace Phototesting.PlateLifecycle.Tray
                 }
             }
 
-            if (!showPhoto)
+            // If the plate is in a photo-visible stage but the sealed texture is not available yet,
+            // fall back to the plain plate mesh instead of rendering nothing.
+            if (!showPhoto || string.IsNullOrEmpty(plate.Attributes?.GetString("photoId") ?? string.Empty) || mesh == null)
             {
                 try
                 {

@@ -163,8 +163,9 @@ namespace Phototesting.CameraCapture
                 cameraSlot?.MarkDirty();
         }
 
-        // Stamps the ExposurePaused plate already sitting in the tray with the sealed photo id,
-        // transitioning it to Exposed so the pending developer pour sees the correct stage.
+        // Stamps the in-tray paused/developing/finished plate with the sealed photo id.
+        // When the developer pour has not advanced yet, transition ExposurePaused to Exposed so the
+        // pending developer pour sees the correct stage. Later arrivals keep the current stage intact.
         private void OnSealAndInsertTrayReceived(IServerPlayer player, SealAndInsertIntoTrayPacket packet)
         {
             if (Api?.Side != EnumAppSide.Server || Api.World == null) return;
@@ -180,7 +181,10 @@ namespace Phototesting.CameraCapture
             if (trayPlate == null) return;
 
             PlateStage trayStage = PlateStateService.GetStage(trayPlate);
-            if (trayStage != PlateStage.ExposurePaused && trayStage != PlateStage.Developing && trayStage != PlateStage.Developed) return;
+            if (trayStage != PlateStage.ExposurePaused
+                && trayStage != PlateStage.Developing
+                && trayStage != PlateStage.Developed
+                && trayStage != PlateStage.Finished) return;
 
             string exposureId = trayPlate.Attributes.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
             if (!string.Equals(exposureId, packet.ExposureId, StringComparison.OrdinalIgnoreCase)) return;
@@ -189,7 +193,7 @@ namespace Phototesting.CameraCapture
             trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureId);
             trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposedFrames);
             trayPlate.Attributes.RemoveAttribute(PlateStateAttributes.ExposureTargetFrames);
-            // Only change stage for ExposurePaused; if the pour already advanced the plate to Developing/Developed,
+            // Only change stage for ExposurePaused; if the tray already advanced to Developing/Developed/Finished,
             // just set the photoId and clean up exposure attrs without rewinding the stage.
             if (trayStage == PlateStage.ExposurePaused)
                 PlateStateService.SetStage(trayPlate, PlateStage.Exposed);
