@@ -12,8 +12,8 @@ namespace Phototesting.CameraCapture.Exposure
     /// <summary>
     /// Accumulates frames from the player's live viewport into an <see cref="ExposureAccumulationBuffer"/>.
     /// Registered as an <c>IRenderer</c> at <c>EnumRenderStage.AfterBlit</c> while actively capturing;
-    /// reads back the back buffer via <c>GL.ReadPixels</c> each sample interval and feeds the bytes
-    /// to the CPU accumulator.
+    /// blits the back buffer into a downsampled FBO and reads that smaller frame via <c>GL.ReadPixels</c>
+    /// each sample interval before feeding the bytes to the CPU accumulator.
     /// <para>Lifecycle: <see cref="Start"/> → <see cref="ExposureState.Capturing"/> → optional
     /// <see cref="Pause"/>/<see cref="Resume"/> → <see cref="Stop"/> or <see cref="Export"/>.
     /// <see cref="OnAutoHalt"/> fires when a timer or sample-count stop policy is satisfied.</para>
@@ -23,6 +23,8 @@ namespace Phototesting.CameraCapture.Exposure
         private readonly ICoreClientAPI _capi;
         private readonly WetplateEffectsConfig _baselineEffects;
         private ExposureAccumulationBuffer? _buffer;
+        private FrameBufferRef? _downsampleFbo;
+        private byte[]? _readbackScratch;
         private PlateProcessProfile _process;
         private ExposureStartOptions _startOptions;
         private float _elapsedSinceLastSample;
@@ -64,8 +66,9 @@ namespace Phototesting.CameraCapture.Exposure
 
             int w = Math.Max(1, _capi.Render.FrameWidth);
             int h = Math.Max(1, _capi.Render.FrameHeight);
+            EnsureReadbackResources(w, h);
             _buffer?.Dispose();
-            _buffer = new ExposureAccumulationBuffer(w, h, process.SampleCount);
+            _buffer = new ExposureAccumulationBuffer(_downsampleFbo!.Width, _downsampleFbo.Height, process.SampleCount);
             ApplyProcessToBuffer(_buffer, process);
 
             RegisterRenderer();
@@ -115,8 +118,7 @@ namespace Phototesting.CameraCapture.Exposure
                 ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 
             using SKBitmap developed = _buffer.Develop();
-            using SKBitmap flipped = FlipVertical(developed);
-            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(flipped, maxDim);
+            SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, maxDim);
 
             try
             {
@@ -149,33 +151,49 @@ namespace Phototesting.CameraCapture.Exposure
             int w = _capi.Render.FrameWidth;
             int h = _capi.Render.FrameHeight;
 
-            // Reset buffer on viewport resize to prevent averaging mixed-dimension frames.
-            if (_buffer.Width != w || _buffer.Height != h)
+            int previousBufferWidth = _buffer.Width;
+            int previousBufferHeight = _buffer.Height;
+            EnsureReadbackResources(w, h);
+
+            // Reset buffer on viewport resize or readback-size policy change to prevent averaging mixed-dimension frames.
+            if (_buffer.Width != _downsampleFbo!.Width || _buffer.Height != _downsampleFbo.Height)
             {
                 _buffer.Dispose();
-                _buffer = new ExposureAccumulationBuffer(w, h, _process.SampleCount);
+                _buffer = new ExposureAccumulationBuffer(_downsampleFbo.Width, _downsampleFbo.Height, _process.SampleCount);
                 ApplyProcessToBuffer(_buffer, _process);
-                _capi.Logger.Warning("Phototesting: viewport resized during exposure — accumulated frames discarded.");
+
+                if (previousBufferWidth != _downsampleFbo.Width || previousBufferHeight != _downsampleFbo.Height)
+                    _capi.Logger.Warning("Phototesting: viewport readback size changed during exposure — accumulated frames discarded.");
             }
 
-            int byteCount = w * h * 4;
-            byte[] pixels = ArrayPool<byte>.Shared.Rent(byteCount);
+            byte[] pixels = _readbackScratch!;
+            GL.GetInteger(GetPName.ReadFramebufferBinding, out int prevReadFbo);
+            GL.GetInteger(GetPName.DrawFramebufferBinding, out int prevDrawFbo);
+            GL.GetInteger(GetPName.PackAlignment, out int prevPackAlignment);
             try
             {
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
-                GL.ReadBuffer(ReadBufferMode.Back);
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _downsampleFbo.FboId);
+                GL.BlitFramebuffer(0, 0, w, h,
+                    0, _downsampleFbo.Height, _downsampleFbo.Width, 0,
+                    ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear);
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _downsampleFbo.FboId);
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0);
                 GL.PixelStore(PixelStoreParameter.PackAlignment, 1);
-                GL.ReadPixels(0, 0, w, h, PixelFormat.Bgra, PixelType.UnsignedByte, pixels);
+                GL.ReadPixels(0, 0, _downsampleFbo.Width, _downsampleFbo.Height, PixelFormat.Bgra, PixelType.UnsignedByte, pixels);
 
                 // Ensure fully opaque alpha so the accumulator treats every pixel as solid.
-                for (int i = 3; i < byteCount; i += 4) pixels[i] = 255;
+                for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
 
                 if (_buffer is ICpuExposureAccumulator cpu)
-                    cpu.Accumulate(pixels, w, h);
+                    cpu.Accumulate(pixels, _downsampleFbo.Width, _downsampleFbo.Height);
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(pixels);
+                GL.PixelStore(PixelStoreParameter.PackAlignment, prevPackAlignment);
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, prevReadFbo);
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, prevDrawFbo);
             }
 
             // Auto-halt once the target sample count is reached.
@@ -213,16 +231,51 @@ namespace Phototesting.CameraCapture.Exposure
             buf.HDGamma = process.HDGamma;
         }
 
-        // Flips a bitmap vertically using a canvas transform.
-        // GL.ReadPixels returns bottom-to-top; this corrects the orientation.
-        private static SKBitmap FlipVertical(SKBitmap src)
+        private void EnsureReadbackResources(int sourceWidth, int sourceHeight)
         {
-            var dst = new SKBitmap(new SKImageInfo(src.Width, src.Height, SKColorType.Bgra8888, SKAlphaType.Opaque));
-            using var canvas = new SKCanvas(dst);
-            canvas.Scale(1, -1);
-            canvas.Translate(0, -(float)src.Height);
-            canvas.DrawBitmap(src, 0, 0);
-            return dst;
+            int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
+                ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
+
+            ExposureReadbackPipeline.ComputeTargetDimensions(sourceWidth, sourceHeight, maxDimension, out int targetWidth, out int targetHeight);
+            if (_downsampleFbo != null && _downsampleFbo.Width == targetWidth && _downsampleFbo.Height == targetHeight)
+                return;
+
+            FreeReadbackResources();
+
+            _downsampleFbo = ClientFramebufferCompat.Create(_capi,
+                new FramebufferAttrs("phototesting-viewport-exposure-downsample", targetWidth, targetHeight)
+                {
+                    Attachments = new[]
+                    {
+                        new FramebufferAttrsAttachment
+                        {
+                            AttachmentType = EnumFramebufferAttachment.ColorAttachment0,
+                            Texture = new RawTexture
+                            {
+                                Width = targetWidth,
+                                Height = targetHeight,
+                                PixelInternalFormat = EnumTextureInternalFormat.Rgba8,
+                                PixelFormat = EnumTexturePixelFormat.Rgba,
+                                MinFilter = EnumTextureFilter.Linear,
+                                MagFilter = EnumTextureFilter.Linear,
+                            }
+                        }
+                    }
+                });
+
+            _readbackScratch = new byte[targetWidth * targetHeight * 4];
+        }
+
+        private void FreeReadbackResources()
+        {
+            _readbackScratch = null;
+
+            if (_downsampleFbo != null)
+            {
+                BestEffort.Try(null, "destroy viewport exposure downsample FBO",
+                    () => _capi.Render.DestroyFrameBuffer(_downsampleFbo));
+                _downsampleFbo = null;
+            }
         }
 
         private void RegisterRenderer()
@@ -247,6 +300,7 @@ namespace Phototesting.CameraCapture.Exposure
             UnregisterRenderer();
             _buffer?.Dispose();
             _buffer = null;
+            FreeReadbackResources();
             State = ExposureState.Idle;
         }
     }
