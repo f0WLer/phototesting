@@ -80,6 +80,21 @@ namespace Phototesting.CameraCapture.Exposure
         // Post-development finishing toggle. When off, exposure preview/export stop after emulsion develop.
         internal bool ApplyFinishing = false;
 
+        // Chemistry overrides — NaN means "use the active process profile's default".
+        // Persisted across Start()/Reset() and applied to each new buffer via ApplyProcessToBuffer.
+        internal float ChemistryDevStrength = float.NaN;
+        internal float ChemistryHDGamma     = float.NaN;
+        internal float ChemistryRedSens     = float.NaN;
+        internal float ChemistryGreenSens   = float.NaN;
+        internal float ChemistryBlueSens    = float.NaN;
+
+        // Effective chemistry values — override if set, otherwise falls back to the active process.
+        internal float EffectiveDevStrength => float.IsNaN(ChemistryDevStrength) ? _process.DevelopmentStrength : ChemistryDevStrength;
+        internal float EffectiveHDGamma     => float.IsNaN(ChemistryHDGamma)     ? _process.HDGamma             : ChemistryHDGamma;
+        internal float EffectiveRedSens     => float.IsNaN(ChemistryRedSens)     ? _process.RedSensitivity      : ChemistryRedSens;
+        internal float EffectiveGreenSens   => float.IsNaN(ChemistryGreenSens)   ? _process.GreenSensitivity    : ChemistryGreenSens;
+        internal float EffectiveBlueSens    => float.IsNaN(ChemistryBlueSens)    ? _process.BlueSensitivity     : ChemistryBlueSens;
+
         // Copies the current physics settings onto a buffer.
         private void ApplyPhysicsToBuffer(IExposureAccumulator buf)
         {
@@ -89,15 +104,15 @@ namespace Phototesting.CameraCapture.Exposure
             buf.NormalizeByActualFrameCount = PhysicsNormalize;
         }
 
-        // Copies current physics settings and active process chemistry onto a buffer.
+        // Copies current physics settings and active process chemistry (respecting overrides) onto a buffer.
         private void ApplyProcessToBuffer(IExposureAccumulator buf)
         {
             ApplyPhysicsToBuffer(buf);
-            buf.RedSensitivity      = _process.RedSensitivity;
-            buf.GreenSensitivity    = _process.GreenSensitivity;
-            buf.BlueSensitivity     = _process.BlueSensitivity;
-            buf.DevelopmentStrength = _process.DevelopmentStrength;
-            buf.HDGamma             = _process.HDGamma;
+            buf.RedSensitivity      = EffectiveRedSens;
+            buf.GreenSensitivity    = EffectiveGreenSens;
+            buf.BlueSensitivity     = EffectiveBlueSens;
+            buf.DevelopmentStrength = EffectiveDevStrength;
+            buf.HDGamma             = EffectiveHDGamma;
         }
 
         // Updates a named physics flag on both the renderer and the live buffer (if any).
@@ -114,6 +129,38 @@ namespace Phototesting.CameraCapture.Exposure
             }
             if (_buffer != null) ApplyPhysicsToBuffer(_buffer);
             return true;
+        }
+
+        // Sets a named chemistry override on both the renderer and the live buffer (if any).
+        // Returns false if name is unrecognised.
+        internal bool SetChemistry(string param, float value)
+        {
+            switch (param)
+            {
+                case "devstrength": ChemistryDevStrength = value; break;
+                case "hdgamma":     ChemistryHDGamma     = value; break;
+                case "redsens":     ChemistryRedSens     = value; break;
+                case "greensens":   ChemistryGreenSens   = value; break;
+                case "bluesens":    ChemistryBlueSens    = value; break;
+                default: return false;
+            }
+            if (_buffer != null) ApplyProcessToBuffer(_buffer);
+            return true;
+        }
+
+        // Clears all chemistry overrides and restores process-profile defaults on the live buffer.
+        internal void ResetChemistryOverrides()
+        {
+            ChemistryDevStrength = ChemistryHDGamma = ChemistryRedSens = ChemistryGreenSens = ChemistryBlueSens = float.NaN;
+            if (_buffer != null) ApplyProcessToBuffer(_buffer);
+        }
+
+        // Redevelops the buffer immediately if capturing, otherwise resets the idle-preview timer.
+        internal void RequestPreviewRefresh()
+        {
+            if (State == ExposureState.Capturing && _buffer?.FramesAccumulated > 0)
+                PushPreviewFrame();
+            PreviewSink?.ForceRefreshNextFrame();
         }
 
         public double RenderOrder => 0.4;

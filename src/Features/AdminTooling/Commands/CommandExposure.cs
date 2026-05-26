@@ -6,9 +6,10 @@ namespace Phototesting.AdminTooling
 {
     // .phototesting exposure command handler.
     // Controls the multi-frame virtual camera exposure session.
-    // Commands: start [cap] | stop | discard | pause | resume | reset | export | ref [n] | status | physics
+    // Commands: start [cap] | stop | discard | pause | resume | reset | export | ref [n] | status | physics | gui
     internal sealed partial class AdminToolingModSystemBridge
     {
+        private GuiDialogExposurePhysics? _exposurePhysicsDialog;
 
         internal void HandleWetplateExposureCommand(Vintagestory.API.Common.CmdArgs args)
         {
@@ -254,9 +255,15 @@ namespace Phototesting.AdminTooling
                     return;
                 }
 
+                case "gui":
+                case "window":
+                    _exposurePhysicsDialog ??= new GuiDialogExposurePhysics(_owner.ClientApi, renderer, _owner);
+                    _exposurePhysicsDialog.TryOpen();
+                    return;
+
                 default:
                     _owner.ClientApi.ShowChatMessage(
-                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics|finishing>");
+                        "Wetplate: usage: .phototesting exposure <start [process]|stop|discard|pause|resume|reset|export|process [name]|status|physics|finishing|gui>");
                     return;
             }
         }
