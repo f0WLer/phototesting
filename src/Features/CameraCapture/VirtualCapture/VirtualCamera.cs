@@ -96,19 +96,19 @@ namespace Phototesting.CameraCapture
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
 
-        public Vec3d CameraPos = new Vec3d(0, 0, 0);
-        public float Pitch = 0f;
-        public float Yaw = 0f;
-        public float Roll = 0f;
+        internal Vec3d CameraPos = new Vec3d(0, 0, 0);
+        internal float Pitch = 0f;
+        internal float Yaw = 0f;
+        internal float Roll = 0f;
 
-        public float Fov = 0f;
+        internal float Fov = 0f;
 
         // Render the local player's full third-person model from this virtual viewpoint.
-        public bool SelfPortrait = false;
+        internal bool SelfPortrait = false;
 
-        public int Dimension = 0;
+        internal int Dimension = 0;
 
-        public FrameBufferRef fbo = null!; // Assigned by InitBuffer() before first use
+        internal FrameBufferRef fbo = null!; // Assigned by InitBuffer() before first use
 
         private long _lastSelfPortraitRenderMs;
 
@@ -116,7 +116,7 @@ namespace Phototesting.CameraCapture
         private const string RendererRenderModeFieldName = "renderMode";
         private const string ChunkRendererFieldName = "chunkRenderer";
         private const string ChunkRendererBeforeMethodName = "OnRenderBefore";
-        private const int GlClampToBorder = 33069;
+        private static readonly float[] SsaoBorderColor = { 1f, 1f, 1f, 1f };
 
         // Cached GameContent enum value used to force the local player renderer out of first-person arms mode.
         private static Type? _renderModeType;
@@ -224,9 +224,9 @@ namespace Phototesting.CameraCapture
         private static void ApplySsaoAttachmentParameters(int textureId)
         {
             GL.BindTexture(TextureTarget.Texture2D, textureId);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, new float[] { 1f, 1f, 1f, 1f });
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, GlClampToBorder);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, GlClampToBorder);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, SsaoBorderColor);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToBorder);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToBorder);
             GL.BindTexture(TextureTarget.Texture2D, 0);
         }
 
