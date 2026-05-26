@@ -3,7 +3,6 @@ using Phototesting.CameraCapture;
 using Phototesting.CameraCapture.Rendering;
 using Phototesting.ImageEffects;
 using Phototesting.PhotoSync.Storage;
-using System.Runtime.InteropServices;
 
 namespace Phototesting.CameraCapture.Exposure
 {
@@ -60,7 +59,7 @@ namespace Phototesting.CameraCapture.Exposure
                     cpuCompatibleData = data;
                     break;
                 case ExposureAccumulationBlobFormat.GpuBackend:
-                    if (!TryConvertGpuBlobToCpuBlob(data, header, out cpuCompatibleData)) return null;
+                    if (!ExposureAccumulationBlobFormat.TryConvertGpuBlobToCpuBlob(data, header, out cpuCompatibleData)) return null;
                     break;
                 default:
                     return null;
@@ -89,35 +88,5 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
-        private static bool TryConvertGpuBlobToCpuBlob(byte[] data, ExposureAccumulationBlobHeader header, out byte[] cpuBlob)
-        {
-            cpuBlob = Array.Empty<byte>();
-            if (header.ChannelCount != 4) return false;
-
-            int expectedByteCount = ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, header.ChannelCount);
-            if (data.Length < expectedByteCount) return false;
-
-            int pixelCount = checked(header.Width * header.Height);
-            ReadOnlySpan<byte> gpuPayloadBytes = data.AsSpan(ExposureAccumulationBlobFormat.HeaderSize, pixelCount * 4 * sizeof(float));
-            ReadOnlySpan<float> gpuPayload = MemoryMarshal.Cast<byte, float>(gpuPayloadBytes);
-
-            cpuBlob = new byte[ExposureAccumulationBlobFormat.GetTotalByteCount(header.Width, header.Height, 3)];
-            ExposureAccumulationBlobFormat.WriteHeader(cpuBlob, header.Width, header.Height, 3, header.FrameCount, ExposureAccumulationBlobFormat.CpuBackend);
-
-            Span<float> cpuPayload = MemoryMarshal.Cast<byte, float>(cpuBlob.AsSpan(ExposureAccumulationBlobFormat.HeaderSize));
-            Span<float> cpuR = cpuPayload.Slice(0, pixelCount);
-            Span<float> cpuG = cpuPayload.Slice(pixelCount, pixelCount);
-            Span<float> cpuB = cpuPayload.Slice(pixelCount * 2, pixelCount);
-
-            for (int pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++)
-            {
-                int rgbaOffset = pixelIndex * 4;
-                cpuR[pixelIndex] = gpuPayload[rgbaOffset + 0];
-                cpuG[pixelIndex] = gpuPayload[rgbaOffset + 1];
-                cpuB[pixelIndex] = gpuPayload[rgbaOffset + 2];
-            }
-
-            return true;
-        }
     }
 }

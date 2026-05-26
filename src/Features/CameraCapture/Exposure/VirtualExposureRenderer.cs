@@ -9,9 +9,6 @@ using Phototesting.PhotoSync.Storage;
 
 namespace Phototesting.CameraCapture.Exposure
 {
-    /// <summary>Lifecycle state of an exposure session on either the viewport or virtual-camera renderer path.</summary>
-    internal enum ExposureState { Idle, Capturing, Paused, Faulted, Done }
-
     /// <summary>
     /// Persistent renderer that drives a <see cref="VirtualCamera"/> across consecutive game frames,
     /// accumulating pixel data via an <see cref="IExposureAccumulator"/>.
@@ -25,7 +22,7 @@ namespace Phototesting.CameraCapture.Exposure
     /// </summary>
     internal sealed class VirtualExposureRenderer : IRenderer, IDisposable
     {
-        private readonly ICoreClientAPI _capi;
+        private readonly ICoreClientAPI _clientApi;
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
         private readonly WetplateEffectsConfig _baselineEffects;
@@ -49,7 +46,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         // When set, the exposure renderer pushes developed preview frames here while capturing,
         // keeping the debug preview window live during long exposures.
-        internal IExposurePreviewSink? PreviewSink { get; set; }
+        internal IExposurePreviewSink? ExposurePreviewSink { get; set; }
 
         // Process profile applied to the current or next exposure session.
         // Controls timing (duration, sample count) and emulsion response (spectral weights, H&D curve).
@@ -62,7 +59,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal int CapFrameCount => _process.SampleCount;
 
         private long GetEffectiveShutterNowMs()
-            => _shutterFrozenMs != 0 ? _shutterFrozenMs : _capi.ElapsedMilliseconds;
+            => _shutterFrozenMs != 0 ? _shutterFrozenMs : _clientApi.ElapsedMilliseconds;
 
         // Wall-clock time elapsed since shutter open / remaining until close.
         // Returns 0 when no exposure is active.
@@ -160,7 +157,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (State == ExposureState.Capturing && _buffer?.FramesAccumulated > 0)
                 PushPreviewFrame();
-            PreviewSink?.ForceRefreshNextFrame();
+            ExposurePreviewSink?.ForceRefreshNextFrame();
         }
 
         public double RenderOrder => 0.4;
@@ -168,7 +165,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         internal VirtualExposureRenderer(ICoreClientAPI capi)
         {
-            _capi = capi;
+            _clientApi = capi;
             _main = (ClientMain)capi.World;
             _platform = (ClientPlatformWindows)_main.Platform;
             _baselineEffects = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
@@ -187,7 +184,7 @@ namespace Phototesting.CameraCapture.Exposure
             _shutterFrozenMs = nowMs;
             State = ExposureState.Done;
             PushPreviewFrame();
-            _capi.Logger.Notification(
+            _clientApi.Logger.Notification(
                 $"Phototesting: {_process.Name} exposure complete — " +
                 $"{_buffer?.FramesAccumulated ?? 0}/{_process.SampleCount} samples over {(nowMs - _shutterStartMs) / 1000f:F2}s. " +
                 $"Use '.phototesting exposure export' to save.");
@@ -202,7 +199,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (State != ExposureState.Idle) return;
             DestroyCamera();
-            VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
+            VirtualCamera cam = new VirtualCamera(_clientApi, _platform, _main);
             cam.ApplyState(cameraState);
             cam.InitBuffer();
             _camera = cam;
@@ -247,7 +244,7 @@ namespace Phototesting.CameraCapture.Exposure
             _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
 
-            long now = _capi.ElapsedMilliseconds;
+            long now = _clientApi.ElapsedMilliseconds;
             _shutterStartMs = now;
             _shutterEndMs   = ResolveShutterEndMs(now);
             _pauseStartedMs = 0;
@@ -256,14 +253,14 @@ namespace Phototesting.CameraCapture.Exposure
             if (_camera == null)
             {
                 // No camera prepared by PrepareCamera() — create one from the supplied state (legacy/admin path).
-                VirtualCamera cam = new VirtualCamera(_capi, _platform, _main);
+                VirtualCamera cam = new VirtualCamera(_clientApi, _platform, _main);
                 cam.ApplyState(cameraState);
                 cam.InitBuffer();
                 _camera = cam;
             }
 
             AllocateBufferAndReadback();
-            PreviewSink?.BeginExposurePassthrough();
+            ExposurePreviewSink?.BeginExposurePassthrough();
             State = ExposureState.Capturing;
         }
 
@@ -272,7 +269,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (State == ExposureState.Capturing)
             {
-                _pauseStartedMs = _capi.ElapsedMilliseconds;
+                _pauseStartedMs = _clientApi.ElapsedMilliseconds;
                 _shutterFrozenMs = _pauseStartedMs;
                 State = ExposureState.Paused;
             }
@@ -284,7 +281,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (State == ExposureState.Paused)
             {
                 // Extend the shutter window by however long we were paused.
-                long pausedFor = _capi.ElapsedMilliseconds - _pauseStartedMs;
+                long pausedFor = _clientApi.ElapsedMilliseconds - _pauseStartedMs;
                 _shutterStartMs += pausedFor;
                 _shutterEndMs   += pausedFor;
                 _pauseStartedMs = 0;
@@ -302,14 +299,14 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Stop()
         {
             DrainReadbackPipeline();
-            _shutterFrozenMs = _capi.ElapsedMilliseconds;
+            _shutterFrozenMs = _clientApi.ElapsedMilliseconds;
             // The virtual camera is kept alive so the preview can continue after shutter close.
             State = ExposureState.Done;
 
             int frames = _buffer?.FramesAccumulated ?? 0;
-            long nowMs = _capi.ElapsedMilliseconds;
+            long nowMs = _clientApi.ElapsedMilliseconds;
             float elapsed = _shutterStartMs == 0 ? 0f : (nowMs - _shutterStartMs) / 1000f;
-            _capi.Logger.Notification(
+            _clientApi.Logger.Notification(
                 $"Phototesting: {_process.Name} exposure stopped — " +
                 $"{frames}/{_process.SampleCount} samples over {elapsed:F2}s. " +
                 $"Use '.phototesting exposure export' to save.");
@@ -331,7 +328,7 @@ namespace Phototesting.CameraCapture.Exposure
             _shutterEndMs   = 0;
             _pauseStartedMs = 0;
             _shutterFrozenMs = 0;
-            PreviewSink?.EndExposurePassthrough();
+            ExposurePreviewSink?.EndExposurePassthrough();
             State = ExposureState.Idle;
         }
 
@@ -339,11 +336,11 @@ namespace Phototesting.CameraCapture.Exposure
         internal void Reset()
         {
             if (_buffer == null || _camera == null) return;
-            _readback?.ResetRing();
+            _readback?.ResetReadbackRing();
             _buffer.Reset();
             _elapsedSinceLastSample  = 0f;
             _elapsedSinceLastPreview = 0f;
-            long now = _capi.ElapsedMilliseconds;
+            long now = _clientApi.ElapsedMilliseconds;
             _shutterStartMs = now;
             _shutterEndMs   = ResolveShutterEndMs(now);
             _pauseStartedMs = 0;
@@ -363,7 +360,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             using SKBitmap averaged = _buffer.Develop();
 
-            int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.PhotoCaptureMaxDimension
+            int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_clientApi)?.Viewfinder?.PhotoCaptureMaxDimension
                 ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 
             SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(averaged, maxDimension);
@@ -408,20 +405,20 @@ namespace Phototesting.CameraCapture.Exposure
 
             if (!_buffer.DeserializeAccumulation(data, out int restoredFrames))
             {
-                _capi.Logger.Warning("Phototesting: partial exposure blob is incompatible with the current buffer dimensions — starting fresh.");
+                _clientApi.Logger.Warning("Phototesting: partial exposure blob is incompatible with the current buffer dimensions — starting fresh.");
                 return;
             }
 
-            _capi.Logger.Notification($"Phototesting: restored {restoredFrames} accumulated frames from saved partial exposure.");
+            _clientApi.Logger.Notification($"Phototesting: restored {restoredFrames} accumulated frames from saved partial exposure.");
         }
 
         // Develops and shapes one debug-preview frame using the same crop/scale/finishing policy
         // as the normal virtual camera preview path.
         private void PushPreviewFrame()
         {
-            if (_buffer == null || PreviewSink == null || _buffer.FramesAccumulated == 0) return;
+            if (_buffer == null || ExposurePreviewSink == null || _buffer.FramesAccumulated == 0) return;
 
-            ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_clientApi)?.Viewfinder;
             int maxDimension = cfg?.DebugPreviewMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
 
             using SKBitmap developed = _buffer.Develop();
@@ -429,7 +426,7 @@ namespace Phototesting.CameraCapture.Exposure
             SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);
             try
             {
-                PreviewSink.StoreExposureFrame(cropped);
+                ExposurePreviewSink.StoreExposureFrame(cropped);
             }
             finally
             {
@@ -453,15 +450,15 @@ namespace Phototesting.CameraCapture.Exposure
 
             // Reinitialize FBO and reset the readback pipeline if the window was resized.
             // Mixed-dimension frames cannot be averaged so accumulated data must be discarded.
-            if (_capi.Render.FrameWidth != _camera.fbo.Width || _capi.Render.FrameHeight != _camera.fbo.Height)
+            if (_clientApi.Render.FrameWidth != _camera.fbo.Width || _clientApi.Render.FrameHeight != _camera.fbo.Height)
             {
                 ReinitializeCameraAndBufferForResize();
-                _capi.Logger.Warning("Phototesting: window resized during exposure — accumulated frames discarded.");
+                _clientApi.Logger.Warning("Phototesting: window resized during exposure — accumulated frames discarded.");
             }
 
             // Wall-clock shutter close: shutter has been open long enough.
             // Drain in-flight PBOs first so no samples from the last two kicks are lost.
-            long nowMs = _capi.ElapsedMilliseconds;
+            long nowMs = _clientApi.ElapsedMilliseconds;
             if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.Timer && _shutterEndMs != 0 && nowMs >= _shutterEndMs)
             {
                 CompleteAutoStop(nowMs);
@@ -488,20 +485,20 @@ namespace Phototesting.CameraCapture.Exposure
                 {
                     // CPU path: maintain readback pipeline and accumulate from PBO.
                     // Resolve the max readback dimension from config (hot-reload safe).
-                    int maxDim = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
+                    int maxDim = PhotoTestingConfigAccess.ResolveClientConfig(_clientApi)?.Viewfinder?.ExposureReadbackMaxDimension
                                  ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
 
                     // Resize the readback pipeline if config or source changed; reallocate the buffer.
                     if (_readback!.EnsureAllocated(_camera.fbo.Width, _camera.fbo.Height, maxDim))
                     {
                         ReallocateAccumulationBuffer();
-                        _capi.Logger.Warning("Phototesting: readback dimensions changed during exposure — accumulated frames discarded.");
+                        _clientApi.Logger.Warning("Phototesting: readback dimensions changed during exposure — accumulated frames discarded.");
                     }
 
                     EnsureScratch(_readback.Width * _readback.Height * 4);
 
                     // Kick async blit+readback into PBO, collect from the PBO written two kicks ago.
-                    if (_readback.KickAndCollect(_camera.fbo, _readbackScratch!))
+                    if (_readback.SubmitFrameAndCollectReadback(_camera.fbo, _readbackScratch!))
                     {
                         if (_buffer is ICpuExposureAccumulator cpu)
                             cpu.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
@@ -510,22 +507,22 @@ namespace Phototesting.CameraCapture.Exposure
             }
             catch (Exception ex)
             {
-                _capi.Logger.Error($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex}");
+                _clientApi.Logger.Error($"Phototesting: exposure frame {_buffer.FramesAccumulated} render failed: {ex}");
                 LastFaultMessage = ex.Message;
-                _shutterFrozenMs = _capi.ElapsedMilliseconds;
+                _shutterFrozenMs = _clientApi.ElapsedMilliseconds;
                 State = ExposureState.Faulted;
                 return;
             }
 
             if (_startOptions.StopMode == ExposureStartOptions.ExposureStopMode.TargetSamples && _buffer.FramesAccumulated >= _process.SampleCount)
             {
-                CompleteAutoStop(_capi.ElapsedMilliseconds);
+                CompleteAutoStop(_clientApi.ElapsedMilliseconds);
                 return;
             }
 
             // Push preview on wall-clock cadence; only after new data has been accumulated
             // so the preview reflects the latest exposure state without redundant develop calls.
-            if (PreviewSink != null && _buffer.FramesAccumulated > 0 &&
+            if (ExposurePreviewSink != null && _buffer.FramesAccumulated > 0 &&
                 (_buffer.FramesAccumulated == 1 || _elapsedSinceLastPreview >= PreviewCadenceSeconds))
             {
                 _elapsedSinceLastPreview = 0f;
@@ -546,9 +543,9 @@ namespace Phototesting.CameraCapture.Exposure
         // allocates a GpuExposureAccumulator with the same target dimensions.
         private void AllocateBufferAndReadback()
         {
-            int sourceW = _capi.Render.FrameWidth;
-            int sourceH = _capi.Render.FrameHeight;
-            ViewfinderConfig? vfCfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            int sourceW = _clientApi.Render.FrameWidth;
+            int sourceH = _clientApi.Render.FrameHeight;
+            ViewfinderConfig? vfCfg = PhotoTestingConfigAccess.ResolveClientConfig(_clientApi)?.Viewfinder;
             int maxDim  = vfCfg?.ExposureReadbackMaxDimension ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
             bool useGpu = vfCfg?.UseGpuExposureAccumulator    ?? false;
 
@@ -561,14 +558,14 @@ namespace Phototesting.CameraCapture.Exposure
 
                 ExposureReadbackPipeline.ComputeTargetDimensions(sourceW, sourceH, maxDim, out int w, out int h);
                 _buffer?.Dispose();
-                var gpu = new GpuExposureAccumulator(_capi, w, h, _process.SampleCount);
+                var gpu = new GpuExposureAccumulator(_clientApi, w, h, _process.SampleCount);
                 ApplyProcessToBuffer(gpu);
                 _buffer = gpu;
             }
             else
             {
                 // CPU path: lazily create the readback pipeline and allocate CPU buffer.
-                _readback ??= new ExposureReadbackPipeline(_capi);
+                _readback ??= new ExposureReadbackPipeline(_clientApi);
                 _readback.EnsureAllocated(sourceW, sourceH, maxDim);
                 ReallocateAccumulationBuffer();
                 EnsureScratch(_readback.Width * _readback.Height * 4);
@@ -607,7 +604,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             // Drain in-flight PBOs before discarding the accumulation data.
             DrainReadbackPipeline();
-            _readback?.ResetRing();
+            _readback?.ResetReadbackRing();
 
             _camera.Destroy(); // Destroys the FBO; _camera object is reused (not nulled).
             _camera.InitBuffer();

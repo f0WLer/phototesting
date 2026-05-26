@@ -14,7 +14,7 @@ namespace Phototesting.CameraCapture.Exposure
     /// </summary>
     internal sealed class ExposureReadbackPipeline : IDisposable
     {
-        private readonly ICoreClientAPI _capi;
+        private readonly ICoreClientAPI _clientApi;
 
         // Downsample target — a small single-colour-attachment FBO.
         private FrameBufferRef? _downsampleFbo;
@@ -25,8 +25,8 @@ namespace Phototesting.CameraCapture.Exposure
         // 3-PBO async readback ring.
         private const int RingSize = 3;
         private readonly int[] _pboIds  = new int[RingSize];
-        private readonly bool[] _pboPending = new bool[RingSize];
-        private int _kickCount;   // total kicks issued so far; used to derive ring indices
+        private readonly bool[] _pboReadbackReady = new bool[RingSize];
+        private int _totalKicksIssued;   // total kicks issued so far; used to derive ring indices
         private int _pboByteSize;
         private bool _pbosAllocated;
 
@@ -37,7 +37,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         internal ExposureReadbackPipeline(ICoreClientAPI capi)
         {
-            _capi = capi;
+            _clientApi = capi;
         }
 
         internal static void ComputeTargetDimensions(int sourceW, int sourceH, int maxDim, out int width, out int height)
@@ -65,7 +65,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (_downsampleFbo != null)
             {
                 BestEffort.Try(null, "destroy exposure downsample FBO",
-                    () => _capi.Render.DestroyFrameBuffer(_downsampleFbo));
+                    () => _clientApi.Render.DestroyFrameBuffer(_downsampleFbo));
                 _downsampleFbo = null;
             }
 
@@ -75,7 +75,7 @@ namespace Phototesting.CameraCapture.Exposure
             Height = height;
 
             // Single colour attachment (RGBA8, linear filter for the bilinear downsample).
-            _downsampleFbo = ClientFramebufferCompat.Create(_capi,
+            _downsampleFbo = ClientFramebufferCompat.Create(_clientApi,
                 new FramebufferAttrs("phototesting-exposure-downsample", Width, Height)
                 {
                     Attachments = new[]
@@ -110,7 +110,7 @@ namespace Phototesting.CameraCapture.Exposure
         /// Returns <see langword="true"/> when <paramref name="outBytes"/> has been filled with a complete BGRA frame.
         /// <paramref name="outBytes"/> must be at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes.
         /// </summary>
-        internal bool KickAndCollect(FrameBufferRef fromFbo, byte[] outBytes)
+        internal bool SubmitFrameAndCollectReadback(FrameBufferRef fromFbo, byte[] outBytes)
         {
             if (_downsampleFbo == null || !_pbosAllocated) return false;
 
@@ -124,22 +124,22 @@ namespace Phototesting.CameraCapture.Exposure
                 // --- Stage 1: blit-downsample with Y-flip ---
                 // The Y-flip converts OpenGL's bottom-left-origin image to top-left origin,
                 // replacing the Skia rotate+mirror pass in ReadFramebuffer.
-                BlitYFlipped(fromFbo, _downsampleFbo!);
+                ExposureUtils.BlitYFlipped(fromFbo, _downsampleFbo!);
 
                 // --- Stage 2: async ReadPixels into write PBO (no CPU stall) ---
-                int writeIdx = _kickCount % RingSize;
+                int writeIdx = _totalKicksIssued % RingSize;
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _downsampleFbo.FboId);
                 GL.BindBuffer(BufferTarget.PixelPackBuffer, _pboIds[writeIdx]);
                 GL.ReadPixels(0, 0, Width, Height, PixelFormat.Bgra, PixelType.UnsignedByte, IntPtr.Zero);
-                _pboPending[writeIdx] = true;
+                _pboReadbackReady[writeIdx] = true;
 
                 // --- Stage 3: map the PBO from two kicks ago (guaranteed done by GPU) ---
                 bool produced = false;
-                if (_kickCount >= RingSize - 1)
+                if (_totalKicksIssued >= RingSize - 1)
                 {
                     // (kickCount + 1) % RingSize is the PBO written at kick (kickCount - 2).
-                    int readIdx = (_kickCount + 1) % RingSize;
-                    if (_pboPending[readIdx])
+                    int readIdx = (_totalKicksIssued + 1) % RingSize;
+                    if (_pboReadbackReady[readIdx])
                     {
                         GL.BindBuffer(BufferTarget.PixelPackBuffer, _pboIds[readIdx]);
                         IntPtr mapped = GL.MapBuffer(BufferTarget.PixelPackBuffer, BufferAccess.ReadOnly);
@@ -149,11 +149,11 @@ namespace Phototesting.CameraCapture.Exposure
                             GL.UnmapBuffer(BufferTarget.PixelPackBuffer);
                             produced = true;
                         }
-                        _pboPending[readIdx] = false;
+                        _pboReadbackReady[readIdx] = false;
                     }
                 }
 
-                _kickCount++;
+                _totalKicksIssued++;
                 return produced;
             }
             finally
@@ -170,7 +170,7 @@ namespace Phototesting.CameraCapture.Exposure
         /// May briefly stall if a PBO has not finished yet — acceptable at shutter close.
         /// <paramref name="scratch"/> must be at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes.
         /// </summary>
-        internal void DrainPending(byte[] scratch, Action<byte[]> onFrame)
+        internal void DrainPending(byte[] scratch, Action<byte[]> onReadbackComplete)
         {
             if (!_pbosAllocated) return;
 
@@ -180,8 +180,8 @@ namespace Phototesting.CameraCapture.Exposure
                 for (int i = 0; i < RingSize; i++)
                 {
                     // Drain starting from the oldest pending PBO.
-                    int idx = (_kickCount + 1 + i) % RingSize;
-                    if (!_pboPending[idx]) continue;
+                    int idx = (_totalKicksIssued + 1 + i) % RingSize;
+                    if (!_pboReadbackReady[idx]) continue;
 
                     GL.BindBuffer(BufferTarget.PixelPackBuffer, _pboIds[idx]);
                     IntPtr mapped = GL.MapBuffer(BufferTarget.PixelPackBuffer, BufferAccess.ReadOnly);
@@ -189,9 +189,9 @@ namespace Phototesting.CameraCapture.Exposure
                     {
                         Marshal.Copy(mapped, scratch, 0, _pboByteSize);
                         GL.UnmapBuffer(BufferTarget.PixelPackBuffer);
-                        onFrame(scratch);
+                        onReadbackComplete(scratch);
                     }
-                    _pboPending[idx] = false;
+                    _pboReadbackReady[idx] = false;
                 }
             }
             finally
@@ -201,10 +201,10 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         /// <summary>Discards in-flight ring state so the next kick starts clean. Called when the accumulation buffer is reset mid-session.</summary>
-        internal void ResetRing()
+        internal void ResetReadbackRing()
         {
-            for (int i = 0; i < RingSize; i++) _pboPending[i] = false;
-            _kickCount = 0;
+            for (int i = 0; i < RingSize; i++) _pboReadbackReady[i] = false;
+            _totalKicksIssued = 0;
         }
 
         private void AllocatePbos()
@@ -215,36 +215,23 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 GL.BindBuffer(BufferTarget.PixelPackBuffer, _pboIds[i]);
                 GL.BufferData(BufferTarget.PixelPackBuffer, byteSize, IntPtr.Zero, BufferUsageHint.StreamRead);
-                _pboPending[i] = false;
+                _pboReadbackReady[i] = false;
             }
             GL.BindBuffer(BufferTarget.PixelPackBuffer, 0);
             _pboByteSize   = byteSize;
-            _kickCount     = 0;
+            _totalKicksIssued     = 0;
             _pbosAllocated = true;
         }
 
         private void FreePbos()
         {
             if (!_pbosAllocated) return;
-            for (int i = 0; i < RingSize; i++) _pboPending[i] = false;
+            for (int i = 0; i < RingSize; i++) _pboReadbackReady[i] = false;
             GL.DeleteBuffers(RingSize, _pboIds);
             Array.Clear(_pboIds, 0, RingSize);
             _pboByteSize   = 0;
-            _kickCount     = 0;
+            _totalKicksIssued     = 0;
             _pbosAllocated = false;
-        }
-
-        /// <summary>
-        /// Blits <paramref name="fromFbo"/> into <paramref name="toFbo"/> with a vertical flip,
-        /// converting OpenGL's bottom-left-origin image to top-left origin.
-        /// </summary>
-        internal static void BlitYFlipped(FrameBufferRef fromFbo, FrameBufferRef toFbo)
-        {
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fromFbo.FboId);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, toFbo.FboId);
-            GL.BlitFramebuffer(0, 0, fromFbo.Width, fromFbo.Height,
-                0, toFbo.Height, toFbo.Width, 0,
-                ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear);
         }
 
         public void Dispose()
@@ -255,7 +242,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (_downsampleFbo != null)
             {
                 BestEffort.Try(null, "destroy exposure downsample FBO",
-                    () => _capi.Render.DestroyFrameBuffer(_downsampleFbo));
+                    () => _clientApi.Render.DestroyFrameBuffer(_downsampleFbo));
                 _downsampleFbo = null;
             }
         }

@@ -32,7 +32,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         // ── Internal state ────────────────────────────────────────────────────────────────
         private readonly ICoreClientAPI _capi;
-        private readonly int _referenceFrameCount;
+        private readonly int _targetSampleCount;
         private int _frameCount;
 
         // Sample FBO: RGBA8, receives the blit from the source camera FBO each frame.
@@ -156,7 +156,7 @@ void main() {
             _capi = capi;
             Width  = width;
             Height = height;
-            _referenceFrameCount = Math.Max(1, referenceFrameCount);
+            _targetSampleCount = Math.Max(1, referenceFrameCount);
 
             AllocateGpuResources();
         }
@@ -172,7 +172,7 @@ void main() {
                 DisableRenderStateForFullscreenPass();
 
                 // 1. Blit source → sample FBO (Y-flipped downsample, same as CPU path).
-                ExposureReadbackPipeline.BlitYFlipped(sourceFbo, _sampleFbo);
+                ExposureUtils.BlitYFlipped(sourceFbo, _sampleFbo);
 
                 // 2. Accumulate: sample + current accum → next accum.
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
@@ -233,7 +233,7 @@ void main() {
                 // Normalise by actual or reference frame count.
                 float invRef = NormalizeByActualFrameCount
                     ? 1f / _frameCount
-                    : 1f / _referenceFrameCount;
+                    : 1f / _targetSampleCount;
 
                 // Normalise spectral weights so a grey pixel always maps to the same energy.
                 float rw = RedSensitivity, gw = GreenSensitivity, bw = BlueSensitivity;

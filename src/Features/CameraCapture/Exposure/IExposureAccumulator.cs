@@ -95,6 +95,9 @@ namespace Phototesting.CameraCapture.Exposure
         void Accumulate(FrameBufferRef sourceFbo);
     }
 
+    /// <summary>Lifecycle state of an exposure session on either the viewport or virtual-camera renderer path.</summary>
+    internal enum ExposureState { Idle, Capturing, Paused, Faulted, Done }
+
     /// <summary>
     /// Shared interface for the two gameplay-level accumulation-based exposure paths:
     /// the handheld viewport accumulator and the mounted virtual-camera renderer.
@@ -141,5 +144,16 @@ namespace Phototesting.CameraCapture.Exposure
         void StoreExposureFrame(SKBitmap bitmap);
         /// <summary>Resets the idle-preview timer so the next render tick produces a fresh frame.</summary>
         void ForceRefreshNextFrame();
+    }
+
+    /// <summary>
+    /// Shared flag consulted by the Harmony patch on <c>EntityPlayerShapeRenderer</c>
+    /// to suppress local-player rendering during viewport exposure accumulation.
+    /// Only ever read or written on the main game thread.
+    /// </summary>
+    internal static class ViewportExposureSuppressContext
+    {
+        /// <summary>When <see langword="true"/>, the patched renderer skips drawing the local player for the current frame.</summary>
+        internal static bool SuppressLocalPlayer;
     }
 }

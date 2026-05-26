@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace Phototesting.CameraCapture.Exposure
 {
@@ -69,6 +70,41 @@ namespace Phototesting.CameraCapture.Exposure
         private static int ReadInt(byte[] blob, int offset)
         {
             return BinaryPrimitives.ReadInt32LittleEndian(blob.AsSpan(offset, sizeof(int)));
+        }
+
+        /// <summary>
+        /// Converts a 4-channel (RGBA) GPU blob into a 3-channel (RGB) CPU blob by discarding the alpha channel.
+        /// Returns <see langword="false"/> when the blob is not a valid 4-channel GPU blob or is truncated.
+        /// </summary>
+        internal static bool TryConvertGpuBlobToCpuBlob(byte[] data, ExposureAccumulationBlobHeader header, out byte[] cpuBlob)
+        {
+            cpuBlob = Array.Empty<byte>();
+            if (header.ChannelCount != 4) return false;
+
+            int expectedByteCount = GetTotalByteCount(header.Width, header.Height, header.ChannelCount);
+            if (data.Length < expectedByteCount) return false;
+
+            int pixelCount = checked(header.Width * header.Height);
+            ReadOnlySpan<byte> gpuPayloadBytes = data.AsSpan(HeaderSize, pixelCount * 4 * sizeof(float));
+            ReadOnlySpan<float> gpuPayload = MemoryMarshal.Cast<byte, float>(gpuPayloadBytes);
+
+            cpuBlob = new byte[GetTotalByteCount(header.Width, header.Height, 3)];
+            WriteHeader(cpuBlob, header.Width, header.Height, 3, header.FrameCount, CpuBackend);
+
+            Span<float> cpuPayload = MemoryMarshal.Cast<byte, float>(cpuBlob.AsSpan(HeaderSize));
+            Span<float> cpuR = cpuPayload.Slice(0, pixelCount);
+            Span<float> cpuG = cpuPayload.Slice(pixelCount, pixelCount);
+            Span<float> cpuB = cpuPayload.Slice(pixelCount * 2, pixelCount);
+
+            for (int pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++)
+            {
+                int rgbaOffset = pixelIndex * 4;
+                cpuR[pixelIndex] = gpuPayload[rgbaOffset + 0];
+                cpuG[pixelIndex] = gpuPayload[rgbaOffset + 1];
+                cpuB[pixelIndex] = gpuPayload[rgbaOffset + 2];
+            }
+
+            return true;
         }
     }
 }

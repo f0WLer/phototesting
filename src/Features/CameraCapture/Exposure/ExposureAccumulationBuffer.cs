@@ -19,10 +19,7 @@ namespace Phototesting.CameraCapture.Exposure
         private readonly float[] _sumG;
         private readonly float[] _sumR;
         private int _frameCount;
-        private readonly int _referenceFrameCount;
-
-        // Precomputed sRGB-to-linear LUT (index = 0-255 sRGB byte value).
-        private static readonly float[] SRgbToLinear = BuildLinearTable();
+        private readonly int _targetSampleCount;
 
         // Convert sRGB input pixels to linear light before accumulating.
         // Disabling accumulates in gamma space; faster but physically incorrect.
@@ -64,7 +61,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             _width  = width;
             _height = height;
-            _referenceFrameCount = Math.Max(1, referenceFrameCount);
+            _targetSampleCount = Math.Max(1, referenceFrameCount);
             int count = width * height;
             _sumB = new float[count];
             _sumG = new float[count];
@@ -98,9 +95,9 @@ namespace Phototesting.CameraCapture.Exposure
                 for (int i = 0; i < pixelCount; i++)
                 {
                     int b = i * 4;
-                    _sumB[i] += SRgbToLinear[bytes[b + 0]];
-                    _sumG[i] += SRgbToLinear[bytes[b + 1]];
-                    _sumR[i] += SRgbToLinear[bytes[b + 2]];
+                    _sumB[i] += ExposureUtils.SRgbToLinear[bytes[b + 0]];
+                    _sumG[i] += ExposureUtils.SRgbToLinear[bytes[b + 1]];
+                    _sumR[i] += ExposureUtils.SRgbToLinear[bytes[b + 2]];
                 }
             }
             else
@@ -136,11 +133,11 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 float invRef = NormalizeByActualFrameCount
                     ? 1f / Math.Max(_frameCount, 1)
-                    : 1f / _referenceFrameCount;
+                    : 1f / _targetSampleCount;
 
                 // Capture flags as locals to avoid repeated field reads in the hot loop.
-                bool spectral = ApplySpectralWeights;
-                bool hd       = ApplyHDCurve;
+                bool applySpectral = ApplySpectralWeights;
+                bool applyHdCurve  = ApplyHDCurve;
                 float devStr  = DevelopmentStrength;
                 float gamma   = HDGamma;
 
@@ -154,11 +151,11 @@ namespace Phototesting.CameraCapture.Exposure
                 {
                     int idx = i * 4;
 
-                    if (spectral)
+                    if (applySpectral)
                     {
                         // Collapse RGB to a single silver-density exposure value.
                         float E = (_sumR[i] * rw + _sumG[i] * gw + _sumB[i] * bw) * invRef;
-                        byte  v = ToByte(hd ? HDCurve(E, devStr, gamma) : E);
+                        byte  v = ToByte(applyHdCurve ? HDCurve(E, devStr, gamma) : E);
                         bytes[idx + 0] = v;
                         bytes[idx + 1] = v;
                         bytes[idx + 2] = v;
@@ -169,9 +166,9 @@ namespace Phototesting.CameraCapture.Exposure
                         float Eb = _sumB[i] * invRef;
                         float Eg = _sumG[i] * invRef;
                         float Er = _sumR[i] * invRef;
-                        bytes[idx + 0] = ToByte(hd ? HDCurve(Eb, devStr, gamma) : Eb);
-                        bytes[idx + 1] = ToByte(hd ? HDCurve(Eg, devStr, gamma) : Eg);
-                        bytes[idx + 2] = ToByte(hd ? HDCurve(Er, devStr, gamma) : Er);
+                        bytes[idx + 0] = ToByte(applyHdCurve ? HDCurve(Eb, devStr, gamma) : Eb);
+                        bytes[idx + 1] = ToByte(applyHdCurve ? HDCurve(Eg, devStr, gamma) : Eg);
+                        bytes[idx + 2] = ToByte(applyHdCurve ? HDCurve(Er, devStr, gamma) : Er);
                     }
 
                     bytes[idx + 3] = 255;
@@ -195,19 +192,6 @@ namespace Phototesting.CameraCapture.Exposure
             return MathF.Pow(MathF.Max(density, 0f), gamma);
         }
 
-        // Precomputes the standard sRGB-to-linear LUT (256 entries).
-        private static float[] BuildLinearTable()
-        {
-            float[] t = new float[256];
-            for (int i = 0; i < 256; i++)
-            {
-                float c = i / 255f;
-                t[i] = c <= 0.04045f
-                    ? c / 12.92f
-                    : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
-            }
-            return t;
-        }
 
         private static byte ToByte(float v)
         {
