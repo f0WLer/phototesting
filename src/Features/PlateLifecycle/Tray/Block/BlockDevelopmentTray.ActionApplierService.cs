@@ -64,6 +64,7 @@ namespace Phototesting.PlateLifecycle.Tray
                     newPlate = new ItemStack(developedItem);
                     try { newPlate.Attributes.MergeTree(plate.Attributes.Clone()); }
                     catch (Exception ex) { Log.Warn(world?.Logger, "TryApplyDeveloperPourServer: attribute merge failed: {0}", ex.Message); }
+                    newPlate.Attributes.RemoveAttribute(PlateStateAttributes.NameLangCode);
                 }
 
                 int newPours = currentPours + 1;
@@ -107,6 +108,7 @@ namespace Phototesting.PlateLifecycle.Tray
                     newPlate = new ItemStack(finishedItem);
                     try { newPlate.Attributes.MergeTree(plate.Attributes.Clone()); }
                     catch (Exception ex) { Log.Warn(world?.Logger, "TryApplyFixerPourServer: attribute merge failed: {0}", ex.Message); }
+                    newPlate.Attributes.RemoveAttribute(PlateStateAttributes.NameLangCode);
 
                     PlateStateService.EnsureProcessId(newPlate);
                     PlateStateService.SetStage(newPlate, PlateStage.Finished);
@@ -157,7 +159,7 @@ namespace Phototesting.PlateLifecycle.Tray
                 be.TrySetPlate(result.Plate);
 
                 string? stageVariant = result.StageVariantOverride
-                    ?? PlateStageUtil.ToAttributeString(PlateStateService.GetStage(result.Plate));
+                    ?? ResolveTrayBlockVariantStage(PlateStateService.GetStage(result.Plate));
 
                 owner.SwapTrayBlockForPlateStage(world, pos, stageVariant, result.Plate);
                 return true;

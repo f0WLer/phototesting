@@ -64,7 +64,7 @@ namespace Phototesting.PlateLifecycle.Tray
 
                 if (IsHoldingChemical(activeSlot, spec.DeveloperPortionCode))
                 {
-                    if (!TryGetDeveloperPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack clientDevPlate, out _, out _, out int currentPours)) return false;
+                    if (!TryGetDeveloperPourContext(be, spec.DeveloperApplicationsRequired, out ItemStack clientDevPlate, out bool clientIsExposed, out _, out int currentPours)) return false;
 
                     if (currentPours >= spec.DeveloperApplicationsRequired) return false;
                     if (PlateDryingTransition.IsDry(world, clientDevPlate))
@@ -73,6 +73,26 @@ namespace Phototesting.PlateLifecycle.Tray
                         return false;
                     }
                     if (!WetPlateChemicalUtil.HasConsumableChemical(activeSlot, spec.DeveloperPortionCode, spec.DeveloperAmountPerUse)) return false;
+
+                    // NOTE: Sealing is intentionally triggered here at interaction START (RMB press),
+                    // not at completion. The natural design would be to seal when the first pour
+                    // finishes, but that is impossible in singleplayer due to tick ordering:
+                    //
+                    //   OnBlockInteractStep is called server-first within the same game tick.
+                    //   When pour #1 reaches its duration, the server applies the transition
+                    //   (ExposurePaused → Developing), calls TrayTimedInteractionState.Clear,
+                    //   and returns false — all before the client's copy of the method runs.
+                    //   The client then calls TryResolveTimedActionKind, finds state already
+                    //   cleared, and returns false immediately, so any completion-side seal
+                    //   logic is never reached.
+                    //
+                    // At RMB-press time the client plate is guaranteed to still be ExposurePaused
+                    // (the server has not processed anything yet), so the condition is reliable.
+                    // TrySendSealForTray is idempotent: SealToPng deletes the .pex blob on
+                    // success, so a redundant second call returns null harmlessly.
+                    if (clientIsExposed && PlateStateService.GetStage(clientDevPlate) == PlateStage.ExposurePaused)
+                        if (world.Api is ICoreClientAPI capiSeal)
+                            PhotoTestingConfigAccess.ResolveModSystem(capiSeal)?.CameraCaptureBridge.TrySendSealForTray(capiSeal, blockSel.Position, clientDevPlate);
 
                     TrayTimedInteractionState.Begin(byPlayer, blockSel.Position, ActionDeveloper, GetDeveloperPourSeconds());
                     return true;
@@ -163,9 +183,12 @@ namespace Phototesting.PlateLifecycle.Tray
         {
             if (IsInsertablePlate(held))
             {
-                trayStage = PlateStateTransitions.IsDevelopingFamily(held)
-                    ? PlateStage.Developed
-                    : PlateStage.Exposed;
+                PlateStage currentStage = PlateStateService.GetStage(held);
+                trayStage = currentStage == PlateStage.ExposurePaused
+                    ? PlateStage.ExposurePaused
+                    : PlateStateTransitions.IsDevelopingFamily(held)
+                        ? PlateStage.Developed
+                        : PlateStage.Exposed;
                 return true;
             }
 
@@ -263,10 +286,6 @@ namespace Phototesting.PlateLifecycle.Tray
             if (world.Side == EnumAppSide.Client)
             {
                 TrayTimedInteractionState.SetNeedsRelease(byPlayer);
-                // ExposurePaused plate: seal now that the developer pour completed successfully.
-                if (actionKind == TrayActionKind.Developer && PlateStateService.GetStage(plate) == PlateStage.ExposurePaused)
-                    if (world.Api is ICoreClientAPI capiSeal)
-                        PhotoTestingConfigAccess.ResolveModSystem(capiSeal)?.CameraCaptureBridge.TrySendSealForTray(capiSeal, pos, plate);
             }
 
             if (world.Side == EnumAppSide.Server)
@@ -402,7 +421,7 @@ namespace Phototesting.PlateLifecycle.Tray
 
             PlateStateService.EnsureProcessId(toInsert);
             PlateStateService.EnsureStage(toInsert, trayStage);
-            SwapTrayBlockForPlateStage(world, trayPos, PlateStageUtil.ToAttributeString(trayStage), toInsert);
+            SwapTrayBlockForPlateStage(world, trayPos, ResolveTrayBlockVariantStage(trayStage), toInsert);
 
             activeSlot.TakeOut(1);
             activeSlot.MarkDirty();
@@ -582,6 +601,19 @@ namespace Phototesting.PlateLifecycle.Tray
             {
                 world.SpawnItemEntity(plateToKeep, pos.ToVec3d().Add(0.5, 0.5, 0.5));
             }
+        }
+
+        private static string? ResolveTrayBlockVariantStage(PlateStage stage)
+        {
+            return stage switch
+            {
+                PlateStage.ExposurePaused => PlateStageUtil.ToAttributeString(PlateStage.Exposed),
+                PlateStage.Exposed => PlateStageUtil.ToAttributeString(PlateStage.Exposed),
+                PlateStage.Developing => PlateStageUtil.ToAttributeString(PlateStage.Developed),
+                PlateStage.Developed => PlateStageUtil.ToAttributeString(PlateStage.Developed),
+                PlateStage.Finished => PlateStageUtil.ToAttributeString(PlateStage.Finished),
+                _ => PlateStageUtil.ToAttributeString(stage)
+            };
         }
 
         // Sends a concise server notification tied to the tray interaction outcome.
