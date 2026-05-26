@@ -1,8 +1,5 @@
 namespace Phototesting.CameraCapture.Exposure
 {
-    /// <summary>The three supported wet-plate chemistry variants, each with distinct film speed and spectral response.</summary>
-    internal enum PlateProcess { Chloride, Iodide, Bromide }
-
     /// <summary>
     /// Immutable emulsion parameters for a single wet-plate chemistry variant.
     /// Defines shutter timing (<see cref="DurationSeconds"/>, <see cref="SampleCount"/>) and the
@@ -61,15 +58,6 @@ namespace Phototesting.CameraCapture.Exposure
             "Bromide", durationSeconds: 3f, sampleCount: 32,
             redSensitivity: 0.30f, greenSensitivity: 0.59f, blueSensitivity: 1.00f,
             developmentStrength: 8.0f, hdGamma: 1.05f);
-
-        /// <summary>Returns the preset <see cref="PlateProcessProfile"/> for the given <see cref="PlateProcess"/> enum value.</summary>
-        internal static PlateProcessProfile ForProcess(PlateProcess process) => process switch
-        {
-            PlateProcess.Chloride => Chloride,
-            PlateProcess.Iodide   => Iodide,
-            PlateProcess.Bromide  => Bromide,
-            _                     => Iodide
-        };
 
         /// <summary>Parses a chemistry name (case-insensitive) into a <see cref="PlateProcessProfile"/>. Returns <see langword="false"/> when the name is unrecognised.</summary>
         internal static bool TryParse(string name, out PlateProcessProfile profile)

@@ -23,7 +23,7 @@ namespace Phototesting.CameraCapture.Exposure
         /// <summary>Writes the serialized accumulation blob to disk, creating the containing folder if it does not exist.</summary>
         internal static void Save(string exposureId, byte[] data)
         {
-            if (string.IsNullOrEmpty(exposureId) || data == null || data.Length == 0) return;
+            if (string.IsNullOrEmpty(exposureId) || data.Length == 0) return;
 
             string path = GetStorePath(exposureId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -31,7 +31,7 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         /// <summary>Reads a previously saved blob. Returns <see langword="false"/> when no file exists for this ID.</summary>
-        internal static bool TryLoad(string exposureId, out byte[]? data)
+        internal static bool TryLoad(string exposureId, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out byte[]? data)
         {
             data = null;
             if (string.IsNullOrEmpty(exposureId)) return false;
@@ -49,8 +49,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (string.IsNullOrEmpty(exposureId)) return;
 
             string path = GetStorePath(exposureId);
-            if (File.Exists(path))
-                File.Delete(path);
+            File.Delete(path);
         }
     }
 }

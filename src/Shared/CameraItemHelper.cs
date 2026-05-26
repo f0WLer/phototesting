@@ -83,7 +83,7 @@ namespace Phototesting
         internal static bool TryGetMountedCaptureState(ItemStack? cameraStack, out VirtualCameraState state, out ExposureStartOptions startOptions)
         {
             state = default;
-            startOptions = ExposureStartOptions.Manual();
+            startOptions = default;
             if (cameraStack?.Item is not ItemWetplateCamera) return false;
             string? packed = cameraStack.Attributes.GetString(MountedCaptureAttrKey, null);
             if (string.IsNullOrEmpty(packed)) return false;

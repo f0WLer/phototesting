@@ -31,8 +31,6 @@ namespace Phototesting.CameraCapture.Exposure
             bool spectral   = true,
             bool hdCurve    = true)
         {
-            if (bmp == null) return;
-
             int count     = bmp.Width * bmp.Height;
             int byteCount = count * 4;
 
@@ -75,7 +73,6 @@ namespace Phototesting.CameraCapture.Exposure
                     bytes[idx + 0] = bv;
                     bytes[idx + 1] = bv;
                     bytes[idx + 2] = bv;
-                    // alpha unchanged
                 }
 
                 Marshal.Copy(bytes, 0, bmp.GetPixels(), byteCount);

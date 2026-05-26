@@ -195,8 +195,7 @@ namespace Phototesting.CameraCapture.Exposure
                 // Ensure fully opaque alpha so the accumulator treats every pixel as solid.
                 for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
 
-                if (_buffer is ICpuExposureAccumulator cpu)
-                    cpu.Accumulate(pixels, _downsampleFbo.Width, _downsampleFbo.Height);
+                _buffer.Accumulate(pixels, _downsampleFbo.Width, _downsampleFbo.Height);
             }
             finally
             {
@@ -230,9 +229,6 @@ namespace Phototesting.CameraCapture.Exposure
 
         private static void ApplyProcessToBuffer(ExposureAccumulationBuffer buf, PlateProcessProfile process)
         {
-            buf.LinearizeInput = true;
-            buf.ApplySpectralWeights = true;
-            buf.ApplyHDCurve = true;
             buf.RedSensitivity = process.RedSensitivity;
             buf.GreenSensitivity = process.GreenSensitivity;
             buf.BlueSensitivity = process.BlueSensitivity;

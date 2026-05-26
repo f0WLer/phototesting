@@ -17,9 +17,6 @@ namespace Phototesting.CameraCapture.Exposure
             TargetSamples = 2
         }
 
-        /// <summary>Open-ended exposure; the player controls when the shutter closes.</summary>
-        internal static ExposureStartOptions Manual() => new(ExposureStopMode.Manual);
-
         /// <summary>Exposure closes automatically after the given number of wall-clock seconds.</summary>
         internal static ExposureStartOptions Timer(float stopAfterSeconds)
             => new(ExposureStopMode.Timer, Math.Max(0f, stopAfterSeconds));

@@ -7,7 +7,7 @@ namespace Phototesting.CameraCapture.Exposure
 
     /// <summary>
     /// Binary layout for persisted exposure accumulation blobs.
-    /// A blob begins with a 24-byte header (magic, version, dimensions, frame count) followed
+    /// A blob begins with a 28-byte header (magic, version, dimensions, frame count) followed
     /// by the raw per-channel float sums. Used by <see cref="IExposureAccumulator.SerializeAccumulation"/>
     /// and read back by <see cref="PartialExposureSealer"/>.
     /// </summary>
@@ -44,7 +44,7 @@ namespace Phototesting.CameraCapture.Exposure
         internal static bool TryReadHeader(byte[] data, out ExposureAccumulationBlobHeader header)
         {
             header = default;
-            if (data == null || data.Length < HeaderSize) return false;
+            if (data.Length < HeaderSize) return false;
 
             int magic = ReadInt(data, 0);
             int version = ReadInt(data, 4);

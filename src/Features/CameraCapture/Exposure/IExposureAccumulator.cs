@@ -139,5 +139,7 @@ namespace Phototesting.CameraCapture.Exposure
         void EndExposurePassthrough();
         /// <summary>Delivers a developed mid-exposure preview frame to the sink for display.</summary>
         void StoreExposureFrame(SKBitmap bitmap);
+        /// <summary>Resets the idle-preview timer so the next render tick produces a fresh frame.</summary>
+        void ForceRefreshNextFrame();
     }
 }

@@ -30,8 +30,7 @@ namespace Phototesting.CameraCapture.Exposure
             WetplateEffectsConfig baselineEffects,
             WetplateEffectsConfig? effectsOverride = null)
         {
-            if (string.IsNullOrEmpty(exposureId)) return null;
-            if (!ExposureAccumulationStore.TryLoad(exposureId, out byte[]? data) || data == null) return null;
+            if (!ExposureAccumulationStore.TryLoad(exposureId, out byte[]? data)) return null;
 
             string? fileName = RenderBlobToPng(data, profile, targetFrameCount, maxDimension, baselineEffects, effectsOverride);
             if (!string.IsNullOrEmpty(fileName))
@@ -52,14 +51,22 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out var header)) return null;
             if (header.FrameCount <= 0) return null;
-            if (!TryGetCpuCompatibleBlob(data, header, out byte[] cpuCompatibleData)) return null;
 
-            int referenceFrameCount = Math.Max(1, targetFrameCount);
+            byte[] cpuCompatibleData;
+            switch (header.BackendTag)
+            {
+                case ExposureAccumulationBlobFormat.CpuBackend:
+                    if (header.ChannelCount != 3) return null;
+                    cpuCompatibleData = data;
+                    break;
+                case ExposureAccumulationBlobFormat.GpuBackend:
+                    if (!TryConvertGpuBlobToCpuBlob(data, header, out cpuCompatibleData)) return null;
+                    break;
+                default:
+                    return null;
+            }
 
-            var buffer = new ExposureAccumulationBuffer(header.Width, header.Height, referenceFrameCount);
-            buffer.LinearizeInput       = true;
-            buffer.ApplySpectralWeights = true;
-            buffer.ApplyHDCurve         = true;
+            var buffer = new ExposureAccumulationBuffer(header.Width, header.Height, Math.Max(1, targetFrameCount));
             buffer.RedSensitivity        = profile.RedSensitivity;
             buffer.GreenSensitivity      = profile.GreenSensitivity;
             buffer.BlueSensitivity       = profile.BlueSensitivity;
@@ -79,24 +86,6 @@ namespace Phototesting.CameraCapture.Exposure
             finally
             {
                 cropped.Dispose();
-            }
-        }
-
-        private static bool TryGetCpuCompatibleBlob(byte[] data, ExposureAccumulationBlobHeader header, out byte[] cpuCompatibleData)
-        {
-            cpuCompatibleData = Array.Empty<byte>();
-
-            switch (header.BackendTag)
-            {
-                case ExposureAccumulationBlobFormat.CpuBackend:
-                    cpuCompatibleData = data;
-                    return header.ChannelCount == 3;
-
-                case ExposureAccumulationBlobFormat.GpuBackend:
-                    return TryConvertGpuBlobToCpuBlob(data, header, out cpuCompatibleData);
-
-                default:
-                    return false;
             }
         }
 

@@ -263,7 +263,7 @@ void main() {
 
                 // Synchronous readback — acceptable here since Develop() is not in the hot path.
                 GL.Finish();
-                return ReadbackBitmap();
+                return ClientFramebufferCapture.ReadToSkBitmap(_capi, _developFbo, flip: false);
             }
             finally
             {
@@ -388,14 +388,9 @@ void main() {
                 try { GL.DeleteTexture(texId);     } catch { /* best-effort */ }
             }
 
-            if (_accumProgram   != 0) try { GL.DeleteProgram(_accumProgram);      } catch { /* best-effort */ }
-            if (_developProgram != 0) try { GL.DeleteProgram(_developProgram);    } catch { /* best-effort */ }
-            if (_quadVao        != 0) try { GL.DeleteVertexArray(_quadVao);       } catch { /* best-effort */ }
-        }
-
-        private SKBitmap ReadbackBitmap()
-        {
-            return ClientFramebufferCapture.ReadToSkBitmap(_capi, _developFbo, flip: false);
+            try { GL.DeleteProgram(_accumProgram);   } catch { /* best-effort */ }
+            try { GL.DeleteProgram(_developProgram); } catch { /* best-effort */ }
+            try { GL.DeleteVertexArray(_quadVao);     } catch { /* best-effort */ }
         }
 
         private SKBitmap CreateBlackBitmap()
@@ -494,7 +489,6 @@ void main() {
             int floatCount  = pixelCount * 4;
             byte[] blob = new byte[ExposureAccumulationBlobFormat.GetTotalByteCount(Width, Height, 4)];
 
-            int pos = ExposureAccumulationBlobFormat.HeaderSize;
             ExposureAccumulationBlobFormat.WriteHeader(blob, Width, Height, 4, _frameCount, ExposureAccumulationBlobFormat.GpuBackend);
 
             SaveGlState(out GlState state);
@@ -503,7 +497,7 @@ void main() {
                 float[] floats = new float[floatCount];
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _accumFboIds[_readIdx]);
                 GL.ReadPixels(0, 0, Width, Height, PixelFormat.Rgba, PixelType.Float, floats);
-                System.Buffer.BlockCopy(floats, 0, blob, pos, floatCount * sizeof(float));
+                System.Buffer.BlockCopy(floats, 0, blob, ExposureAccumulationBlobFormat.HeaderSize, floatCount * sizeof(float));
             }
             finally
             {

@@ -35,7 +35,7 @@ namespace Phototesting.CameraCapture.Exposure
         private ExposureReadbackPipeline? _readback;
         private byte[]? _readbackScratch;
         private PlateProcessProfile _process = PlateProcessProfile.Iodide;
-        private ExposureStartOptions _startOptions = ExposureStartOptions.Manual();
+        private ExposureStartOptions _startOptions;
         private float _elapsedSinceLastSample;
         private float _elapsedSinceLastPreview;
 
@@ -404,7 +404,7 @@ namespace Phototesting.CameraCapture.Exposure
         /// </summary>
         internal void PrimeFromPartial(byte[] data)
         {
-            if (_buffer == null || data == null) return;
+            if (_buffer == null) return;
 
             if (!_buffer.DeserializeAccumulation(data, out int restoredFrames))
             {

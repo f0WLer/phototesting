@@ -209,7 +209,6 @@ namespace Phototesting.CameraCapture.Exposure
 
         private void AllocatePbos()
         {
-            FreePbos();
             int byteSize = Width * Height * 4;
             GL.GenBuffers(RingSize, _pboIds);
             for (int i = 0; i < RingSize; i++)
