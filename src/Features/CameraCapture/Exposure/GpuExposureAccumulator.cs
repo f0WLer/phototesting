@@ -15,7 +15,6 @@ namespace Phototesting.CameraCapture.Exposure
     /// </summary>
     internal sealed class GpuExposureAccumulator : IGpuExposureAccumulator
     {
-        // ── IExposureAccumulator properties ──────────────────────────────────────────────
         public int Width  { get; }
         public int Height { get; }
         public int FramesAccumulated => _frameCount;
@@ -30,7 +29,7 @@ namespace Phototesting.CameraCapture.Exposure
         public float DevelopmentStrength     { get; set; } = 3.5f;
         public float HDGamma                 { get; set; } = 1.1f;
 
-        // ── Internal state ────────────────────────────────────────────────────────────────
+        // Internal state.
         private readonly ICoreClientAPI _capi;
         private readonly int _targetSampleCount;
         private int _frameCount;
@@ -70,8 +69,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         private bool _disposed;
 
-        // ── GLSL source (shared vertex shader + two fragment shaders) ─────────────────────
-        //
+        // GLSL source — vertex shader + accumulation and develop fragment shaders.
         // Vertex: produces a fullscreen triangle from gl_VertexID, no VBO needed.
         // UVs (0,0)→(1,1) map directly onto the fullscreen quad via the large-triangle trick.
         private const string VertSrc = @"
@@ -150,7 +148,6 @@ void main() {
     out_color = vec4(result, 1.0);
 }";
 
-        // ── Constructor ───────────────────────────────────────────────────────────────────
         internal GpuExposureAccumulator(ICoreClientAPI capi, int width, int height, int referenceFrameCount)
         {
             _capi = capi;
@@ -161,7 +158,6 @@ void main() {
             AllocateGpuResources();
         }
 
-        // ── IGpuExposureAccumulator ───────────────────────────────────────────────────────
         public void Accumulate(FrameBufferRef sourceFbo)
         {
             if (_disposed) return;
@@ -201,7 +197,6 @@ void main() {
             }
         }
 
-        // ── IExposureAccumulator ──────────────────────────────────────────────────────────
         public void Reset()
         {
             if (_disposed) return;
@@ -277,8 +272,6 @@ void main() {
             _disposed = true;
             FreeGpuResources();
         }
-
-        // ── Private helpers ───────────────────────────────────────────────────────────────
 
         private void AllocateGpuResources()
         {

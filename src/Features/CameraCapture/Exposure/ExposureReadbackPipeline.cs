@@ -121,19 +121,17 @@ namespace Phototesting.CameraCapture.Exposure
 
             try
             {
-                // --- Stage 1: blit-downsample with Y-flip ---
-                // The Y-flip converts OpenGL's bottom-left-origin image to top-left origin,
-                // replacing the Skia rotate+mirror pass in ReadFramebuffer.
+                // 1. Blit-downsample with Y-flip (converts bottom-left origin to top-left).
                 ExposureUtils.BlitYFlipped(fromFbo, _downsampleFbo!);
 
-                // --- Stage 2: async ReadPixels into write PBO (no CPU stall) ---
+                // 2. Async ReadPixels into the write PBO — no CPU stall.
                 int writeIdx = _totalKicksIssued % RingSize;
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _downsampleFbo.FboId);
                 GL.BindBuffer(BufferTarget.PixelPackBuffer, _pboIds[writeIdx]);
                 GL.ReadPixels(0, 0, Width, Height, PixelFormat.Bgra, PixelType.UnsignedByte, IntPtr.Zero);
                 _pboReadbackReady[writeIdx] = true;
 
-                // --- Stage 3: map the PBO from two kicks ago (guaranteed done by GPU) ---
+                // 3. Map the PBO from two kicks ago — guaranteed ready, no stall.
                 bool produced = false;
                 if (_totalKicksIssued >= RingSize - 1)
                 {
