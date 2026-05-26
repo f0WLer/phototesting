@@ -64,6 +64,9 @@ namespace Phototesting.CameraCapture
             _latestPreviewPixels = null;
         }
 
+        // Resets the idle-preview refresh timer so a fresh frame is produced on the next render tick.
+        public void ForceRefreshNextFrame() => _lastRenderMs = 0;
+
         // Stores an already-developed exposure bitmap into the preview buffer.
         // Ignored unless BeginExposurePassthrough() was called.
         public void StoreExposureFrame(SKBitmap bmp)
@@ -115,9 +118,8 @@ namespace Phototesting.CameraCapture
 
             if (!ExposureRenderer.TryGetIdleCameraForPreview(out VirtualCamera camera)) return;
 
-            int refreshMs = cfg!.DebugPreviewRefreshMs;
             long nowMs = _capi.ElapsedMilliseconds;
-            if (nowMs - _lastRenderMs < refreshMs) return;
+            if (nowMs - _lastRenderMs < cfg!.DebugPreviewRefreshMs) return;
             _lastRenderMs = nowMs;
 
             // Reinitialize the FBO if the window was resized since last render.
@@ -134,11 +136,24 @@ namespace Phototesting.CameraCapture
                 // Clear the primary FBO that RenderCamera may have left in an intermediate state.
                 GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-                int maxDimension = cfg.DebugPreviewMaxDimension;
-                using SKBitmap raw = VirtualCaptureService.ReadFramebuffer(_capi, camera.fbo);
-                using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
+                using SKBitmap raw = ClientFramebufferCapture.ReadToSkBitmap(_capi, camera.fbo);
+                using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, cfg.DebugPreviewMaxDimension);
 
-                EmulsionDevelop.ApplyInPlace(croppedBitmap, EmulsionProcess);
+                // Reflect any live-tuning overrides from the exposure renderer (physics flags + chemistry).
+                // ExposureRenderer non-null guaranteed by guard above.
+                VirtualExposureRenderer er = ExposureRenderer;
+                EmulsionDevelop.ApplyInPlace(
+                    croppedBitmap,
+                    new PlateProcessProfile(
+                        EmulsionProcess.Name, EmulsionProcess.DurationSeconds, EmulsionProcess.SampleCount,
+                        er.EffectiveRedSens,
+                        er.EffectiveGreenSens,
+                        er.EffectiveBlueSens,
+                        er.EffectiveDevStrength,
+                        er.EffectiveHDGamma),
+                    linearize: er.PhysicsLinearize,
+                    spectral:  er.PhysicsSpectralWeights,
+                    hdCurve:   er.PhysicsHDCurve);
 
                 int count = croppedBitmap.Width * croppedBitmap.Height;
                 int[] pixels = new int[count];

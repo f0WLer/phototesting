@@ -72,7 +72,7 @@ namespace Phototesting.CameraCapture
                     cam.RenderCameraInStoredDimension(dt);
                     GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-                    using SKBitmap raw = ReadFramebuffer(_capi, cam.fbo);
+                    using SKBitmap raw = ClientFramebufferCapture.ReadToSkBitmap(_capi, cam.fbo);
                     using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
 
                     EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
@@ -102,12 +102,6 @@ namespace Phototesting.CameraCapture
             });
 
             _capi.Event.RegisterRenderer(renderer, EnumRenderStage.Before, "phototesting-virtualcapture");
-        }
-
-        // Reads pixels from a virtual FBO into a SkiaSharp bitmap through the engine screenshot path.
-        internal static SKBitmap ReadFramebuffer(ICoreClientAPI capi, FrameBufferRef framebuffer)
-        {
-            return ClientFramebufferCapture.ReadToSkBitmap(capi, framebuffer);
         }
 
         public void Dispose()

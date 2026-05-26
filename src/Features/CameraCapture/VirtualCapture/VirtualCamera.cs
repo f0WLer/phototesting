@@ -149,9 +149,6 @@ namespace Phototesting.CameraCapture
             _lastSelfPortraitRenderMs = 0;
         }
 
-        internal VirtualCameraState GetState()
-            => new VirtualCameraState(CameraPos, Yaw, Pitch, Fov, Dimension, SelfPortrait);
-
         internal void RenderCameraInStoredDimension(float dt)
         {
             var playerPos = _capi.World.Player.Entity.Pos;
