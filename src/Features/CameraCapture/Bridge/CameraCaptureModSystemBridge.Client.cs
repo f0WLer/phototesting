@@ -496,9 +496,22 @@ namespace Phototesting.CameraCapture
                     acc.Pause();
 
                     if (acc.FramesAccumulated >= acc.TargetFrames)
+                    {
                         ExportAndSealExposure(byEntity);
+                    }
                     else
+                    {
+                        if (acc is ViewportExposureAccumulator viewportAcc
+                            && acc.FramesAccumulated > 0
+                            && !string.IsNullOrEmpty(_owner.ActiveExposureId))
+                        {
+                            byte[]? blob = viewportAcc.ExportPartial();
+                            if (blob != null)
+                                ExposureAccumulationStore.Save(_owner.ActiveExposureId, blob);
+                        }
+
                         SendExposureStatePacket(isExposing: false, acc.FramesAccumulated, _owner.ActiveExposureId, acc.TargetFrames);
+                    }
 
                     // Exit viewfinder immediately when pausing if RMB is not held.
                     if (!GetRightMouseDown() && _owner.IsViewfinderActive)
@@ -594,7 +607,10 @@ namespace Phototesting.CameraCapture
                         ?? loadedPlate?.Attributes?.GetString(PlateStateAttributes.ExposureId)
                         ?? string.Empty;
                     if (!string.IsNullOrEmpty(exposureId))
+                    {
+                        ExposureAccumulationStore.Delete(exposureId);
                         ViewfinderExposureRegistry.Remove(exposureId);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -769,6 +785,14 @@ namespace Phototesting.CameraCapture
                 if (renderer.State != ExposureState.Capturing) return;
 
                 renderer.Pause();
+
+                if (renderer.FramesAccumulated > 0 && !string.IsNullOrEmpty(_mountedExposureId))
+                {
+                    byte[]? blob = renderer.ExportPartial();
+                    if (blob != null)
+                        ExposureAccumulationStore.Save(_mountedExposureId, blob);
+                }
+
                 SendExposureStatePacket(false, renderer.FramesAccumulated, _mountedExposureId, renderer.CapFrameCount);
             }
 

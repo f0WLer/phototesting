@@ -133,6 +133,15 @@ namespace Phototesting.CameraCapture.Exposure
             }
         }
 
+        /// <summary>
+        /// Serializes the current accumulated frame sums for pause/resume and tray-seal workflows.
+        /// Returns <see langword="null"/> when no frames have been accumulated.
+        /// </summary>
+        internal byte[]? ExportPartial()
+        {
+            return _buffer?.SerializeAccumulation();
+        }
+
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing || _buffer == null) return;
