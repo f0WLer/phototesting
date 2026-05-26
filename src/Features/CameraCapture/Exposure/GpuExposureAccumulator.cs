@@ -69,9 +69,9 @@ namespace Phototesting.CameraCapture.Exposure
 
         private bool _disposed;
 
-        // GLSL source — vertex shader + accumulation and develop fragment shaders.
-        // Vertex: produces a fullscreen triangle from gl_VertexID, no VBO needed.
-        // UVs (0,0)→(1,1) map directly onto the fullscreen quad via the large-triangle trick.
+        // Vertex shader — fullscreen triangle from gl_VertexID, no VBO needed.
+        // UVs (0,0)→(1,1) via the large-triangle trick; shared by both GPU programs.
+        // Fragment shaders are loaded from embedded resources at construction time.
         private const string VertSrc = @"
 #version 330 core
 out vec2 v_uv;
@@ -82,71 +82,7 @@ void main() {
     gl_Position = vec4(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
 }";
 
-        // Fragment: adds the new sample (optionally linearised) to the running RGBA32F sum.
-        private const string AccumFragSrc = @"
-#version 330 core
-in  vec2 v_uv;
-out vec4 out_sum;
 
-uniform sampler2D u_sample;   // RGBA8 - new frame blit from virtual camera
-uniform sampler2D u_accum;    // RGBA32F - running channel sums
-uniform bool      u_linearize;
-
-float srgbToLinear(float c) {
-    return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
-}
-
-void main() {
-    vec3 s    = texture(u_sample, v_uv).rgb;
-    vec3 prev = texture(u_accum,  v_uv).rgb;
-    if (u_linearize)
-        s = vec3(srgbToLinear(s.r), srgbToLinear(s.g), srgbToLinear(s.b));
-    out_sum = vec4(prev + s, 1.0);
-}";
-
-        // Fragment: maps the accumulated sums through spectral-weights and H&D curve to RGBA8.
-        // Mirrors ExposureAccumulationBuffer.Develop() exactly, including weight normalisation.
-        private const string DevelopFragSrc = @"
-#version 330 core
-in  vec2 v_uv;
-out vec4 out_color;
-
-uniform sampler2D u_accum;
-uniform float u_inv_ref;
-uniform bool  u_spectral;
-uniform bool  u_hd_curve;
-uniform float u_red_sens;
-uniform float u_green_sens;
-uniform float u_blue_sens;
-uniform float u_dev_strength;
-uniform float u_gamma;
-
-float hdCurve(float E, float k, float g) {
-    float d = log(1.0 + E * k) / log(10.0);
-    return pow(max(d, 0.0), g);
-}
-
-void main() {
-    vec3 sum = texture(u_accum, v_uv).rgb;
-    vec3 E   = sum * u_inv_ref;
-
-    vec3 result;
-    if (u_spectral) {
-        float e = E.r * u_red_sens + E.g * u_green_sens + E.b * u_blue_sens;
-        float v = u_hd_curve ? hdCurve(e, u_dev_strength, u_gamma) : e;
-        result  = vec3(clamp(v, 0.0, 1.0));
-    } else {
-        if (u_hd_curve) {
-            result = clamp(vec3(
-                hdCurve(E.r, u_dev_strength, u_gamma),
-                hdCurve(E.g, u_dev_strength, u_gamma),
-                hdCurve(E.b, u_dev_strength, u_gamma)), 0.0, 1.0);
-        } else {
-            result = clamp(E, 0.0, 1.0);
-        }
-    }
-    out_color = vec4(result, 1.0);
-}";
 
         internal GpuExposureAccumulator(ICoreClientAPI capi, int width, int height, int referenceFrameCount)
         {
@@ -345,9 +281,11 @@ void main() {
             }
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, prevFbo);
 
-            // Compile shaders.
-            _accumProgram   = CompileProgram(VertSrc, AccumFragSrc);
-            _developProgram = CompileProgram(VertSrc, DevelopFragSrc);
+            // Load fragment shaders from embedded resources and compile.
+            string accumFrag   = LoadShaderSource("Phototesting.gpu-exposure-accum.frag.glsl");
+            string developFrag = LoadShaderSource("Phototesting.gpu-exposure-develop.frag.glsl");
+            _accumProgram   = CompileProgram(VertSrc, accumFrag);
+            _developProgram = CompileProgram(VertSrc, developFrag);
 
             // Cache uniform locations (queried once here; zero-cost per draw call).
             _uAccumSample    = GL.GetUniformLocation(_accumProgram,   "u_sample");
@@ -536,7 +474,14 @@ void main() {
             return true;
         }
 
-        // ── Shader compilation ────────────────────────────────────────────────────────────
+        private static string LoadShaderSource(string resourceName)
+        {
+            var asm = typeof(GpuExposureAccumulator).Assembly;
+            using var stream = asm.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded shader not found: {resourceName}");
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
 
         private static int CompileProgram(string vertSrc, string fragSrc)
         {

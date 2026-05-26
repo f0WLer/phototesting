@@ -56,14 +56,14 @@ namespace Phototesting.CameraCapture.Exposure
 
                     // Spectral collapse: weight each channel by emulsion sensitivity → single exposure value.
                     // Without spectral weights, fall back to standard Rec.601 luminance.
-                    float E = spectral
+                    float e = spectral
                         ? rL * rw + gL * gw + bL * bw
                         : 0.299f * rL + 0.587f * gL + 0.114f * bL;
 
-                    // H&D characteristic curve: log10(1 + E * k)^gamma.
+                    // H&D characteristic curve: log10(1 + e * k)^gamma.
                     float v = hdCurve
-                        ? MathF.Pow(MathF.Max(MathF.Log10(1f + E * devStr), 0f), gamma)
-                        : E;
+                        ? MathF.Pow(MathF.Max(MathF.Log10(1f + e * devStr), 0f), gamma)
+                        : e;
 
                     byte bv = ToByte(v);
                     bytes[idx + 0] = bv;

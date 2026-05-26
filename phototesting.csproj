@@ -75,6 +75,15 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="src\Features\CameraCapture\Exposure\Shaders\gpu-exposure-accum.frag.glsl">
+      <LogicalName>Phototesting.gpu-exposure-accum.frag.glsl</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="src\Features\CameraCapture\Exposure\Shaders\gpu-exposure-develop.frag.glsl">
+      <LogicalName>Phototesting.gpu-exposure-develop.frag.glsl</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <!-- Don't compile or deploy reference repos/tools checked into the workspace. -->
   <ItemGroup>
     <Compile Remove="reference\**\*.cs" />
