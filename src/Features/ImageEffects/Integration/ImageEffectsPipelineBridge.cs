@@ -20,9 +20,14 @@ namespace Phototesting.ImageEffects
                 : baselineProfile;
         }
 
+        // Set to false to skip all finishing effects on every output path (handheld, tray seal, screenshot).
+        // Previews are unaffected — they never apply finishing effects.
+        internal static bool ApplyEffects = false;
+
         // Applies the effects pipeline in-place for one captured bitmap.
         internal static void ApplyCaptureEffects(SKBitmap bitmap, string seedKey, WetplateEffectsConfig profile)
         {
+            if (!ApplyEffects) return;
             WetplateEffects.ApplyInPlace(bitmap, seedKey, profile);
         }
     }
