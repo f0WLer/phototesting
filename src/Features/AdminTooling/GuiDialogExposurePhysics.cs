@@ -12,7 +12,7 @@ namespace Phototesting.AdminTooling
         private readonly VirtualExposureRenderer _renderer;
         private readonly PhotoTestingModSystem _owner;
 
-        public override string? ToggleKeyCombinationCode => null;
+        public override string ToggleKeyCombinationCode => "phototesting-exposuregui";
 
         internal GuiDialogExposurePhysics(
             ICoreClientAPI capi,
@@ -31,7 +31,7 @@ namespace Phototesting.AdminTooling
 
         private void ComposeDialog()
         {
-            const double dialogW  = 520.0;
+            const double dialogW  = 360.0;
             const double labelW   = 160.0;
             const double sliderW  = dialogW - labelW - 14.0;
             const double halfW    = dialogW / 2.0;
@@ -94,6 +94,12 @@ namespace Phototesting.AdminTooling
             var (lGrn,  sGrn)  = SliderRow(y, labelW, sliderW); y += rowH;
             var (lVig,  sVig)  = SliderRow(y, labelW, sliderW); y += rowH;
             var (lImp,  sImp)  = SliderRow(y, labelW, sliderW); y += rowH + 8;
+
+            // ── Dev Tools section ───────────────────────────────────────────────
+            var devHeader    = B(0, y, dialogW, 20);
+            y += 26;
+            var givePlateBtn = B(0, y, 220, 25);
+            y += rowH + 4;
 
             // Close button
             var closeBtn = B(dialogW - 90, y, 90, 25);
@@ -182,6 +188,9 @@ namespace Phototesting.AdminTooling
                 .AddStaticText("Imperfection",        CairoFont.WhiteDetailText(), lImp)
                 .AddSlider(v => { Effects.Imperfection        = v / 100f; return true; }, sImp, "sl-imperfection")
 
+                .AddStaticText("─── Dev Tools ───", CairoFont.WhiteSmallText(), devHeader)
+                .AddSmallButton("Give Sensitized Plate", OnGiveSensitizedPlate, givePlateBtn)
+
                 .AddSmallButton("Close", TryClose, closeBtn)
 
                 .EndChildElements()
@@ -233,6 +242,12 @@ namespace Phototesting.AdminTooling
             // Reopen the dialog to reseed all sliders from the process profile defaults.
             TryClose();
             TryOpen();
+            return true;
+        }
+
+        private bool OnGiveSensitizedPlate()
+        {
+            _owner.ClientChannel?.SendPacket(new GiveSensitizedPlatePacket());
             return true;
         }
 

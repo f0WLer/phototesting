@@ -1,3 +1,4 @@
+using Phototesting.CameraCapture.Exposure;
 using Vintagestory.API.Client;
 
 namespace Phototesting.AdminTooling
@@ -16,6 +17,21 @@ namespace Phototesting.AdminTooling
                 OnWetplateClientCommand
             );
 #pragma warning restore CS0618
+
+            api.Input.RegisterHotKey(
+                "phototesting-exposuregui",
+                "Phototesting: Open Exposure Physics GUI",
+                GlKeys.Unknown,
+                HotkeyType.GUIOrOtherControls);
+            api.Input.SetHotKeyHandler("phototesting-exposuregui", _ =>
+            {
+                VirtualExposureRenderer? renderer = _owner.CameraCaptureBridge._virtualExposureRenderer;
+                if (renderer == null) return false;
+                _exposurePhysicsDialog ??= new GuiDialogExposurePhysics(api, renderer, _owner);
+                if (_exposurePhysicsDialog.IsOpened()) _exposurePhysicsDialog.TryClose();
+                else _exposurePhysicsDialog.TryOpen();
+                return true;
+            });
         }
     }
 }

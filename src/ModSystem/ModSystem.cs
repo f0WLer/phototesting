@@ -70,6 +70,7 @@ namespace Phototesting
             var channel = CameraCaptureChannelRegistration.RegisterCameraCaptureMessageTypes(api.Network.RegisterChannel("phototesting"));
 
             CameraCaptureChannelRegistration.RegisterCameraCaptureConfigMessageTypes(PhotoSyncModSystemBridge.RegisterPhotoSyncMessageTypes(channel));
+            AdminToolingChannelRegistration.RegisterAdminToolingMessageTypes(channel);
         }
 
         // Asset-backed process profile defaults are available from this lifecycle stage.
