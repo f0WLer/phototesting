@@ -344,6 +344,9 @@ namespace Phototesting.CameraCapture.Exposure
         /// </summary>
         internal byte[]? ExportPartial()
         {
+            // Fold any in-flight CPU readbacks into the buffer before persisting a paused exposure.
+            // Without this, tray sealing can render from stale accumulation data captured before pause.
+            DrainReadbackPipeline();
             return _buffer?.SerializeAccumulation();
         }
 
