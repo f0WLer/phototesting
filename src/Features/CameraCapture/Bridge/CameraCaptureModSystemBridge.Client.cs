@@ -77,7 +77,7 @@ namespace Phototesting.CameraCapture
             api.Event.RegisterRenderer(_virtualCameraPreviewRenderer, EnumRenderStage.Before, "phototesting-virtualcamera-preview");
 
             _virtualExposureRenderer = new VirtualExposureRenderer(api);
-            _virtualExposureRenderer.PreviewSink = _virtualCameraPreviewRenderer;
+            _virtualExposureRenderer.ExposurePreviewSink = _virtualCameraPreviewRenderer;
             _virtualCameraPreviewRenderer.ExposureRenderer = _virtualExposureRenderer;
             api.Event.RegisterRenderer(_virtualExposureRenderer, EnumRenderStage.Before, "phototesting-virtualexposure");
 
@@ -766,7 +766,7 @@ namespace Phototesting.CameraCapture
                         PlateProcessProfile profile = ResolveMountedPlateProcessProfile(clientApi, packet.ProcessId);
 
                         renderer.ApplyFinishing = false;
-                        renderer.PreviewSink = _owner._virtualCameraPreviewRenderer;
+                        renderer.ExposurePreviewSink = _owner._virtualCameraPreviewRenderer;
                         renderer.Start(cameraState, profile, _pendingMountedStartOptions);
 
                         // Restore a previously saved partial accumulation if one exists for this plate's exposure.

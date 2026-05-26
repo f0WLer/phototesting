@@ -13,12 +13,8 @@ namespace Phototesting.CameraCapture.Exposure
     /// VirtualCameraPreviewRenderer) so all capture paths produce a consistently developed
     /// greyscale plate before the effects pipeline runs.
     /// </summary>
-    internal static class EmulsionDevelop
+    internal static class EmulsionProcessor
     {
-        // Precomputed sRGB-to-linear LUT (index = 0-255 sRGB byte value).
-        // Identical to the table in ExposureAccumulationBuffer — shared math, separate instance.
-        private static readonly float[] SRgbToLinear = BuildLinearTable();
-
         /// <summary>
         /// Applies emulsion physics to <paramref name="bmp"/> in-place, producing a greyscale developed plate.
         /// The three physics stages are individually gated by <paramref name="linearize"/>, <paramref name="spectral"/>,
@@ -54,9 +50,9 @@ namespace Phototesting.CameraCapture.Exposure
                     int idx = i * 4;
 
                     // Read raw channel bytes (BGRA layout).
-                    float bL = linearize ? SRgbToLinear[bytes[idx + 0]] : bytes[idx + 0] / 255f;
-                    float gL = linearize ? SRgbToLinear[bytes[idx + 1]] : bytes[idx + 1] / 255f;
-                    float rL = linearize ? SRgbToLinear[bytes[idx + 2]] : bytes[idx + 2] / 255f;
+                    float bL = linearize ? ExposureUtils.SRgbToLinear[bytes[idx + 0]] : bytes[idx + 0] / 255f;
+                    float gL = linearize ? ExposureUtils.SRgbToLinear[bytes[idx + 1]] : bytes[idx + 1] / 255f;
+                    float rL = linearize ? ExposureUtils.SRgbToLinear[bytes[idx + 2]] : bytes[idx + 2] / 255f;
 
                     // Spectral collapse: weight each channel by emulsion sensitivity → single exposure value.
                     // Without spectral weights, fall back to standard Rec.601 luminance.
@@ -90,17 +86,5 @@ namespace Phototesting.CameraCapture.Exposure
             return (byte)(v * 255f + 0.5f);
         }
 
-        private static float[] BuildLinearTable()
-        {
-            float[] t = new float[256];
-            for (int i = 0; i < 256; i++)
-            {
-                float c = i / 255f;
-                t[i] = c <= 0.04045f
-                    ? c / 12.92f
-                    : MathF.Pow((c + 0.055f) / 1.055f, 2.4f);
-            }
-            return t;
-        }
     }
 }

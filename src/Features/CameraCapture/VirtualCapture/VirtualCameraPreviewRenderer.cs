@@ -142,7 +142,7 @@ namespace Phototesting.CameraCapture
                 // Reflect any live-tuning overrides from the exposure renderer (physics flags + chemistry).
                 // ExposureRenderer non-null guaranteed by guard above.
                 VirtualExposureRenderer er = ExposureRenderer;
-                EmulsionDevelop.ApplyInPlace(
+                EmulsionProcessor.ApplyInPlace(
                     croppedBitmap,
                     new PlateProcessProfile(
                         EmulsionProcess.Name, EmulsionProcess.DurationSeconds, EmulsionProcess.SampleCount,

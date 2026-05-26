@@ -188,7 +188,7 @@ namespace Phototesting.CameraCapture.Rendering
 
                 try
                 {
-                    EmulsionDevelop.ApplyInPlace(dstBitmap, PlateProcessProfile.Iodide);
+                    EmulsionProcessor.ApplyInPlace(dstBitmap, PlateProcessProfile.Iodide);
 
                     WetplateEffectsConfig activeCfg = ImageEffectsPipelineBridge.ResolveCaptureProfile(_effectsConfig, effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(dstBitmap, seedKey, activeCfg);

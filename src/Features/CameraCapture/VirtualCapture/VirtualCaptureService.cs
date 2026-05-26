@@ -75,7 +75,7 @@ namespace Phototesting.CameraCapture
                     using SKBitmap raw = ClientFramebufferCapture.ReadToSkBitmap(_capi, cam.fbo);
                     using SKBitmap croppedBitmap = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(raw, maxDimension);
 
-                    EmulsionDevelop.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
+                    EmulsionProcessor.ApplyInPlace(croppedBitmap, PlateProcessProfile.Iodide);
 
                     WetplateEffectsConfig profile = ImageEffectsPipelineBridge.ResolveCaptureProfile(_baselineEffects, effectsOverride);
                     ImageEffectsPipelineBridge.ApplyCaptureEffects(croppedBitmap, fileName, profile);
