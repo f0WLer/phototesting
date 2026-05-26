@@ -248,7 +248,7 @@ namespace Phototesting.CameraCapture
                 return;
             }
 
-            bool paused = PauseMountedCameraStorage(cameraStack);
+            PauseMountedCameraStorage(cameraStack);
             ItemStack? droppedCamera = mountedBe.TakeStoredCameraStack(world);
             if (droppedCamera == null)
             {

@@ -252,7 +252,7 @@ namespace Phototesting.CameraCapture
         // seal+insert packet to the server. Returns true when the packet was sent successfully.
         internal bool TrySendSealForTray(ICoreClientAPI capi, BlockPos trayPos, ItemStack trayPlate)
         {
-            if (ClientChannel == null || trayPlate == null) return false;
+            if (ClientChannel == null) return false;
 
             string exposureId = trayPlate.Attributes?.GetString(PlateStateAttributes.ExposureId) ?? string.Empty;
             if (string.IsNullOrEmpty(exposureId)) return false;
