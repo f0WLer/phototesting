@@ -118,7 +118,7 @@ namespace Phototesting.CameraCapture
         private const string RendererRenderModeFieldName = "renderMode";
         private const string ChunkRendererFieldName = "chunkRenderer";
         private const string ChunkRendererBeforeMethodName = "OnRenderBefore";
-        private static readonly float[] SsaoBorderColor = { 1f, 1f, 1f, 1f };
+        private static readonly float[] _ssaoBorderColor = { 1f, 1f, 1f, 1f };
 
         // Cached GameContent enum value used to force the local player renderer out of first-person arms mode.
         private static Type? _renderModeType;
@@ -226,7 +226,7 @@ namespace Phototesting.CameraCapture
         private static void ApplySsaoAttachmentParameters(int textureId)
         {
             GL.BindTexture(TextureTarget.Texture2D, textureId);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, SsaoBorderColor);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBorderColor, _ssaoBorderColor);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToBorder);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToBorder);
             GL.BindTexture(TextureTarget.Texture2D, 0);
