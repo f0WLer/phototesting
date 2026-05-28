@@ -16,11 +16,17 @@ namespace Phototesting.CameraCapture
         private static readonly AssetLocation _cameraPlateLoadSound = new AssetLocation("phototesting", "sounds/glass-slide1");
         private static readonly AssetLocation _cameraPlateUnloadSound = new AssetLocation("phototesting", "sounds/glass-slide2");
 
+        // Resolves the correct base code for a camera stack, falling back to the standard wetplate code.
+        private static AssetLocation GetBaseCode(ItemStack? cameraStack)
+            => cameraStack?.Item is ItemWetplateCamera cam ? cam.CameraBaseCode : _wetplateCameraBaseCode;
+
         // Chooses the camera item variant that matches the currently loaded plate's visible state.
-        private static AssetLocation GetLoadedCameraCodeForPlate(ItemStack? loadedPlate)
+        private static AssetLocation GetLoadedCameraCodeForPlate(ItemStack? cameraStack, ItemStack? loadedPlate)
         {
-            if (PlateStateService.IsPlateExposed(loadedPlate)) return _wetplateCameraLoadedExposedCode;
-            return _wetplateCameraLoadedSensitizedCode;
+            bool exposed = PlateStateService.IsPlateExposed(loadedPlate);
+            return cameraStack?.Item is ItemWetplateCamera cam
+                ? (exposed ? cam.CameraLoadedExposedCode : cam.CameraLoadedSensitizedCode)
+                : (exposed ? _wetplateCameraLoadedExposedCode : _wetplateCameraLoadedSensitizedCode);
         }
 
         private ItemStack? ReplaceCameraCode(ItemStack? cameraStack, AssetLocation code)

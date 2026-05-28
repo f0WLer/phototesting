@@ -288,7 +288,7 @@ namespace Phototesting.CameraCapture
             loadedPlate.StackSize = 1;
 
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
-            SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));
+            SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(cameraStack, loadedPlate));
 
             offhandSlot.TakeOut(1);
             offhandSlot.MarkDirty();
@@ -315,14 +315,14 @@ namespace Phototesting.CameraCapture
             if (!CameraItemHelper.TryGetLoadedPlateStack(cameraStack, Api.World, out ItemStack? loadedPlate) || loadedPlate == null)
             {
                 ClearLoadedPlateAttributes(cameraStack);
-                SetCameraCode(cameraSlot, _wetplateCameraBaseCode);
+                SetCameraCode(cameraSlot, GetBaseCode(cameraStack));
                 cameraSlot.MarkDirty();
                 return true;
             }
 
             loadedPlate.StackSize = 1;
             ClearLoadedPlateAttributes(cameraStack);
-            SetCameraCode(cameraSlot, _wetplateCameraBaseCode);
+            SetCameraCode(cameraSlot, GetBaseCode(cameraStack));
             cameraSlot.MarkDirty();
 
             offhandSlot.Itemstack = loadedPlate;

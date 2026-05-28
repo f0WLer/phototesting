@@ -23,10 +23,12 @@ namespace Phototesting.CameraCapture
             if (modSys == null) return false;
 
             ItemStack? cameraStack = CameraItemHelper.GetActiveCameraStack(capi);
-            if (CameraItemHelper.HasMountedTripod(cameraStack))
-                return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy);
+            ExposureStartOptions startOptions = (cameraStack?.Item as ItemWetplateCamera)?.GetDefaultStartOptions() ?? default;
 
-            return modSys.CameraCaptureBridge.TryToggleViewfinderExposure(byEntity, silentIfBusy);
+            if (CameraItemHelper.HasMountedTripod(cameraStack))
+                return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy, startOptions);
+
+            return modSys.CameraCaptureBridge.TryToggleViewfinderExposure(byEntity, silentIfBusy, startOptions);
         }
 
         // Drives shutter clicks while RMB viewfinder mode is active on the client.

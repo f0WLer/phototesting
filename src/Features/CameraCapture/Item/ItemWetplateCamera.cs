@@ -1,4 +1,5 @@
 using Vintagestory.API.Common;
+using Phototesting.CameraCapture.Exposure;
 
 namespace Phototesting.CameraCapture
 {
@@ -9,6 +10,20 @@ namespace Phototesting.CameraCapture
     {
         public const string AttrLoadedPlate = "phototestingLoadedPlate";
         public const string AttrLoadedPlateStack = "phototestingLoadedPlateStack";
+
+        // Item code family used when swapping between loaded/unloaded visual variants.
+        // Subclasses override these to stay within their own code family.
+        private static readonly AssetLocation _baseCode             = new("phototesting", "wetplatecamera");
+        private static readonly AssetLocation _loadedSensitizedCode = new("phototesting", "wetplatecamera-loaded-silvered");
+        private static readonly AssetLocation _loadedExposedCode    = new("phototesting", "wetplatecamera-loaded-exposed");
+
+        internal virtual AssetLocation CameraBaseCode             => _baseCode;
+        internal virtual AssetLocation CameraLoadedSensitizedCode => _loadedSensitizedCode;
+        internal virtual AssetLocation CameraLoadedExposedCode    => _loadedExposedCode;
+
+        // The exposure mode used when this camera starts a fresh exposure.
+        // Subclasses override to provide timer or auto-stop behaviour.
+        internal virtual ExposureStartOptions GetDefaultStartOptions() => default;
 
         // Prevents normal item use so the client tick and held-interact callbacks can own the camera's custom viewfinder flow.
         public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)

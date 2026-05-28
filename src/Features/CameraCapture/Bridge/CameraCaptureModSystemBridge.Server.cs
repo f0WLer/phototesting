@@ -107,13 +107,13 @@ namespace Phototesting.CameraCapture
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
             if (mountedBe != null)
             {
-                ItemStack? updatedCamera = ReplaceCameraCode(cameraStack, GetLoadedCameraCodeForPlate(loadedPlate));
+                ItemStack? updatedCamera = ReplaceCameraCode(cameraStack, GetLoadedCameraCodeForPlate(cameraStack, loadedPlate));
                 if (updatedCamera == null) return;
                 mountedBe.SetStoredCameraStack(updatedCamera, mountedBe.OwnerPlayerUid, Api.World);
             }
             else if (cameraSlot != null)
             {
-                SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(loadedPlate));
+                SetCameraCode(cameraSlot, GetLoadedCameraCodeForPlate(cameraStack, loadedPlate));
                 cameraSlot.MarkDirty();
             }
 

@@ -51,6 +51,8 @@ namespace Phototesting
                 string.Join(", ", Processes.AllProcesses.Keys));
 
             api.RegisterItemClass("WetplateCamera", typeof(ItemWetplateCamera));
+            api.RegisterItemClass("WetplateCameraTimer", typeof(ItemWetplateCameraTimer));
+            api.RegisterItemClass("WetplateCameraAuto", typeof(ItemWetplateCameraAuto));
             api.RegisterItemClass("GlassPlate", typeof(ItemGlassPlate));
             api.RegisterItemClass("SensitizedPlate", typeof(ItemSensitizedPlate));
             api.RegisterItemClass("PhotoPlate", typeof(ItemPhotoPlate));

@@ -1,0 +1,40 @@
+{
+    "code": "wetplatecamera-timer-loaded-silvered",
+    "class": "WetplateCameraTimer",
+    "heldTpIdleAnimation": "holdbothhands",
+    "heldRightReadyAnimation": "holdbothhands",
+    "shape": { "base": "phototesting:item/camera-loaded" },
+    "textures": {
+        "oak": { "base": "game:block/wood/debarked/oak" },
+        "tinbronze": { "base": "game:block/metal/sheet-plain/tinbronze1" },
+        "blackleather": { "base": "game:block/leather/black" },
+        "clearquartz": { "base": "game:item/resource/ungraded/clearquartz" },
+        "loadedplate": { "base": "phototesting:item/plate-silvered" }
+    },
+    "attributes": {
+        "handbook": {
+            "groupBy": ["wetplatecamera-*"]
+        }
+    },
+    "behaviors": [],
+    "maxstacksize": 1,
+    "creativeinventory": { "general": [] },
+    "guiTransform": {
+        "translation": { "x": 0, "y": -30.0, "z": 0 },
+        "rotation": { "x": -45.0, "y": 45.0, "z": 180.0 },
+        "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": 3.0
+    },
+    "tpHandTransform": {
+        "translation": { "x": -0.4, "y": 0, "z": -0.6 },
+        "rotation": { "x": -80, "y": 5, "z": -110 },
+        "origin": { "x": 0.5, "y": 0, "z": 0.5 },
+        "scale": 1.0
+    },
+    "groundTransform": {
+        "translation": { "x": 0, "y": 0.6, "z": 0 },
+        "rotation": { "x": 0, "y": 90, "z": 0 },
+        "origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+        "scale": 2.5
+    }
+}
