@@ -98,6 +98,11 @@ namespace Phototesting.AdminTooling
             // ── Dev Tools section ───────────────────────────────────────────────
             var devHeader    = B(0, y, dialogW, 20);
             y += 26;
+
+            var swPreview = B(0,          y,         swSize, swSize);
+            var lbPreview = B(swSize + 6, y + 3,     200,    20);
+            y += rowH;
+
             var givePlateBtn = B(0, y, 220, 25);
             y += rowH + 4;
 
@@ -189,6 +194,8 @@ namespace Phototesting.AdminTooling
                 .AddSlider(v => { Effects.Imperfection        = v / 100f; return true; }, sImp, "sl-imperfection")
 
                 .AddStaticText("─── Dev Tools ───", CairoFont.WhiteSmallText(), devHeader)
+                .AddSwitch(v => _owner.Config.Viewfinder.DebugPreviewPeak = v, swPreview, "sw-preview-peak", swSize)
+                .AddStaticText("Preview Peak", CairoFont.WhiteDetailText(), lbPreview)
                 .AddSmallButton("Give Sensitized Plate", OnGiveSensitizedPlate, givePlateBtn)
 
                 .AddSmallButton("Close", TryClose, closeBtn)
@@ -203,6 +210,7 @@ namespace Phototesting.AdminTooling
             c.GetSwitch("sw-hdcurve")  .SetValue(_renderer.PhysicsHDCurve);
             c.GetSwitch("sw-normalize").SetValue(_renderer.PhysicsNormalize);
             c.GetSwitch("sw-finishing").SetValue(_renderer.ApplyFinishing);
+            c.GetSwitch("sw-preview-peak").SetValue(_owner.Config.Viewfinder.DebugPreviewPeak);
 
             // Sliders: 0-1 floats → int 0-100; Contrast 0-3 → 0-300; Brightness -1..1 → -100..100.
             var fx = Effects;

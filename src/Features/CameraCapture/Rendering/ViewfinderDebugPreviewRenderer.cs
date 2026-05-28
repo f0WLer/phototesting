@@ -36,10 +36,8 @@ namespace Phototesting.CameraCapture.Rendering
             ViewfinderConfig? cfg = ViewfinderCfg;
             if (cfg == null) return;
 
-            bool exposureActive = _virtualPreviewRenderer?.IsExposureActive == true;
-
-            // Idle vcam preview requires peak mode; exposure accumulation always shows.
-            if (!exposureActive && !cfg.DebugPreviewPeak) return;
+            // All preview output (idle vcam or active exposure) requires peak mode.
+            if (!cfg.DebugPreviewPeak) return;
             if (_virtualPreviewRenderer?.IsActive != true) return;
 
             bool hasNewFrame = _virtualPreviewRenderer!.TryConsumeLatestFrame(out int[] bgraPixels, out int width, out int height);
