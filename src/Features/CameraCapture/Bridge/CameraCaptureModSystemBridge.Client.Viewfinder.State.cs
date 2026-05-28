@@ -82,6 +82,7 @@ namespace Phototesting.CameraCapture
                 }
 
                 ApplyZoomedFov();
+                ViewportExposureSuppressContext.ViewfinderActive = true;
             }
         }
 
@@ -147,6 +148,7 @@ namespace Phototesting.CameraCapture
 
                 _viewfinderSavedFov = null;
                 _viewfinderTargetFov = 0f;
+                ViewportExposureSuppressContext.ViewfinderActive = false;
             }
         }
 

@@ -6,6 +6,7 @@ namespace Phototesting.CameraCapture
 {
     public sealed class BlockEntityMountedCamera : BlockEntity
     {
+        private MountedCameraBlockRenderer? _renderer;
         private const string CameraStackAttr = "phototestingMountedCameraStack";
         private const string OwnerUidAttr    = "phototestingMountedCameraOwnerUid";
         private const string FacingYawAttr   = "phototestingMountedFacingYaw";
@@ -53,14 +54,47 @@ namespace Phototesting.CameraCapture
         internal void SetFacingYaw(float yaw)
         {
             _facingYaw = yaw;
+            _renderer?.SetFacingYaw(yaw);
             MarkDirty(true);
+        }
+
+        public override void Initialize(ICoreAPI api)
+        {
+            base.Initialize(api);
+            if (api is ICoreClientAPI capi)
+            {
+                _renderer = new MountedCameraBlockRenderer(capi, Pos, Block, _facingYaw);
+                capi.Event.RegisterRenderer(_renderer, EnumRenderStage.Opaque, "phototesting-mounted-camera");
+            }
+        }
+
+        public override void OnBlockUnloaded()
+        {
+            base.OnBlockUnloaded();
+            DisposeRenderer();
+        }
+
+        public override void OnBlockRemoved()
+        {
+            base.OnBlockRemoved();
+            DisposeRenderer();
+        }
+
+        private void DisposeRenderer()
+        {
+            if (_renderer == null) return;
+            if (Api is ICoreClientAPI capi)
+                BestEffort.Try(null, "unregister mounted camera block renderer",
+                    () => capi.Event.UnregisterRenderer(_renderer, EnumRenderStage.Opaque));
+            _renderer.Dispose();
+            _renderer = null;
         }
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
         {
-            tessThreadTesselator.TesselateBlock(Block, out MeshData mesh);
-            mesh.Rotate(0f, _facingYaw, 0f);
-            mesher.AddMeshData(mesh);
+            // Rendering is handled by MountedCameraBlockRenderer so the block can be
+            // excluded from virtual camera captures at runtime. Returning true suppresses
+            // the default block shape without adding any geometry to the chunk mesh.
             return true;
         }
 
@@ -89,6 +123,7 @@ namespace Phototesting.CameraCapture
             _cameraStack?.ResolveBlockOrItem(worldAccessForResolve);
             _ownerPlayerUid = tree.GetString(OwnerUidAttr, string.Empty);
             _facingYaw = tree.GetFloat(FacingYawAttr, 0f);
+            _renderer?.SetFacingYaw(_facingYaw);
         }
 
         public override void GetBlockInfo(IPlayer forPlayer, System.Text.StringBuilder dsc)

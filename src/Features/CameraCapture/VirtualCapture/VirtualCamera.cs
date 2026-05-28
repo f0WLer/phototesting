@@ -356,6 +356,7 @@ namespace Phototesting.CameraCapture
             Dictionary<long, bool>? savedEntityIsRendered = null;
 
             _main.PerspectiveMode();
+            VirtualCameraRenderContext.IsVirtualRender = true;
 
             try
             {
@@ -446,6 +447,7 @@ namespace Phototesting.CameraCapture
                 GL.Disable(EnableCap.DepthTest);
                 _platform.FrameBuffers[0] = primaryFbo;
                 _platform.CurrentFrameBuffer = currentFbo;
+                VirtualCameraRenderContext.IsVirtualRender = false;
             }
         }
 

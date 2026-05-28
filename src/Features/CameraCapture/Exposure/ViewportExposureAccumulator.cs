@@ -73,7 +73,7 @@ namespace Phototesting.CameraCapture.Exposure
 
             RegisterRenderer();
             State = ExposureState.Capturing;
-            ViewportExposureSuppressContext.SuppressLocalPlayer = true;
+            ViewportExposureSuppressContext.ExposureCapturing = true;
         }
 
         public void Pause()
@@ -81,7 +81,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (State == ExposureState.Capturing)
             {
                 State = ExposureState.Paused;
-                ViewportExposureSuppressContext.SuppressLocalPlayer = false;
+                ViewportExposureSuppressContext.ExposureCapturing = false;
             }
         }
 
@@ -90,7 +90,7 @@ namespace Phototesting.CameraCapture.Exposure
             if (State == ExposureState.Paused)
             {
                 State = ExposureState.Capturing;
-                ViewportExposureSuppressContext.SuppressLocalPlayer = true;
+                ViewportExposureSuppressContext.ExposureCapturing = true;
             }
         }
 
@@ -100,7 +100,7 @@ namespace Phototesting.CameraCapture.Exposure
             // auto-halt path; calling UnregisterRenderer() here from within the render loop would
             // crash the game. Idle: nothing to do.
             if (State == ExposureState.Idle || State == ExposureState.Done) return;
-            ViewportExposureSuppressContext.SuppressLocalPlayer = false;
+            ViewportExposureSuppressContext.ExposureCapturing = false;
             UnregisterRenderer();
             State = ExposureState.Done;
         }
@@ -214,7 +214,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         private void CompleteAutoStop()
         {
-            ViewportExposureSuppressContext.SuppressLocalPlayer = false;
+            ViewportExposureSuppressContext.ExposureCapturing = false;
             State = ExposureState.Done;
             // Clear the flag NOW (before OnAutoHalt fires) so any Dispose() call triggered
             // by the auto-stop callback chain (e.g. Registry.Remove → Dispose) hits the
@@ -301,7 +301,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (_disposed) return;
             _disposed = true;
-            ViewportExposureSuppressContext.SuppressLocalPlayer = false;
+            ViewportExposureSuppressContext.ExposureCapturing = false;
             UnregisterRenderer();
             _buffer?.Dispose();
             _buffer = null;
