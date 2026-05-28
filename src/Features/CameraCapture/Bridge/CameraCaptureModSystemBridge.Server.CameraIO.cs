@@ -405,7 +405,7 @@ namespace Phototesting.CameraCapture
             if (TryReadMountedCameraPos(cameraStack, out BlockPos existingPos))
             {
                 Block existing = Api.World.BlockAccessor.GetBlock(existingPos);
-                if (existing?.Code == CameraItemHelper.MountedCameraBlockCode) return true;
+                if (existing is BlockMountedCamera) return true;
             }
 
             BlockPos pos = player.Entity.Pos.AsBlockPos;
@@ -417,7 +417,7 @@ namespace Phototesting.CameraCapture
                 if (current.Replaceable < 6000) return false;
             }
 
-            Block? mountedBlock = Api.World.GetBlock(CameraItemHelper.MountedCameraBlockCode);
+            Block? mountedBlock = Api.World.GetBlock(new AssetLocation("phototesting", "camera-mounted"));
             if (mountedBlock == null) return false;
 
             Api.World.BlockAccessor.SetBlock(mountedBlock.BlockId, pos);
@@ -426,6 +426,7 @@ namespace Phototesting.CameraCapture
             if (Api.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityMountedCamera mountedBe) return false;
 
             mountedBe.SetStoredCameraStack(cameraStack, player.PlayerUID, Api.World);
+            mountedBe.SetFacingYaw(player.Entity.Pos.Yaw);
             RememberMountedCameraPos(player.PlayerUID, pos);
             cameraSlot.Itemstack = null;
             cameraSlot.MarkDirty();

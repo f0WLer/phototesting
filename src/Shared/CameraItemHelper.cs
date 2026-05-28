@@ -13,7 +13,6 @@ namespace Phototesting
     public static class CameraItemHelper
     {
         public static readonly AssetLocation TripodItemCode = new AssetLocation("phototesting", "tripod");
-        public static readonly AssetLocation MountedCameraBlockCode = new AssetLocation("phototesting", "camera-mounted");
 
         public const string MountedAttrKey    = "phototestingMounted";
         public const string MountedPosAttrKey = "phototestingMountedPos";
