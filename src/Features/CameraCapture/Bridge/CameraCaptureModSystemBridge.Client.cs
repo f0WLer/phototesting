@@ -336,6 +336,8 @@ namespace Phototesting.CameraCapture
             private bool _rightMouseDown;
             private MouseEventDelegate? _mouseDownHandler;
             private MouseEventDelegate? _mouseUpHandler;
+            private MouseWheelEventDelegate? _mouseWheelHandler;
+            private KeyEventDelegate? _keyDownHandler;
             private long _lastShutterGateChatMs;
 
             internal CameraCaptureClientRuntime(CameraCaptureModSystemBridge owner)
@@ -344,12 +346,34 @@ namespace Phototesting.CameraCapture
             }
 
             // Subscribes to MouseDown/MouseUp so RMB state is event-driven (no Input polling / no try-catch).
+            // Also subscribes scroll-wheel and +/- keys for live viewfinder zoom.
             internal void SubscribeMouseEvents(ICoreClientAPI api)
             {
                 _mouseDownHandler = (MouseEvent e) => { if (e.Button == EnumMouseButton.Right) _rightMouseDown = true; };
-                _mouseUpHandler = (MouseEvent e) => { if (e.Button == EnumMouseButton.Right) _rightMouseDown = false; };
+                _mouseUpHandler   = (MouseEvent e) => { if (e.Button == EnumMouseButton.Right) _rightMouseDown = false; };
                 api.Event.MouseDown += _mouseDownHandler;
-                api.Event.MouseUp += _mouseUpHandler;
+                api.Event.MouseUp   += _mouseUpHandler;
+
+                _mouseWheelHandler = (MouseWheelEventArgs e) =>
+                {
+                    if (!_owner.IsViewfinderActive) return;
+                    float delta = -e.deltaPrecise * CameraCaptureModSystemBridge.ZoomFovStepRad;
+                    _owner.AdjustViewfinderZoom(delta);
+                    e.SetHandled();
+                };
+                api.Event.MouseWheelMove += _mouseWheelHandler;
+
+                _keyDownHandler = (KeyEvent e) =>
+                {
+                    if (!_owner.IsViewfinderActive) return;
+                    bool minus = e.KeyCode == (int)GlKeys.Minus    || e.KeyCode == (int)GlKeys.KeypadMinus;
+                    bool plus  = e.KeyCode == (int)GlKeys.Plus     || e.KeyCode == (int)GlKeys.KeypadPlus;
+                    if (!minus && !plus) return;
+                    _owner.AdjustViewfinderZoom(plus ? -CameraCaptureModSystemBridge.ZoomFovStepRad
+                                                     :  CameraCaptureModSystemBridge.ZoomFovStepRad);
+                    e.Handled = true;
+                };
+                api.Event.KeyDown += _keyDownHandler;
             }
 
             internal void UnsubscribeMouseEvents(ICoreClientAPI api)
@@ -365,6 +389,18 @@ namespace Phototesting.CameraCapture
                     var u = _mouseUpHandler;
                     BestEffort.Try(_owner.BestEffortLogger, "unsubscribe viewfinder mouseup", () => api.Event.MouseUp -= u);
                     _mouseUpHandler = null;
+                }
+                if (_mouseWheelHandler != null)
+                {
+                    var w = _mouseWheelHandler;
+                    BestEffort.Try(_owner.BestEffortLogger, "unsubscribe viewfinder mousewheel", () => api.Event.MouseWheelMove -= w);
+                    _mouseWheelHandler = null;
+                }
+                if (_keyDownHandler != null)
+                {
+                    var k = _keyDownHandler;
+                    BestEffort.Try(_owner.BestEffortLogger, "unsubscribe viewfinder keydown", () => api.Event.KeyDown -= k);
+                    _keyDownHandler = null;
                 }
                 _rightMouseDown = false;
             }

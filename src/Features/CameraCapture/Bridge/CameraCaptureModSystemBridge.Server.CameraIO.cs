@@ -451,7 +451,7 @@ namespace Phototesting.CameraCapture
                     double.IsFinite(packet.CameraPosZ) ? packet.CameraPosZ : player.Entity.Pos.Z),
                 ClampFiniteRange(packet.CameraYaw, -360f, 360f),
                 ClampFiniteRange(packet.CameraPitch, -180f, 180f),
-                ClampFiniteRange(packet.CameraFov, 1f, 179f),
+                ClampFiniteRange(packet.CameraFov, 5f * GameMath.PI / 180f, GameMath.PI), // radians, not degrees
                 packet.CameraDimension,
                 selfPortrait: true);
             var startOptions = ExposureStartOptions.FromStopModeInt(packet.StopMode, packet.StopAfterSeconds);

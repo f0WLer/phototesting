@@ -40,6 +40,7 @@ namespace Phototesting.CameraCapture
             internal readonly double Yaw;
             internal readonly double Pitch;
             internal readonly double Roll;
+            internal readonly float Fov;
             internal readonly Vec3d CamSourcePos;
             internal readonly Vec3d OriginPos;
             internal readonly Vec3d EntityCameraPos;
@@ -54,6 +55,7 @@ namespace Phototesting.CameraCapture
                 Yaw = camera.Yaw;
                 Pitch = camera.Pitch;
                 Roll = camera.Roll;
+                Fov = camera.Fov;
                 CamSourcePos = camera.CamSourcePosition.Clone();
                 OriginPos = camera.OriginPosition.Clone();
                 EntityCameraPos = player.CameraPos.Clone();
@@ -255,6 +257,7 @@ namespace Phototesting.CameraCapture
             camera.Yaw = savedState.Yaw;
             camera.Pitch = savedState.Pitch;
             camera.Roll = savedState.Roll;
+            camera.Fov = savedState.Fov;
             camera.Update(float.Epsilon, _main.interesectionTester);
 
             _main.Reset3DProjection();
@@ -293,8 +296,6 @@ namespace Phototesting.CameraCapture
             camera.Pitch = this.Pitch;
             camera.Roll = this.Roll;
 
-            float oldFov = camera.Fov;
-
             if (Fov != 0) camera.Fov = Fov;
 
             camera.Update(float.Epsilon, _main.interesectionTester);
@@ -315,7 +316,9 @@ namespace Phototesting.CameraCapture
 
             SyncPerspectiveState(CameraPos.AsBlockPos);
 
-            camera.Fov = oldFov;
+            // camera.Fov intentionally left at Fov so the subsequent Reset3DProjection call in
+            // RenderCamera builds the projection with the virtual camera FOV. It is restored to
+            // the original value by RestoreMainCamera via SavedMainCameraState.Fov.
         }
 
         // Returns an anchor sitting near CameraPos: allocates one centered on the map if missing,

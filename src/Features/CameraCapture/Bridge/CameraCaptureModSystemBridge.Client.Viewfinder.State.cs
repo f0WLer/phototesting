@@ -25,6 +25,13 @@ namespace Phototesting.CameraCapture
         private float? _viewfinderSavedFov;
         internal float _viewfinderTargetFov;
 
+        // Per-session zoom value (radians). 0 = not yet set; initialised from ZoomMultiplier on first viewfinder entry.
+        private float _viewfinderZoomFovRad;
+
+        private const float ZoomFovMinRad = 5f  * MathF.PI / 180f;   // 5°
+        private const float ZoomFovMaxRad = 90f * MathF.PI / 180f;   // 90°
+        internal const float ZoomFovStepRad = 5f * MathF.PI / 180f;  // 5° per scroll notch / key press
+
         private bool _zoomMechanismTipShownThisViewfinder;
 
         // Reports whether the nested client viewfinder mode depth is currently active.
@@ -78,8 +85,8 @@ namespace Phototesting.CameraCapture
             }
         }
 
-        // Saves current MainCamera.Fov (radians) and applies the zoom multiplier directly.
-        // This replaces the prior Harmony IL transpiler on ClientMain.Set3DProjection.
+        // Saves current MainCamera.Fov (radians) and applies the zoom, initialising from the
+        // multiplier on the first viewfinder entry of the session.
         private void ApplyZoomedFov()
         {
             if (ClientApi?.World is not ClientMain client || client.MainCamera == null) return;
@@ -87,22 +94,38 @@ namespace Phototesting.CameraCapture
             float current = client.MainCamera.Fov;
             if (_viewfinderSavedFov == null) _viewfinderSavedFov = current;
 
-            float baseFov = _viewfinderSavedFov.Value;
-            float zoomed = ClampZoomedFov(baseFov * ViewfinderZoomMultiplierCfg, baseFov);
-            client.MainCamera.Fov = zoomed;
-            _viewfinderTargetFov = zoomed;
+            if (_viewfinderZoomFovRad == 0f)
+            {
+                float baseFov = _viewfinderSavedFov.Value;
+                float initial = baseFov * ViewfinderZoomMultiplierCfg;
+                _viewfinderZoomFovRad = Math.Max(ZoomFovMinRad, Math.Min(ZoomFovMaxRad, initial));
+            }
+
+            client.MainCamera.Fov = _viewfinderZoomFovRad;
+            _viewfinderTargetFov = _viewfinderZoomFovRad;
 
             ClientApi.Render?.Reset3DProjection();
         }
 
-        private static float ClampZoomedFov(float proposed, float oldValue)
+        // Adjusts the live viewfinder FOV by deltaRad. No-op when viewfinder is not active.
+        internal void AdjustViewfinderZoom(float deltaRad)
         {
-            // MainCamera.Fov is stored in radians (~0.3..2.5 rad covers typical FOV range).
-            if (oldValue > 0f && oldValue < 10f)
+            lock (_viewfinderLock)
             {
-                return Math.Max(0.3f, Math.Min(2.5f, proposed));
+                if (_viewfinderDepth == 0) return;
+
+                float next = Math.Max(ZoomFovMinRad, Math.Min(ZoomFovMaxRad, _viewfinderZoomFovRad + deltaRad));
+                if (next == _viewfinderZoomFovRad) return;
+
+                _viewfinderZoomFovRad = next;
+
+                if (ClientApi?.World is ClientMain client && client.MainCamera != null)
+                {
+                    client.MainCamera.Fov = _viewfinderZoomFovRad;
+                    _viewfinderTargetFov  = _viewfinderZoomFovRad;
+                    ClientApi.Render?.Reset3DProjection();
+                }
             }
-            return Math.Max(30f, Math.Min(110f, proposed));
         }
 
         // Exits viewfinder mode and restores the saved FOV for the outermost entry.
