@@ -214,10 +214,7 @@ namespace Phototesting.CameraCapture.Exposure
             // and map the PBO written 2 kicks ago (guaranteed ready — no CPU stall).
             if (_readback.SubmitFrameAndCollectReadback(0, w, h, _readbackScratch!))
             {
-                byte[] pixels = _readbackScratch!;
-                // Ensure fully opaque alpha so the accumulator treats every pixel as solid.
-                for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
-                _buffer.Accumulate(pixels, _readback.Width, _readback.Height);
+                _buffer.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
             }
 
             // Auto-halt once the target sample count is reached.
@@ -237,7 +234,6 @@ namespace Phototesting.CameraCapture.Exposure
             {
                 _readback.DrainPending(_readbackScratch, pixels =>
                 {
-                    for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
                     _buffer.Accumulate(pixels, _readback.Width, _readback.Height);
                 });
             }
