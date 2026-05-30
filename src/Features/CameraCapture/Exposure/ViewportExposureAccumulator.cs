@@ -152,6 +152,25 @@ namespace Phototesting.CameraCapture.Exposure
             return _buffer?.SerializeAccumulation();
         }
 
+        /// <summary>
+        /// Restores a previously serialized accumulation blob into the live buffer after <see cref="Start"/> is called.
+        /// Compatible with blobs produced by either <see cref="ViewportExposureAccumulator"/> or
+        /// <see cref="VirtualExposureRenderer"/> (both use <see cref="GpuExposureAccumulator"/> serialization).
+        /// When the blob's dimensions do not match the current buffer the call is a no-op.
+        /// </summary>
+        internal void PrimeFromPartial(byte[] data)
+        {
+            if (_buffer == null) return;
+
+            if (!_buffer.DeserializeAccumulation(data, out int restoredFrames))
+            {
+                _capi.Logger.Warning("Phototesting: partial exposure blob is incompatible with the current buffer dimensions — starting fresh.");
+                return;
+            }
+
+            _capi.Logger.Notification($"Phototesting: restored {restoredFrames} accumulated frames from saved partial exposure.");
+        }
+
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
             if (State != ExposureState.Capturing || _buffer == null) return;

@@ -577,7 +577,21 @@ namespace Phototesting.CameraCapture
                 }
 
                 // Fresh exposure: generate a new session ID and allocate a new accumulator.
-                exposureId = Guid.NewGuid().ToString("N");
+                // Exception: if the plate already carries an exposure ID with a saved partial blob
+                // (e.g. transferred mid-exposure from a mounted camera), keep that ID so the
+                // accumulated frames are restored and the plate's ID doesn't get orphaned.
+                byte[]? crossCameraBlob = null;
+                if (!string.IsNullOrEmpty(exposureId) &&
+                    ExposureAccumulationStore.TryLoad(exposureId, out byte[]? storedBlob) &&
+                    storedBlob != null)
+                {
+                    crossCameraBlob = storedBlob;
+                    // Keep exposureId — do NOT generate a new one.
+                }
+                else
+                {
+                    exposureId = Guid.NewGuid().ToString("N");
+                }
 
                 string processId = PlateStateService.GetProcessId(loadedPlateStack);
                 if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
@@ -591,12 +605,16 @@ namespace Phototesting.CameraCapture
                 newAcc.OnAutoHalt = () => OnAccumulatorAutoHalt(byEntity, newAcc, exposureId);
                 newAcc.Start(profile, startOptions);
 
+                // Restore accumulated frames from a prior session (cross-camera resume).
+                if (crossCameraBlob != null)
+                    newAcc.PrimeFromPartial(crossCameraBlob);
+
                 ViewfinderExposureRegistry.Register(exposureId, newAcc);
                 _owner.ActiveAccumulator = newAcc;
                 _owner.ActiveExposureId = exposureId;
 
                 _owner.MaybeShowF4GuiLessTip();
-                SendExposureStatePacket(isExposing: true, 0, exposureId, newAcc.TargetFrames);
+                SendExposureStatePacket(isExposing: true, newAcc.FramesAccumulated, exposureId, newAcc.TargetFrames);
 
                 return true;
             }
