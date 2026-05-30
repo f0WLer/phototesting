@@ -66,6 +66,11 @@ namespace Phototesting.CameraCapture
             if (api.Side == EnumAppSide.Client)
                 SetLmbPrev(byEntity, false);
         }
+
+        // Per-entity LMB state helpers for edge detection between held-interact frames.
+        private const string LmbPrevAttrKey = "phototestingCameraLmbPrev";
+        private static bool GetLmbPrev(EntityAgent byEntity) => byEntity?.Attributes?.GetBool(LmbPrevAttrKey) ?? false;
+        private static void SetLmbPrev(EntityAgent byEntity, bool value) => byEntity?.Attributes?.SetBool(LmbPrevAttrKey, value);
     }
 }
 

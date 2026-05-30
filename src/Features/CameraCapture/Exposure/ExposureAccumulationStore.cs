@@ -6,7 +6,7 @@ namespace Phototesting.CameraCapture.Exposure
     /// Persists and restores raw exposure accumulation blobs between game sessions.
     /// Files are keyed by exposure ID and stored under the mod's data folder so they
     /// survive server restarts, logouts, and game relaunches.
-    /// Each file is a self-describing binary blob produced by <see cref="IExposureAccumulator.SerializeAccumulation"/>.
+    /// Each file is a self-describing binary blob produced by <see cref="GpuExposureAccumulator.SerializeAccumulation"/>.
     /// </summary>
     internal static class ExposureAccumulationStore
     {
