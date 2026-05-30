@@ -24,9 +24,7 @@ namespace Phototesting.CameraCapture
         private int[]? _latestPreviewPixels;
         private int _latestPreviewWidth;
         private int _latestPreviewHeight;
-
-        private long _lastRenderMs;
-        private bool _disposed;
+    private int[]? _previewPixelScratch;
 
         // The emulsion process used when developing idle-preview frames.
         // Updated to match the chosen process when an exposure session is started.
@@ -73,9 +71,10 @@ namespace Phototesting.CameraCapture
         {
             if (!_exposurePassthrough) return;
             int count = bmp.Width * bmp.Height;
-            int[] pixels = new int[count];
-            Marshal.Copy(bmp.GetPixels(), pixels, 0, count);
-            _latestPreviewPixels = pixels;
+            if (_previewPixelScratch == null || _previewPixelScratch.Length < count)
+                _previewPixelScratch = new int[count];
+            Marshal.Copy(bmp.GetPixels(), _previewPixelScratch, 0, count);
+            _latestPreviewPixels = _previewPixelScratch;
             _latestPreviewWidth = bmp.Width;
             _latestPreviewHeight = bmp.Height;
         }
@@ -156,9 +155,10 @@ namespace Phototesting.CameraCapture
                     hdCurve:   er.PhysicsHDCurve);
 
                 int count = croppedBitmap.Width * croppedBitmap.Height;
-                int[] pixels = new int[count];
-                Marshal.Copy(croppedBitmap.GetPixels(), pixels, 0, count);
-                _latestPreviewPixels = pixels;
+                if (_previewPixelScratch == null || _previewPixelScratch.Length < count)
+                    _previewPixelScratch = new int[count];
+                Marshal.Copy(croppedBitmap.GetPixels(), _previewPixelScratch, 0, count);
+                _latestPreviewPixels = _previewPixelScratch;
                 _latestPreviewWidth = croppedBitmap.Width;
                 _latestPreviewHeight = croppedBitmap.Height;
             }
