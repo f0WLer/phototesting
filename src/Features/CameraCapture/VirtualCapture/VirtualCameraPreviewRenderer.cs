@@ -24,7 +24,9 @@ namespace Phototesting.CameraCapture
         private int[]? _latestPreviewPixels;
         private int _latestPreviewWidth;
         private int _latestPreviewHeight;
-    private int[]? _previewPixelScratch;
+        private int[]? _previewPixelScratch;
+        private long _lastRenderMs;
+        private bool _disposed;
 
         // The emulsion process used when developing idle-preview frames.
         // Updated to match the chosen process when an exposure session is started.

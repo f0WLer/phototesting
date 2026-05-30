@@ -419,7 +419,9 @@ namespace Phototesting.CameraCapture.Exposure
             if (_buffer == null || ExposurePreviewSink == null || _buffer.FramesAccumulated == 0) return;
 
             ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_clientApi)?.Viewfinder;
-            int maxDimension = cfg?.DebugPreviewMaxDimension ?? ViewfinderConfig.DefaultPhotoCaptureMaxDimension;
+            // Skip the GPU→CPU develop when no one is displaying the preview (DebugPreviewPeak off).
+            if (!(cfg?.DebugPreviewPeak ?? false)) return;
+            int maxDimension = cfg.DebugPreviewMaxDimension;
 
             using SKBitmap developed = _buffer.Develop();
 
