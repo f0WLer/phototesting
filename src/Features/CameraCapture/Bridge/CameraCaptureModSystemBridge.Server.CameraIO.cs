@@ -218,17 +218,21 @@ namespace Phototesting.CameraCapture
                 return true;
             }
 
+            // Re-anchor the per-player dict to the block that was actually interacted with so that
+            // any follow-up server ops that don't have pos in hand resolve the right camera.
+            RememberMountedCameraPos(serverPlayer.PlayerUID, pos);
+
             if (PauseMountedCameraStorage(cameraStack))
             {
                 mountedBe.MarkCameraDirty();
-                SendMountedCameraControl(serverPlayer, false, true);
+                SendMountedCameraControl(serverPlayer, false, true, cameraStack);
                 return true;
             }
 
             if (ResumeMountedCameraStorage(cameraStack))
             {
                 mountedBe.MarkCameraDirty();
-                SendMountedCameraControl(serverPlayer, true, true);
+                SendMountedCameraControl(serverPlayer, true, true, cameraStack);
                 return true;
             }
 
