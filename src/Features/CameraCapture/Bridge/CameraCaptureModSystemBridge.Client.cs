@@ -753,7 +753,9 @@ namespace Phototesting.CameraCapture
 
                 if (!string.IsNullOrEmpty(packet.ExposureId))
                     _mountedExposureId = packet.ExposureId;
-                else if (string.IsNullOrEmpty(_mountedExposureId))
+                else if (string.IsNullOrEmpty(_mountedExposureId) || (packet.IsExposing && renderer.State != ExposureState.Paused))
+                    // Either no ID at all (first mount), or a fresh-start packet arrived with no ID from
+                    // the server (defensive: prevents inheriting a stale ID from a previous camera session).
                     _mountedExposureId = Guid.NewGuid().ToString("N");
 
                 if (packet.HasCameraState)

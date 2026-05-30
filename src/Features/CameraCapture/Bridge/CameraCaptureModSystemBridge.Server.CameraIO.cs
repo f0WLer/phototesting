@@ -143,6 +143,15 @@ namespace Phototesting.CameraCapture
             PlateStage stage = PlateStateService.GetStage(loadedPlate);
             if (stage != PlateStage.ExposurePaused && stage != PlateStage.Sensitized) return false;
 
+            // Assign a unique exposure ID the first time a fresh Sensitized plate begins exposing.
+            // This guarantees the client always receives a non-empty ExposureId in the control packet,
+            // preventing stale IDs from a previous camera session from contaminating a new one.
+            if (stage == PlateStage.Sensitized &&
+                string.IsNullOrEmpty(loadedPlate.Attributes.GetString(PlateStateAttributes.ExposureId, string.Empty)))
+            {
+                loadedPlate.Attributes.SetString(PlateStateAttributes.ExposureId, Guid.NewGuid().ToString("N"));
+            }
+
             PlateStateService.SetStage(loadedPlate, PlateStage.Exposing);
             SetLoadedPlateAttributes(cameraStack, loadedPlate);
             return true;
