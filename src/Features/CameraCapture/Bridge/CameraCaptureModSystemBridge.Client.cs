@@ -583,7 +583,11 @@ namespace Phototesting.CameraCapture
                 if (!PlateProcessProfile.TryParse(processId, out PlateProcessProfile profile))
                     profile = PlateProcessProfile.Iodide;
 
-                var newAcc = new ViewportExposureAccumulator(clientApi);
+                // Consume the primed accumulator prepared at viewfinder entry, or allocate a fresh one.
+                // When Prime() was called, the PBO ring is already warm so the first sample tick maps
+                // a real frame immediately — no sync GL.ReadPixels stall, no 2-kick priming gap.
+                ViewportExposureAccumulator newAcc = _owner._primedViewportAccumulator ?? new ViewportExposureAccumulator(clientApi);
+                _owner._primedViewportAccumulator = null;
                 newAcc.OnAutoHalt = () => OnAccumulatorAutoHalt(byEntity, newAcc, exposureId);
                 newAcc.Start(profile, startOptions);
 

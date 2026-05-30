@@ -23,7 +23,7 @@ namespace Phototesting.CameraCapture.Exposure
         private int _allocatedMaxDim;
 
         // 3-PBO async readback ring.
-        private const int RingSize = 3;
+        internal const int RingSize = 3;
         private readonly int[] _pboIds  = new int[RingSize];
         private readonly bool[] _pboReadbackReady = new bool[RingSize];
         private int _totalKicksIssued;   // total kicks issued so far; used to derive ring indices
@@ -111,6 +111,13 @@ namespace Phototesting.CameraCapture.Exposure
         /// <paramref name="outBytes"/> must be at least <see cref="Width"/> × <see cref="Height"/> × 4 bytes.
         /// </summary>
         internal bool SubmitFrameAndCollectReadback(FrameBufferRef fromFbo, byte[] outBytes)
+            => SubmitFrameAndCollectReadback(fromFbo.FboId, fromFbo.Width, fromFbo.Height, outBytes);
+
+        /// <summary>
+        /// Overload that accepts a raw GL framebuffer ID and dimensions.
+        /// Used by <see cref="ViewportExposureAccumulator"/> where the source is the default back-buffer (ID 0).
+        /// </summary>
+        internal bool SubmitFrameAndCollectReadback(int fromFboId, int fromW, int fromH, byte[] outBytes)
         {
             if (_downsampleFbo == null || !_pbosAllocated) return false;
 
@@ -122,7 +129,7 @@ namespace Phototesting.CameraCapture.Exposure
             try
             {
                 // 1. Blit-downsample with Y-flip (converts bottom-left origin to top-left).
-                ExposureUtils.BlitYFlipped(fromFbo, _downsampleFbo!);
+                ExposureUtils.BlitYFlipped(fromFboId, fromW, fromH, _downsampleFbo!);
 
                 // 2. Async ReadPixels into the write PBO — no CPU stall.
                 int writeIdx = _totalKicksIssued % RingSize;

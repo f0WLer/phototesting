@@ -47,6 +47,10 @@ namespace Phototesting.CameraCapture
         // Kept alive across RMB releases so a paused exposure can be resumed.
         internal IGameplayExposureAccumulator? ActiveAccumulator { get; set; }
 
+        // Primed viewport accumulator created at viewfinder entry so the PBO ring is warm before
+        // shutter press.  Consumed (or disposed) in TryToggleViewfinderExposure / EndViewfinderMode.
+        internal ViewportExposureAccumulator? _primedViewportAccumulator;
+
         // Stable identifier for the active or most recently paused exposure session.
         // Used client-side so manual sealing can evict the matching registry entry deterministically.
         internal string ActiveExposureId { get; set; } = string.Empty;
@@ -82,6 +86,16 @@ namespace Phototesting.CameraCapture
                 }
 
                 ApplyZoomedFov();
+
+                // Prime the async PBO readback ring if this is a fresh viewport (not resuming or capturing).
+                // By priming now, the ring has RingSize async ReadPixels in-flight before the shutter opens,
+                // so the first capturing tick maps a real frame immediately — no synchronous stall.
+                if (_primedViewportAccumulator == null && ClientApi != null && ActiveAccumulator == null)
+                {
+                    _primedViewportAccumulator = new ViewportExposureAccumulator(ClientApi);
+                    _primedViewportAccumulator.Prime();
+                }
+
                 ViewportExposureSuppressContext.ViewfinderActive = true;
             }
         }
@@ -148,6 +162,11 @@ namespace Phototesting.CameraCapture
 
                 _viewfinderSavedFov = null;
                 _viewfinderTargetFov = 0f;
+
+                // Discard the primed accumulator if the shutter was never pressed during this viewfinder session.
+                _primedViewportAccumulator?.Dispose();
+                _primedViewportAccumulator = null;
+
                 ViewportExposureSuppressContext.ViewfinderActive = false;
             }
         }
