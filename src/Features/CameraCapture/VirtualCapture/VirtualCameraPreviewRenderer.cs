@@ -21,6 +21,7 @@ namespace Phototesting.CameraCapture
         private readonly ICoreClientAPI _capi;
         private readonly ClientPlatformWindows _platform;
         private readonly ClientMain _main;
+        private readonly PhotoTestingModSystem? _modSystem;
         private int[]? _latestPreviewPixels;
         private int _latestPreviewWidth;
         private int _latestPreviewHeight;
@@ -86,6 +87,7 @@ namespace Phototesting.CameraCapture
             _capi = capi;
             _main = (ClientMain)capi.World;
             _platform = (ClientPlatformWindows)_main.Platform;
+            _modSystem = PhotoTestingConfigAccess.ResolveModSystem(capi);
         }
 
         // Returns and clears the most recently buffered preview frame, or false if none is available.
@@ -114,7 +116,7 @@ namespace Phototesting.CameraCapture
             if (_exposurePassthrough) return;
             if (ExposureRenderer == null) return;
 
-            ViewfinderConfig? cfg = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
+            ViewfinderConfig? cfg = _modSystem?.Config?.Viewfinder;
             if (!(cfg?.DebugPreviewPeak ?? false)) return;
 
             if (!ExposureRenderer.TryGetIdleCameraForPreview(out VirtualCamera camera)) return;

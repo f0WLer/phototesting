@@ -41,11 +41,14 @@ namespace Phototesting.CameraCapture.Rendering
             }
         }
 
+        private readonly PhotoTestingModSystem? _modSystem;
+
         // Creates a capture renderer bound to the active client API and initial effects config.
         public PhotoCaptureRenderer(ICoreClientAPI capi)
         {
             this._capi = capi;
             _effectsConfig = ImageEffectsPipelineBridge.LoadCaptureBaseline(capi);
+            _modSystem = PhotoTestingConfigAccess.ResolveModSystem(capi);
         }
 
         // Reloads the default effects profile used for subsequent captures and previews.
@@ -132,7 +135,7 @@ namespace Phototesting.CameraCapture.Rendering
             }
         }
 
-        private PhotoCapturePipelineConfig? PipelineCfg => PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.PhotoCapturePipeline;
+        private PhotoCapturePipelineConfig? PipelineCfg => _modSystem?.Config?.PhotoCapturePipeline;
 
         // Gets the blank-frame sampling divisor.
         private int BlankDetectSampleDivisor => PipelineCfg?.BlankDetectSampleDivisor ?? 32;

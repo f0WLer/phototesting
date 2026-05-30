@@ -13,6 +13,7 @@ namespace Phototesting.CameraCapture.Rendering
     {
         private readonly ICoreClientAPI _capi;
         private readonly VirtualCameraPreviewRenderer? _virtualPreviewRenderer;
+        private readonly PhotoTestingModSystem? _modSystem;
 
         private LoadedTexture? _previewTexture;
 
@@ -20,9 +21,8 @@ namespace Phototesting.CameraCapture.Rendering
         {
             this._capi = capi;
             this._virtualPreviewRenderer = virtualPreviewRenderer;
+            _modSystem = PhotoTestingConfigAccess.ResolveModSystem(capi);
         }
-
-        private ViewfinderConfig? ViewfinderCfg => PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder;
 
         public double RenderOrder => 0.97;
         public int RenderRange => 0;
@@ -33,7 +33,7 @@ namespace Phototesting.CameraCapture.Rendering
         {
             if (stage != EnumRenderStage.Ortho) return;
 
-            ViewfinderConfig? cfg = ViewfinderCfg;
+            ViewfinderConfig? cfg = _modSystem?.Config?.Viewfinder;
             if (cfg == null) return;
 
             // All preview output (idle vcam or active exposure) requires peak mode.
