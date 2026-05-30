@@ -85,6 +85,13 @@ namespace Phototesting.CameraCapture.Contracts
         [ProtoMember(4)] public int TargetFrames { get; set; }
     }
 
+    /// <summary>Tells the server to set the timer camera's exposure duration so it survives server-to-client stack syncs.</summary>
+    [ProtoContract]
+    public class CameraTimerPacket
+    {
+        [ProtoMember(1)] public float Seconds { get; set; }
+    }
+
     /// <summary>Tells the server to stamp the partial-exposure plate in the active slot with the given photo id and insert it into the development tray at the given position.</summary>
     [ProtoContract]
     internal class SealAndInsertIntoTrayPacket

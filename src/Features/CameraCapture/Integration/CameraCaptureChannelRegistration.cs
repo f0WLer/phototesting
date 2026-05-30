@@ -17,7 +17,8 @@ namespace Phototesting.CameraCapture.Integration
                 .RegisterMessageType(typeof(CameraTripodPacket))
                 .RegisterMessageType(typeof(ExposureStatePacket))
                 .RegisterMessageType(typeof(CameraMountRequestPacket))
-                .RegisterMessageType(typeof(SealAndInsertIntoTrayPacket));
+                .RegisterMessageType(typeof(SealAndInsertIntoTrayPacket))
+                .RegisterMessageType(typeof(CameraTimerPacket));
         }
 
         // Registers CameraCapture config packet DTOs after sync packet DTOs to preserve existing wire order.

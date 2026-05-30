@@ -23,7 +23,7 @@ namespace Phototesting.CameraCapture
             if (modSys == null) return false;
 
             ItemStack? cameraStack = CameraItemHelper.GetActiveCameraStack(capi);
-            ExposureStartOptions startOptions = (cameraStack?.Item as ItemWetplateCamera)?.GetDefaultStartOptions() ?? default;
+            ExposureStartOptions startOptions = (cameraStack?.Item as ItemWetplateCamera)?.GetDefaultStartOptions(cameraStack) ?? default;
 
             if (CameraItemHelper.HasMountedTripod(cameraStack))
                 return modSys.CameraCaptureBridge.RequestMountedPhotoCapture(byEntity, silentIfBusy, startOptions);

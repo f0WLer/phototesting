@@ -341,6 +341,8 @@ namespace Phototesting.CameraCapture
             private KeyEventDelegate? _keyDownHandler;
             private long _lastShutterGateChatMs;
 
+            private GuiDialogCameraTimer? _timerDialog;
+
             internal CameraCaptureClientRuntime(CameraCaptureModSystemBridge owner)
             {
                 _owner = owner;
@@ -366,9 +368,28 @@ namespace Phototesting.CameraCapture
 
                 _keyDownHandler = (KeyEvent e) =>
                 {
-                    if (!_owner.IsViewfinderActive) return;
                     bool minus = e.KeyCode == (int)GlKeys.Minus    || e.KeyCode == (int)GlKeys.KeypadMinus;
                     bool plus  = e.KeyCode == (int)GlKeys.Plus     || e.KeyCode == (int)GlKeys.KeypadPlus;
+
+                    // Shift+Plus opens the timer-camera settings dialog.
+                    if (plus)
+                    {
+                        bool shiftHeld = api.Input.KeyboardKeyStateRaw[(int)GlKeys.ShiftLeft]
+                                      || api.Input.KeyboardKeyStateRaw[(int)GlKeys.RShift];
+                        if (shiftHeld)
+                        {
+                            ItemStack? camStack = CameraItemHelper.GetActiveCameraStack(api);
+                            if (camStack?.Item is ItemWetplateCameraTimer)
+                            {
+                                _timerDialog ??= new GuiDialogCameraTimer(api, _owner.ClientChannel!);
+                                _timerDialog.OpenFor(camStack);
+                                e.Handled = true;
+                                return;
+                            }
+                        }
+                    }
+
+                    if (!_owner.IsViewfinderActive) return;
                     if (!minus && !plus) return;
                     _owner.AdjustViewfinderZoom(plus ? -CameraCaptureModSystemBridge.ZoomFovStepRad
                                                      :  CameraCaptureModSystemBridge.ZoomFovStepRad);

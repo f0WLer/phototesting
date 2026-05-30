@@ -42,6 +42,7 @@ namespace Phototesting.CameraCapture
                 (player, p) => OnPhotoCaptureConfigRequested(player));
 
             ServerChannel.SetMessageHandler<SealAndInsertIntoTrayPacket>(OnSealAndInsertTrayReceived);
+            ServerChannel.SetMessageHandler<CameraTimerPacket>(OnCameraTimerReceived);
         }
     // Server-authoritative camera capture config broadcast and request handling.
 
@@ -201,6 +202,20 @@ namespace Phototesting.CameraCapture
 
             _owner.PhotoSyncBridge.ServerTouchPhotoSeen(photoId);
             _owner.PhotoSyncBridge.Runtime?.RegisterExpectedUpload(player.PlayerUID, photoId);
+        }
+
+        // Applies a timer-duration change from the client onto the server-side camera stack so it
+        // survives future server-to-client stack syncs (e.g. plate load/unload, exposure state packets).
+        private void OnCameraTimerReceived(IServerPlayer player, CameraTimerPacket packet)
+        {
+            if (Api?.Side != EnumAppSide.Server) return;
+            if (player == null || packet == null) return;
+
+            ItemSlot? cameraSlot = player.InventoryManager.ActiveHotbarSlot;
+            if (cameraSlot?.Itemstack?.Item is not ItemWetplateCameraTimer) return;
+
+            ItemWetplateCameraTimer.WriteTimerSeconds(cameraSlot.Itemstack, packet.Seconds);
+            cameraSlot.MarkDirty();
         }
 
         // Clamps packet-provided floats to a safe range, treating NaN/Infinity as the lower bound.

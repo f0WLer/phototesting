@@ -23,7 +23,8 @@ namespace Phototesting.CameraCapture
 
         // The exposure mode used when this camera starts a fresh exposure.
         // Subclasses override to provide timer or auto-stop behaviour.
-        internal virtual ExposureStartOptions GetDefaultStartOptions() => default;
+        // stack is the currently held itemstack; pass it so per-stack attributes (e.g. timer duration) can be read.
+        internal virtual ExposureStartOptions GetDefaultStartOptions(ItemStack? stack = null) => default;
 
         // Prevents normal item use so the client tick and held-interact callbacks can own the camera's custom viewfinder flow.
         public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
