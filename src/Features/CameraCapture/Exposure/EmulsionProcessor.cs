@@ -6,7 +6,7 @@ namespace Phototesting.CameraCapture.Exposure
 {
     /// <summary>
     /// Single-pass emulsion physics for non-accumulation capture paths.
-    /// Applies the same three physics stages used by <see cref="ExposureAccumulationBuffer"/> — sRGB linearization,
+    /// Applies the same three physics stages used by <see cref="GpuExposureAccumulator"/> — sRGB linearization,
     /// spectral sensitivity collapse, and H&amp;D characteristic curve — but as a single in-place pass
     /// over a BGRA8888 bitmap rather than across many accumulated frames.
     /// Used by single-frame capture paths (PhotoCaptureRenderer, VirtualCaptureService,

@@ -41,13 +41,6 @@ namespace Phototesting.CameraCapture
         public int DebugPreviewMargin = 16;
 
         /// <summary>
-        /// When true, exposure accumulation runs entirely on the GPU via ping-pong RGBA32F
-        /// framebuffers and custom GLSL shaders, eliminating the per-sample PBO readback stall.
-        /// Defaults to true so new configs use the faster GPU path automatically.
-        /// </summary>
-        public bool UseGpuExposureAccumulator = true;
-
-        /// <summary>
         /// When true, the wet-plate drying clock is paused while the plate is in the
         /// Exposing or ExposurePaused lifecycle stage.
         /// </summary>

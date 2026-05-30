@@ -270,6 +270,7 @@ namespace Phototesting.CameraCapture
 
             string? photoId = PartialExposureSealer.SealToPng(
                 exposureId,
+                capi,
                 profile,
                 targetFrames,
                 maxDimension,

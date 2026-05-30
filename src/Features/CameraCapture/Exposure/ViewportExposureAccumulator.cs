@@ -228,7 +228,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
                 ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
-            ExposureReadbackPipeline.ComputeTargetDimensions(sourceWidth, sourceHeight, maxDimension, out int w, out int h);
+            GpuExposureAccumulator.ComputeTargetDimensions(sourceWidth, sourceHeight, maxDimension, out int w, out int h);
             if (_buffer == null || _buffer.Width != w || _buffer.Height != h)
             {
                 _buffer?.Dispose();

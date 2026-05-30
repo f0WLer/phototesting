@@ -13,7 +13,7 @@ namespace Phototesting.CameraCapture.Exposure
     /// preview cadence or shutter close, not per sample.
     /// All OpenGL state disturbed by public methods is saved and restored so VS's render pipeline is unaffected.
     /// </summary>
-    internal sealed class GpuExposureAccumulator : IGpuExposureAccumulator
+    internal sealed class GpuExposureAccumulator : IDisposable
     {
         public int Width  { get; }
         public int Height { get; }
@@ -92,6 +92,18 @@ void main() {
             _targetSampleCount = Math.Max(1, referenceFrameCount);
 
             AllocateGpuResources();
+        }
+
+        /// <summary>
+        /// Computes the target accumulation dimensions from a source frame size and a max-dimension budget,
+        /// preserving aspect ratio and clamping to the source size.
+        /// </summary>
+        internal static void ComputeTargetDimensions(int sourceW, int sourceH, int maxDim, out int width, out int height)
+        {
+            float scale = (float)maxDim / Math.Max(sourceW, sourceH);
+            scale = Math.Min(1f, scale);
+            width  = Math.Max(1, (int)(sourceW * scale));
+            height = Math.Max(1, (int)(sourceH * scale));
         }
 
         /// <summary>

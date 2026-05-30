@@ -1,4 +1,5 @@
 using SkiaSharp;
+using Vintagestory.API.Client;
 using Phototesting.CameraCapture;
 using Phototesting.CameraCapture.Rendering;
 using Phototesting.ImageEffects;
@@ -23,6 +24,7 @@ namespace Phototesting.CameraCapture.Exposure
         /// </summary>
         internal static string? SealToPng(
             string exposureId,
+            ICoreClientAPI capi,
             PlateProcessProfile profile,
             int targetFrameCount,
             int maxDimension,
@@ -31,7 +33,7 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (!ExposureAccumulationStore.TryLoad(exposureId, out byte[]? data)) return null;
 
-            string? fileName = RenderBlobToPng(data, profile, targetFrameCount, maxDimension, baselineEffects, effectsOverride);
+            string? fileName = RenderBlobToPng(data, capi, profile, targetFrameCount, maxDimension, baselineEffects, effectsOverride);
             if (!string.IsNullOrEmpty(fileName))
             {
                 ExposureAccumulationStore.Delete(exposureId);
@@ -42,6 +44,7 @@ namespace Phototesting.CameraCapture.Exposure
 
         private static string? RenderBlobToPng(
             byte[] data,
+            ICoreClientAPI capi,
             PlateProcessProfile profile,
             int targetFrameCount,
             int maxDimension,
@@ -50,29 +53,16 @@ namespace Phototesting.CameraCapture.Exposure
         {
             if (!ExposureAccumulationBlobFormat.TryReadHeader(data, out var header)) return null;
             if (header.FrameCount <= 0) return null;
+            if (header.BackendTag != ExposureAccumulationBlobFormat.GpuBackend) return null;
 
-            byte[] cpuCompatibleData;
-            switch (header.BackendTag)
-            {
-                case ExposureAccumulationBlobFormat.CpuBackend:
-                    if (header.ChannelCount != 3) return null;
-                    cpuCompatibleData = data;
-                    break;
-                case ExposureAccumulationBlobFormat.GpuBackend:
-                    if (!ExposureAccumulationBlobFormat.TryConvertGpuBlobToCpuBlob(data, header, out cpuCompatibleData)) return null;
-                    break;
-                default:
-                    return null;
-            }
+            using var buffer = new GpuExposureAccumulator(capi, header.Width, header.Height, Math.Max(1, targetFrameCount));
+            buffer.RedSensitivity      = profile.RedSensitivity;
+            buffer.GreenSensitivity    = profile.GreenSensitivity;
+            buffer.BlueSensitivity     = profile.BlueSensitivity;
+            buffer.DevelopmentStrength = profile.DevelopmentStrength;
+            buffer.HDGamma             = profile.HDGamma;
 
-            var buffer = new ExposureAccumulationBuffer(header.Width, header.Height, Math.Max(1, targetFrameCount));
-            buffer.RedSensitivity        = profile.RedSensitivity;
-            buffer.GreenSensitivity      = profile.GreenSensitivity;
-            buffer.BlueSensitivity       = profile.BlueSensitivity;
-            buffer.DevelopmentStrength   = profile.DevelopmentStrength;
-            buffer.HDGamma               = profile.HDGamma;
-
-            if (!buffer.DeserializeAccumulation(cpuCompatibleData, out _)) return null;
+            if (!buffer.DeserializeAccumulation(data, out _)) return null;
 
             using SKBitmap developed = buffer.Develop();
             SKBitmap cropped = PhotoCropMath.ScaleDownAndCenterCropToPlateAspect(developed, maxDimension);

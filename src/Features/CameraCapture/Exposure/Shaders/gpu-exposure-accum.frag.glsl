@@ -1,5 +1,5 @@
 // Accumulation pass: adds one new BGRA8 sample (optionally sRGB-linearised) to the running RGBA32F sum.
-// Mirrors the CPU path in ExposureAccumulationBuffer.AccumulateBytes(), including the linearisation branch.
+// Mirrors EmulsionProcessor.AccumulateBytes() physics, including the linearisation branch.
 #version 330 core
 in  vec2 v_uv;
 out vec4 out_sum;

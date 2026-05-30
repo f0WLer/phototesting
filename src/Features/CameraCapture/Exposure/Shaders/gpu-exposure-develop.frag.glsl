@@ -1,5 +1,5 @@
 // Develop pass: converts the RGBA32F accumulated sums to a tone-mapped RGBA8 output.
-// Mirrors ExposureAccumulationBuffer.Develop() exactly, including weight normalisation.
+// Mirrors EmulsionProcessor physics exactly, including weight normalisation.
 #version 330 core
 in  vec2 v_uv;
 out vec4 out_color;
