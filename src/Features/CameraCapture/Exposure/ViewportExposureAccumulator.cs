@@ -8,10 +8,10 @@ using Phototesting.PhotoSync.Storage;
 namespace Phototesting.CameraCapture.Exposure
 {
     /// <summary>
-    /// Accumulates frames from the player's live viewport into an <see cref="ExposureAccumulationBuffer"/>.
+    /// Accumulates frames from the player's live viewport into a <see cref="GpuExposureAccumulator"/>.
     /// Registered as an <c>IRenderer</c> at <c>EnumRenderStage.AfterBlit</c> while actively capturing;
-    /// blits the back buffer into a downsampled FBO and reads that smaller frame via <c>GL.ReadPixels</c>
-    /// each sample interval before feeding the bytes to the CPU accumulator.
+    /// blits the back buffer each sample interval directly into the GPU accumulator’s RGBA32F ping-pong FBOs
+    /// via a GLSL accumulate shader. No CPU readback occurs until <see cref="Export"/> at shutter close.
     /// <para>Lifecycle: <see cref="Start"/> → <see cref="ExposureState.Capturing"/> → optional
     /// <see cref="Pause"/>/<see cref="Resume"/> → <see cref="Stop"/> or <see cref="Export"/>.
     /// <see cref="OnAutoHalt"/> fires when a timer or sample-count stop policy is satisfied.</para>
@@ -20,10 +20,7 @@ namespace Phototesting.CameraCapture.Exposure
     {
         private readonly ICoreClientAPI _capi;
         private readonly WetplateEffectsConfig _baselineEffects;
-        private ExposureAccumulationBuffer? _buffer;
-        private ExposureReadbackPipeline? _readback;
-        private byte[]? _readbackScratch;
-        private int _primingKicksRemaining;
+        private GpuExposureAccumulator? _buffer;
         private PlateProcessProfile _process;
         private ExposureStartOptions _startOptions;
         private float _elapsedSinceLastSample;
@@ -49,21 +46,17 @@ namespace Phototesting.CameraCapture.Exposure
         }
 
         /// <summary>
-        /// Allocates the async PBO readback pipeline and registers this renderer at <c>AfterBlit</c>
-        /// so the 3-slot ring is already warm by the time the player opens the shutter.
-        /// Call at viewfinder entry (before the shutter is ever pressed) so the ring completes
-        /// its <see cref="ExposureReadbackPipeline.RingSize"/> priming kicks during normal aiming;
-        /// the first <see cref="Start"/> tick then maps a real frame immediately with no sync stall
-        /// and no dropped sample from the priming gap.
+        /// Allocates the GPU accumulator and registers this renderer at <c>AfterBlit</c> ahead of
+        /// shutter press, pre-compiling GLSL programs and allocating RGBA32F ping-pong textures so
+        /// there is no first-frame GPU resource stall when the player opens the shutter.
         /// </summary>
         internal void Prime()
         {
             if (_disposed) return;
             int w = Math.Max(1, _capi.Render.FrameWidth);
             int h = Math.Max(1, _capi.Render.FrameHeight);
-            EnsureReadbackResources(w, h);
+            EnsureGpuAccumulator(w, h, 1);
             RegisterRenderer();
-            _primingKicksRemaining = ExposureReadbackPipeline.RingSize;
         }
 
         /// <summary>
@@ -83,16 +76,11 @@ namespace Phototesting.CameraCapture.Exposure
 
             int w = Math.Max(1, _capi.Render.FrameWidth);
             int h = Math.Max(1, _capi.Render.FrameHeight);
-            EnsureReadbackResources(w, h);
-            _buffer?.Dispose();
-            _buffer = new ExposureAccumulationBuffer(_readback!.Width, _readback.Height, process.SampleCount);
-            ApplyProcessToBuffer(_buffer, process);
+            EnsureGpuAccumulator(w, h, process.SampleCount);
+            ApplyProcessToBuffer(_buffer!, process);
+            _buffer!.Reset(); // clear any frames accumulated during priming
 
-            // Stop any in-flight priming kicks; the first OnRenderFrame tick transitions
-            // directly to the accumulation branch.
-            _primingKicksRemaining = 0;
-
-            // Register renderer only if Prime() hasn't already done so during viewfinder aiming.
+            // Register renderer only if Prime() hasn’t already done so during viewfinder aiming.
             if (!_rendererRegistered) RegisterRenderer();
             State = ExposureState.Capturing;
             ViewportExposureSuppressContext.ExposureCapturing = true;
@@ -166,19 +154,6 @@ namespace Phototesting.CameraCapture.Exposure
 
         public void OnRenderFrame(float deltaTime, EnumRenderStage stage)
         {
-            // Priming branch: issue blit+async-ReadPixels into the PBO ring without accumulating.
-            // Runs during viewfinder aiming (before shutter press) so the ring is already warm
-            // when Start() transitions to Capturing.  Any outputs mapped during priming are
-            // discarded — the PBO ring will have been fully cycled by the time real samples arrive.
-            if (_primingKicksRemaining > 0)
-            {
-                int pw = _capi.Render.FrameWidth, ph = _capi.Render.FrameHeight;
-                EnsureReadbackResources(pw, ph);
-                _readback!.SubmitFrameAndCollectReadback(0, pw, ph, _readbackScratch!);
-                _primingKicksRemaining--;
-                return;
-            }
-
             if (State != ExposureState.Capturing || _buffer == null) return;
 
             _elapsedCaptureSeconds += deltaTime;
@@ -195,27 +170,8 @@ namespace Phototesting.CameraCapture.Exposure
             int w = _capi.Render.FrameWidth;
             int h = _capi.Render.FrameHeight;
 
-            int previousBufferWidth = _buffer.Width;
-            int previousBufferHeight = _buffer.Height;
-            EnsureReadbackResources(w, h);
-
-            // Reset buffer on viewport resize or readback-size policy change to prevent averaging mixed-dimension frames.
-            if (_buffer.Width != _readback!.Width || _buffer.Height != _readback.Height)
-            {
-                _buffer.Dispose();
-                _buffer = new ExposureAccumulationBuffer(_readback.Width, _readback.Height, _process.SampleCount);
-                ApplyProcessToBuffer(_buffer, _process);
-
-                if (previousBufferWidth != _readback.Width || previousBufferHeight != _readback.Height)
-                    _capi.Logger.Warning("Phototesting: viewport readback size changed during exposure — accumulated frames discarded.");
-            }
-
-            // Async PBO path: blit back buffer (ID 0) → downsample FBO, issue ReadPixels into write PBO,
-            // and map the PBO written 2 kicks ago (guaranteed ready — no CPU stall).
-            if (_readback.SubmitFrameAndCollectReadback(0, w, h, _readbackScratch!))
-            {
-                _buffer.Accumulate(_readbackScratch!, _readback.Width, _readback.Height);
-            }
+            // GPU blit scales into the fixed-size staging FBO, so viewport resize needs no special handling.
+            _buffer.Accumulate(0, w, h);
 
             // Auto-halt once the target sample count is reached.
             // Do NOT call Stop() here — UnregisterRenderer() must not be called from within
@@ -228,15 +184,6 @@ namespace Phototesting.CameraCapture.Exposure
         private void CompleteAutoStop()
         {
             ViewportExposureSuppressContext.ExposureCapturing = false;
-            // Drain PBOs still in-flight (up to RingSize-1 samples) before sealing so the
-            // last few frames aren't silently dropped at shutter close.
-            if (_readback != null && _readbackScratch != null && _buffer != null)
-            {
-                _readback.DrainPending(_readbackScratch, pixels =>
-                {
-                    _buffer.Accumulate(pixels, _readback.Width, _readback.Height);
-                });
-            }
             State = ExposureState.Done;
             // Clear the flag NOW (before OnAutoHalt fires) so any Dispose() call triggered
             // by the auto-stop callback chain (e.g. Registry.Remove → Dispose) hits the
@@ -249,7 +196,7 @@ namespace Phototesting.CameraCapture.Exposure
             OnAutoHalt?.Invoke();
         }
 
-        private static void ApplyProcessToBuffer(ExposureAccumulationBuffer buf, PlateProcessProfile process)
+        private static void ApplyProcessToBuffer(GpuExposureAccumulator buf, PlateProcessProfile process)
         {
             buf.RedSensitivity = process.RedSensitivity;
             buf.GreenSensitivity = process.GreenSensitivity;
@@ -258,15 +205,16 @@ namespace Phototesting.CameraCapture.Exposure
             buf.HDGamma = process.HDGamma;
         }
 
-        private void EnsureReadbackResources(int sourceWidth, int sourceHeight)
+        private void EnsureGpuAccumulator(int sourceWidth, int sourceHeight, int sampleCount)
         {
             int maxDimension = PhotoTestingConfigAccess.ResolveClientConfig(_capi)?.Viewfinder?.ExposureReadbackMaxDimension
                 ?? ViewfinderConfig.DefaultExposureReadbackMaxDimension;
-
-            _readback ??= new ExposureReadbackPipeline(_capi);
-            bool resized = _readback.EnsureAllocated(sourceWidth, sourceHeight, maxDimension);
-            if (resized || _readbackScratch == null)
-                _readbackScratch = new byte[_readback.Width * _readback.Height * 4];
+            ExposureReadbackPipeline.ComputeTargetDimensions(sourceWidth, sourceHeight, maxDimension, out int w, out int h);
+            if (_buffer == null || _buffer.Width != w || _buffer.Height != h)
+            {
+                _buffer?.Dispose();
+                _buffer = new GpuExposureAccumulator(_capi, w, h, sampleCount);
+            }
         }
 
         private void RegisterRenderer()
@@ -291,9 +239,6 @@ namespace Phototesting.CameraCapture.Exposure
             UnregisterRenderer();
             _buffer?.Dispose();
             _buffer = null;
-            _readback?.Dispose();
-            _readback = null;
-            _readbackScratch = null;
             State = ExposureState.Idle;
         }
     }

@@ -94,6 +94,26 @@ void main() {
             AllocateGpuResources();
         }
 
+        /// <summary>
+        /// Accumulates from a raw GL framebuffer ID (e.g. the back buffer, ID 0).
+        /// </summary>
+        public void Accumulate(int sourceFboId, int sourceWidth, int sourceHeight)
+        {
+            if (_disposed) return;
+
+            SaveGlState(out GlState state);
+            try
+            {
+                DisableRenderStateForFullscreenPass();
+                ExposureUtils.BlitYFlipped(sourceFboId, sourceWidth, sourceHeight, _sampleFbo);
+                AccumulateFromSampleFbo();
+            }
+            finally
+            {
+                RestoreGlState(in state);
+            }
+        }
+
         public void Accumulate(FrameBufferRef sourceFbo)
         {
             if (_disposed) return;
@@ -102,35 +122,37 @@ void main() {
             try
             {
                 DisableRenderStateForFullscreenPass();
-
-                // 1. Blit source → sample FBO (Y-flipped downsample, same as CPU path).
                 ExposureUtils.BlitYFlipped(sourceFbo, _sampleFbo);
-
-                // 2. Accumulate: sample + current accum → next accum.
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
-                GL.Viewport(0, 0, Width, Height);
-
-                GL.UseProgram(_accumProgram);
-                GL.Uniform1(_uAccumSample,    0);
-                GL.Uniform1(_uAccumAccum,     1);
-                GL.Uniform1(_uAccumLinearize, LinearizeInput ? 1 : 0);
-
-                GL.ActiveTexture(TextureUnit.Texture0);
-                GL.BindTexture(TextureTarget.Texture2D, _sampleFbo.ColorTextureIds[0]);
-                GL.ActiveTexture(TextureUnit.Texture1);
-                GL.BindTexture(TextureTarget.Texture2D, _accumTexIds[_readIdx]);
-
-                GL.BindVertexArray(_quadVao);
-                GL.DrawArrays(PrimitiveType.Triangles, 0, 3);
-
-                // Swap ping-pong.
-                (_readIdx, _writeIdx) = (_writeIdx, _readIdx);
-                _frameCount++;
+                AccumulateFromSampleFbo();
             }
             finally
             {
                 RestoreGlState(in state);
             }
+        }
+
+        // Runs the GLSL accumulate pass from _sampleFbo into the ping-pong accum FBOs.
+        // GL state must already be saved and render state disabled before calling.
+        private void AccumulateFromSampleFbo()
+        {
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _accumFboIds[_writeIdx]);
+            GL.Viewport(0, 0, Width, Height);
+
+            GL.UseProgram(_accumProgram);
+            GL.Uniform1(_uAccumSample,    0);
+            GL.Uniform1(_uAccumAccum,     1);
+            GL.Uniform1(_uAccumLinearize, LinearizeInput ? 1 : 0);
+
+            GL.ActiveTexture(TextureUnit.Texture0);
+            GL.BindTexture(TextureTarget.Texture2D, _sampleFbo.ColorTextureIds[0]);
+            GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, _accumTexIds[_readIdx]);
+
+            GL.BindVertexArray(_quadVao);
+            GL.DrawArrays(PrimitiveType.Triangles, 0, 3);
+
+            (_readIdx, _writeIdx) = (_writeIdx, _readIdx);
+            _frameCount++;
         }
 
         public void Reset()
